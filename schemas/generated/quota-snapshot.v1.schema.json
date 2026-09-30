@@ -1,0 +1,109 @@
+{
+  "$defs": {
+    "ConfidenceLevel": {
+      "enum": [
+        "high",
+        "medium",
+        "low",
+        "unknown"
+      ],
+      "title": "ConfidenceLevel",
+      "type": "string"
+    },
+    "QuotaSource": {
+      "enum": [
+        "official",
+        "manual",
+        "estimated",
+        "unknown"
+      ],
+      "title": "QuotaSource",
+      "type": "string"
+    },
+    "QuotaWindow": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "$ref": "#/$defs/ConfidenceLevel",
+          "default": "unknown"
+        },
+        "remaining_ratio": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Remaining Ratio"
+        },
+        "reset_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reset At"
+        },
+        "source": {
+          "$ref": "#/$defs/QuotaSource",
+          "default": "unknown"
+        }
+      },
+      "title": "QuotaWindow",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "account": {
+      "title": "Account",
+      "type": "string"
+    },
+    "five_hour": {
+      "$ref": "#/$defs/QuotaWindow"
+    },
+    "observed_at": {
+      "format": "date-time",
+      "title": "Observed At",
+      "type": "string"
+    },
+    "provider": {
+      "title": "Provider",
+      "type": "string"
+    },
+    "schema_kind": {
+      "const": "projectctl.quota_snapshot",
+      "default": "projectctl.quota_snapshot",
+      "title": "Schema Kind",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "weekly": {
+      "$ref": "#/$defs/QuotaWindow"
+    }
+  },
+  "required": [
+    "provider",
+    "account",
+    "observed_at",
+    "five_hour",
+    "weekly"
+  ],
+  "title": "QuotaSnapshot",
+  "type": "object"
+}

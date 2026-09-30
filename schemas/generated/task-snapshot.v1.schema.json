@@ -1,0 +1,339 @@
+{
+  "$defs": {
+    "NormalizedTask": {
+      "additionalProperties": false,
+      "properties": {
+        "blocks": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Blocks",
+          "type": "array"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "dependencies": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dependencies",
+          "type": "array"
+        },
+        "due_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Due At"
+        },
+        "human_decision_required": {
+          "default": false,
+          "title": "Human Decision Required",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "information_gain": {
+          "default": 0,
+          "maximum": 5,
+          "minimum": 0,
+          "title": "Information Gain",
+          "type": "integer"
+        },
+        "milestone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Milestone"
+        },
+        "normalization_notes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Normalization Notes",
+          "type": "array"
+        },
+        "priority": {
+          "default": 5,
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "ready_since": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ready Since"
+        },
+        "references": {
+          "$ref": "#/$defs/TaskReferences"
+        },
+        "resource_class": {
+          "$ref": "#/$defs/ResourceClass",
+          "default": "unknown"
+        },
+        "risk": {
+          "$ref": "#/$defs/RiskLevel",
+          "default": "unknown"
+        },
+        "source": {
+          "$ref": "#/$defs/TaskSource"
+        },
+        "status": {
+          "$ref": "#/$defs/TaskStatus"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/TaskType",
+          "default": "unknown"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "source",
+        "status"
+      ],
+      "title": "NormalizedTask",
+      "type": "object"
+    },
+    "ResourceClass": {
+      "enum": [
+        "trivial",
+        "small",
+        "medium",
+        "large",
+        "deep",
+        "unknown"
+      ],
+      "title": "ResourceClass",
+      "type": "string"
+    },
+    "RiskLevel": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical",
+        "unknown"
+      ],
+      "title": "RiskLevel",
+      "type": "string"
+    },
+    "TaskReferences": {
+      "additionalProperties": false,
+      "properties": {
+        "decisions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Decisions",
+          "type": "array"
+        },
+        "plans": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Plans",
+          "type": "array"
+        },
+        "research": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Research",
+          "type": "array"
+        },
+        "specs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Specs",
+          "type": "array"
+        }
+      },
+      "title": "TaskReferences",
+      "type": "object"
+    },
+    "TaskSource": {
+      "additionalProperties": false,
+      "properties": {
+        "external_id": {
+          "title": "External Id",
+          "type": "string"
+        },
+        "external_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "External Url"
+        },
+        "observed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observed At"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "revision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revision"
+        }
+      },
+      "required": [
+        "provider",
+        "external_id"
+      ],
+      "title": "TaskSource",
+      "type": "object"
+    },
+    "TaskStatus": {
+      "enum": [
+        "idea",
+        "planned",
+        "ready",
+        "running",
+        "blocked",
+        "needs_decision",
+        "failed",
+        "done",
+        "cancelled"
+      ],
+      "title": "TaskStatus",
+      "type": "string"
+    },
+    "TaskType": {
+      "enum": [
+        "task",
+        "feature",
+        "bug",
+        "refactor",
+        "research",
+        "experiment",
+        "architecture",
+        "security",
+        "docs",
+        "chore",
+        "unknown"
+      ],
+      "title": "TaskType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "captured_at": {
+      "format": "date-time",
+      "title": "Captured At",
+      "type": "string"
+    },
+    "provider": {
+      "title": "Provider",
+      "type": "string"
+    },
+    "schema_kind": {
+      "const": "projectctl.task_snapshot",
+      "default": "projectctl.task_snapshot",
+      "title": "Schema Kind",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "source_revision": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Revision"
+    },
+    "tasks": {
+      "items": {
+        "$ref": "#/$defs/NormalizedTask"
+      },
+      "title": "Tasks",
+      "type": "array"
+    }
+  },
+  "required": [
+    "provider",
+    "captured_at"
+  ],
+  "title": "TaskSnapshot",
+  "type": "object"
+}

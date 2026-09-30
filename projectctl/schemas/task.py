@@ -1,0 +1,53 @@
+from typing import Literal
+
+from pydantic import AwareDatetime, Field
+
+from projectctl.core.enums import ResourceClass, RiskLevel, TaskStatus, TaskType
+from projectctl.schemas.base import Priority, ProjectCtlModel, Signal5
+from projectctl.schemas.config import RepoRelativePath
+
+
+class TaskSource(ProjectCtlModel):
+    provider: str
+    external_id: str
+    revision: str | None = None
+    external_url: str | None = None
+    observed_at: AwareDatetime | None = None
+
+
+class TaskReferences(ProjectCtlModel):
+    specs: list[RepoRelativePath] = Field(default_factory=list)
+    plans: list[RepoRelativePath] = Field(default_factory=list)
+    decisions: list[RepoRelativePath] = Field(default_factory=list)
+    research: list[RepoRelativePath] = Field(default_factory=list)
+
+
+class NormalizedTask(ProjectCtlModel):
+    id: str
+    title: str
+    source: TaskSource
+    type: TaskType = TaskType.UNKNOWN
+    status: TaskStatus
+    priority: Priority = 5
+    milestone: str | None = None
+    created_at: AwareDatetime | None = None
+    ready_since: AwareDatetime | None = None
+    due_at: AwareDatetime | None = None
+    dependencies: list[str] = Field(default_factory=list)
+    blocks: list[str] = Field(default_factory=list)
+    risk: RiskLevel = RiskLevel.UNKNOWN
+    resource_class: ResourceClass = ResourceClass.UNKNOWN
+    information_gain: Signal5 = 0
+    human_decision_required: bool = False
+    references: TaskReferences = Field(default_factory=TaskReferences)
+    tags: list[str] = Field(default_factory=list)
+    normalization_notes: list[str] = Field(default_factory=list)
+
+
+class TaskSnapshot(ProjectCtlModel):
+    schema_kind: Literal["projectctl.task_snapshot"] = "projectctl.task_snapshot"
+    schema_version: Literal[1] = 1
+    provider: str
+    captured_at: AwareDatetime
+    source_revision: str | None = None
+    tasks: list[NormalizedTask] = Field(default_factory=list)

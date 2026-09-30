@@ -1,0 +1,78 @@
+{
+  "$defs": {
+    "ContextArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "digest": {
+          "title": "Digest",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "digest"
+      ],
+      "title": "ContextArtifact",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "artifacts": {
+      "items": {
+        "$ref": "#/$defs/ContextArtifact"
+      },
+      "title": "Artifacts",
+      "type": "array"
+    },
+    "code_paths": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Code Paths",
+      "type": "array"
+    },
+    "git_commit": {
+      "title": "Git Commit",
+      "type": "string"
+    },
+    "graph_revision": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Graph Revision"
+    },
+    "schema_kind": {
+      "const": "projectctl.context_manifest",
+      "default": "projectctl.context_manifest",
+      "title": "Schema Kind",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "git_commit"
+  ],
+  "title": "ContextManifest",
+  "type": "object"
+}
