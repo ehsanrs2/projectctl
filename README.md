@@ -695,8 +695,13 @@ projectctl adopt /path/to/repo \
   --dry-run
 ```
 
-GitHub authentication remains owned by the GitHub CLI. ProjectCTL calls `gh api`; it
-does not persist a GitHub token.
+GitHub authentication remains owned by the GitHub CLI. ProjectCTL calls
+`gh api --hostname github.com`; it does not persist a GitHub token.
+
+Repository identity is part of **ProjectConfig v2**. Existing v1 configs remain readable
+and are upgraded only in memory; ProjectCTL does not rewrite them automatically.
+Onboarding inspection/plan/manifest contracts are likewise versioned to v2 while their
+v1 forms remain available for audit compatibility.
 
 Supported read paths include:
 
