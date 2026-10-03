@@ -3,13 +3,16 @@ from pathlib import Path
 
 from projectctl.schemas.artifact import ArtifactMetadata
 from projectctl.schemas.config import ProjectConfig
-from projectctl.schemas.quota import QuotaSnapshot
-from projectctl.schemas.run import ContextManifest, RunManifest
-from projectctl.schemas.scheduler import SchedulerDecision, SchedulerDecisionV1
+from projectctl.schemas.evidence import EvidenceManifest
+from projectctl.schemas.execution import ExecutionPlan, WorkerCheckpoint, WorkerRequest, WorkerResult
+from projectctl.schemas.onboarding import AdoptionManifest, AdoptionPlan, ProjectInspection
 from projectctl.schemas.project_state import ProjectState
+from projectctl.schemas.quota import QuotaSnapshot
+from projectctl.schemas.run import ContextManifest, ContextManifestV1, RunManifest, RunManifestV1
+from projectctl.schemas.scheduler import SchedulerDecision, SchedulerDecisionV1
 from projectctl.schemas.status import ProjectStatus
 from projectctl.schemas.task import TaskSnapshot
-from projectctl.schemas.onboarding import AdoptionManifest, AdoptionPlan, ProjectInspection
+from projectctl.schemas.verification import VerificationManifest
 
 PUBLIC_SCHEMAS = {
     "project-config.v1.schema.json": ProjectConfig,
@@ -19,8 +22,16 @@ PUBLIC_SCHEMAS = {
     "scheduler-decision.v2.schema.json": SchedulerDecision,
     "project-state.v1.schema.json": ProjectState,
     "project-status.v1.schema.json": ProjectStatus,
-    "run-manifest.v1.schema.json": RunManifest,
-    "context-manifest.v1.schema.json": ContextManifest,
+    "run-manifest.v1.schema.json": RunManifestV1,
+    "run-manifest.v2.schema.json": RunManifest,
+    "context-manifest.v1.schema.json": ContextManifestV1,
+    "context-manifest.v2.schema.json": ContextManifest,
+    "execution-plan.v1.schema.json": ExecutionPlan,
+    "worker-request.v1.schema.json": WorkerRequest,
+    "worker-result.v1.schema.json": WorkerResult,
+    "worker-checkpoint.v1.schema.json": WorkerCheckpoint,
+    "verification-manifest.v1.schema.json": VerificationManifest,
+    "evidence-manifest.v1.schema.json": EvidenceManifest,
     "artifact-metadata.v1.schema.json": ArtifactMetadata,
     "project-inspection.v1.schema.json": ProjectInspection,
     "adoption-plan.v1.schema.json": AdoptionPlan,

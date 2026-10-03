@@ -90,7 +90,9 @@ class HealthStatus(StrEnum):
     ERROR = "error"
 
 
-class RunStatus(StrEnum):
+class RunStatusV1(StrEnum):
+    """Legacy M0 run lifecycle retained for RunManifest v1 reads."""
+
     PLANNED = "planned"
     RUNNING = "running"
     CHECKPOINTED = "checkpointed"
@@ -99,6 +101,72 @@ class RunStatus(StrEnum):
     FAILED = "failed"
     CANCELLED = "cancelled"
     ABANDONED = "abandoned"
+
+
+class RunStatus(StrEnum):
+    """M1 execution lifecycle. Checkpoints are events, not lifecycle states."""
+
+    PLANNED = "planned"
+    PREPARING = "preparing"
+    CLAIMED = "claimed"
+    RUNNING = "running"
+    VERIFYING = "verifying"
+    READY_TO_INTEGRATE = "ready_to_integrate"
+    INTEGRATING = "integrating"
+    PASSED = "passed"
+    BLOCKED_POLICY = "blocked_policy"
+    NEEDS_DECISION = "needs_decision"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    ABANDONED = "abandoned"
+
+
+class RunTerminalReason(StrEnum):
+    WORKER_ERROR = "worker_error"
+    VERIFICATION_FAILED = "verification_failed"
+    POLICY_BLOCKED = "policy_blocked"
+    CONTEXT_INVALID = "context_invalid"
+    STALE_BASE = "stale_base"
+    CLAIM_LOST = "claim_lost"
+    TIMEOUT = "timeout"
+    QUOTA_EXHAUSTED = "quota_exhausted"
+    UNEXPECTED_GIT_HISTORY = "unexpected_git_history"
+    INTEGRATION_CONFLICT = "integration_conflict"
+    INFRASTRUCTURE_ERROR = "infrastructure_error"
+    USER_CANCELLED = "user_cancelled"
+    RECOVERY_UNSAFE = "recovery_unsafe"
+
+
+class ExecutionSandboxMode(StrEnum):
+    READ_ONLY = "read_only"
+    WORKSPACE_WRITE = "workspace_write"
+    DANGER_FULL_ACCESS = "danger_full_access"
+
+
+class NetworkPolicy(StrEnum):
+    DISABLED = "disabled"
+    ENABLED = "enabled"
+
+
+class ApprovalPolicy(StrEnum):
+    DENY_ALL = "deny_all"
+    EXPLICIT = "explicit"
+    AUTO_REVIEW = "auto_review"
+
+
+class WorkerResultStatus(StrEnum):
+    IMPLEMENTED = "implemented"
+    BLOCKED = "blocked"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class VerificationCheckStatus(StrEnum):
+    PASSED = "passed"
+    FAILED = "failed"
+    ERROR = "error"
+    TIMED_OUT = "timed_out"
+    SKIPPED = "skipped"
 
 
 class ImportAction(StrEnum):
