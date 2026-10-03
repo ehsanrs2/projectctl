@@ -118,7 +118,7 @@ class FakeAdapter:
     def probe(self):
         return self.caps
 
-    def start(self, request, *, workspace: Path):
+    def start(self, request, *, workspace: Path, checkpoint_monitor=None):
         (workspace / "worker_output.py").write_text("value = 1\n", encoding="utf-8")
         if self.commit:
             git(workspace, "add", "worker_output.py")
