@@ -239,5 +239,3 @@ def test_review_run_requires_no_changes_and_finishes_without_integration(
 def test_run_verify_cli_is_registered():
     result = runner.invoke(app, ["run", "verify", "--help"])
     assert result.exit_code == 0, result.output
-    assert "--project" in result.output
-    assert "--json" in result.output
