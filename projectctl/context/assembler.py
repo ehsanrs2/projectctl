@@ -119,7 +119,8 @@ def _spec_digest(task: NormalizedTask, artifacts: list[ContextArtifact]) -> str 
 def _constraints_for(plan: ExecutionPlan, manifest: ContextManifest) -> list[str]:
     constraints = [
         "Work only inside the provided isolated Git worktree.",
-        "Follow all applicable AGENTS.md instruction files discovered in the context manifest.",
+        "Follow all applicable AGENTS.md instruction files discovered in the context manifest, but do not modify them.",
+        "Do not modify human-managed requirements, architecture decisions, or docs/PROJECT_STATE.yaml; stop for human decision if the requested change depends on changing those authorities.",
         "Do not commit, merge, rebase, push, or rewrite Git history.",
         "Do not mutate ProjectCTL task state, project state, run state, or evidence files.",
         "Do not weaken or bypass sandbox, approval, or verification policy.",
