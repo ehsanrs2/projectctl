@@ -165,3 +165,18 @@ def test_strategy_requires_effective_adapter_permission_support():
     decision = negotiate_strategy(task(), caps)
     assert decision.compatible is False
     assert "approval:deny_all" in decision.unsupported
+
+
+
+def test_goal_can_chain_to_direct_only_when_both_fallbacks_are_explicit():
+    decision = negotiate_strategy(
+        task(type=TaskType.RESEARCH),
+        capabilities(goal=False, plan=False),
+        fallback=StrategyFallbackPolicy(
+            allow_goal_to_plan_then_execute=True,
+            allow_plan_to_direct=True,
+        ),
+    )
+    assert decision.compatible is True
+    assert decision.resolved == WorkerStrategyKind.DIRECT
+    assert decision.fallback_used is True

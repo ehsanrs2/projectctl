@@ -182,19 +182,22 @@ def negotiate_strategy(
             reasons=[f"Strategy {requested_kind.value} is supported by the probed worker surface."],
         )
 
-    fallback_kind: WorkerStrategyKind | None = None
+    fallback_kinds: list[WorkerStrategyKind] = []
     if (
         requested_kind == WorkerStrategyKind.GOAL
         and fallback.allow_goal_to_plan_then_execute
     ):
-        fallback_kind = WorkerStrategyKind.PLAN_THEN_EXECUTE
+        fallback_kinds.append(WorkerStrategyKind.PLAN_THEN_EXECUTE)
+        if fallback.allow_plan_to_direct:
+            fallback_kinds.append(WorkerStrategyKind.DIRECT)
     elif (
         requested_kind == WorkerStrategyKind.PLAN_THEN_EXECUTE
         and fallback.allow_plan_to_direct
     ):
-        fallback_kind = WorkerStrategyKind.DIRECT
+        fallback_kinds.append(WorkerStrategyKind.DIRECT)
 
-    if fallback_kind is not None:
+    attempted: list[str] = []
+    for fallback_kind in fallback_kinds:
         fallback_ok, fallback_unsupported = _evaluate(fallback_kind, capabilities)
         if fallback_ok:
             planning, execution, goal = _phases(fallback_kind)
@@ -214,7 +217,11 @@ def negotiate_strategy(
                 ],
                 fallback_used=True,
             )
-        unsupported.extend(f"fallback:{value}" for value in fallback_unsupported)
+        attempted.append(fallback_kind.value)
+        unsupported.extend(
+            f"fallback:{fallback_kind.value}:{value}"
+            for value in fallback_unsupported
+        )
 
     return WorkerStrategyDecision(
         task_id=task.id,
