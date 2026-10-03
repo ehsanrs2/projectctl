@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M2.1 — Automatic Codex Quota Provider**, adding supported account-level Codex quota observation to the bounded M2.0 lifecycle.
+This repository currently implements **M2.2 — Budget-aware Checkpointing & Graceful Quota Stop**, adding durable mid-turn quota checkpoints and safe Codex thread resume.
 
 ## Implemented
 
@@ -621,3 +621,53 @@ protocol data.
 Successful official observations are persisted in the existing global ProjectCTL account
 database. Manual quota remains supported. M2.1 does not predict per-task token cost,
 remove `--max-tasks`, or call private OpenAI endpoints.
+
+
+## M2.2 — Budget-aware Checkpointing & Graceful Quota Stop
+
+M2.2 closes the remaining quota gap inside long worker turns.
+
+A checkpoint-aware Codex turn is monitored against fresh account quota while it runs.
+ProjectCTL requests a graceful interrupt when quota becomes stale/critical or the
+remaining effective budget no longer satisfies the current task's resource class.
+
+\`\`\`text
+RUNNING Codex turn
+      ↓
+periodic live quota observation
+      ↓
+budget still fits task? ── yes ──> continue
+      │
+      no
+      ↓
+TurnHandle.interrupt()
+      ↓
+WorkerCheckpoint v2
+      ↓
+RUNNING + durable checkpoint + preserved partial worktree
+      ↓
+fresh quota later
+      ↓
+thread_resume(original_thread_id)
+      ↓
+continue same task
+\`\`\`
+
+Checkpoint artifacts bind the provider thread to the exact run, context, quota snapshot,
+base commit, and partial workspace digest. Git-history changes remain forbidden. External
+changes to the checkpointed workspace fail closed instead of being silently incorporated.
+
+Operators can resume explicitly:
+
+\`\`\`bash
+projectctl run resume RUN_ID --project /path/to/repo
+\`\`\`
+
+The autonomous loop also resumes an intact checkpoint before scheduling new work. If
+quota is still insufficient, it exits cleanly with \`quota_checkpointed\`; this is a
+planned budget stop, not a worker failure.
+
+Checkpointed runs may also be explicitly aborted with the existing
+\`projectctl run abort RUN_ID\` command.
+
+M2.2 keeps the bounded \`--max-tasks\` contract and does not estimate future token cost.
