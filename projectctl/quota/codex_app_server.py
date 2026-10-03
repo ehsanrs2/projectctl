@@ -6,10 +6,12 @@ import shutil
 import sqlite3
 import subprocess
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, TextIO
 
+from projectctl import __version__
 from projectctl.core.enums import ConfidenceLevel, QuotaSource
 from projectctl.core.errors import ProviderUnavailableError, QuotaError
 from projectctl.core.time import utc_now
@@ -74,7 +76,7 @@ class CodexAppServerSession:
                 "clientInfo": {
                     "name": "projectctl",
                     "title": "ProjectCTL",
-                    "version": "0.13.0",
+                    "version": __version__,
                 },
                 "capabilities": {"experimentalApi": True},
             },
@@ -135,9 +137,15 @@ class CodexAppServerSession:
             payload["params"] = params
         self._send(payload)
 
+        deadline = time.monotonic() + timeout
         while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ProviderUnavailableError(
+                    f"Timed out waiting for Codex App Server method {method}."
+                )
             try:
-                message = self._messages.get(timeout=timeout)
+                message = self._messages.get(timeout=remaining)
             except queue.Empty as exc:
                 raise ProviderUnavailableError(
                     f"Timed out waiting for Codex App Server method {method}."
