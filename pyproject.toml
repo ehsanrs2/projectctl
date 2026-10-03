@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "projectctl"
-version = "0.3.1"
+version = "0.4.0"
 description = "Local-first deterministic control plane for AI-assisted software engineering"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -23,7 +23,7 @@ dev = [
 ]
 
 [project.scripts]
-projectctl = "projectctl.cli.app:main"
+projectctl = "projectctl.cli.entry:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["projectctl"]

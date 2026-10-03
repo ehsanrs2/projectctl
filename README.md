@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M0.3.1 — Adaptive Project Onboarding** on top of M0.3 task-system integration.
+This repository currently implements **M0.4 — Resource & Scheduling Core**, building on adaptive brownfield onboarding and task-system integration.
 
 ## Implemented
 
@@ -54,7 +54,7 @@ This repository currently implements **M0.3.1 — Adaptive Project Onboarding** 
 - transaction-like apply with rollback of ProjectCTL-created local artifacts
 - symlink-escape protection
 
-No Codex worker, quota scheduler, model routing, or autonomous code-writing loop is enabled yet.
+No Codex worker or autonomous code-writing loop is enabled yet. M0.4 schedules and recommends resources only; it does not claim or execute tasks.
 
 ## Onboarding behavior
 
@@ -157,3 +157,25 @@ Without installing the package, development tests also work directly:
 pytest
 PYTHONPATH=. python -m projectctl --help
 ```
+
+## M0.4 — Resource & Scheduling Core
+
+M0.4 adds a deterministic, read-only scheduling layer. It does **not** claim tasks or execute Codex yet.
+
+```bash
+# Record a global account quota observation (ratios or percentages are accepted)
+projectctl quota set --five-hour 60% --weekly 40% --project /path/to/repo
+
+# Inspect the current quota mode and reserve-adjusted effective budget
+projectctl quota --project /path/to/repo
+
+# Recommend the next eligible task without claiming it
+projectctl next --project /path/to/repo
+
+# Explain exclusions, score components, quota mode, and model/reasoning recommendation
+projectctl explain-next --project /path/to/repo
+```
+
+Scheduling is snapshot-first and deterministic: ProjectCTL captures the task state, reads the account-scoped quota snapshot, evaluates eligibility before scoring, applies stable tie-breaking, and records the resulting decision as telemetry. Unknown or stale quota enters conservation mode; only trivial/small work is auto-eligible until a fresh observation is available.
+
+Model routing uses logical profiles (`economical`, `balanced`, `strong`, `deep`) rather than hard-coded model names. M0.4 only recommends a profile and reasoning level; worker execution is a later milestone.
