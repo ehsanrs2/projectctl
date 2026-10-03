@@ -21,7 +21,8 @@ PUBLIC_SCHEMAS = {
     "project-config.v1.schema.json": ProjectConfig,
     "worker-capabilities.v1.schema.json": WorkerCapabilities,
     "worker-strategy-decision.v1.schema.json": WorkerStrategyDecision,
-    "quota-snapshot.v1.schema.json": QuotaSnapshotV1,\n    "quota-snapshot.v2.schema.json": QuotaSnapshot,
+    "quota-snapshot.v1.schema.json": QuotaSnapshotV1,
+    "quota-snapshot.v2.schema.json": QuotaSnapshot,
     "task-snapshot.v1.schema.json": TaskSnapshot,
     "scheduler-decision.v1.schema.json": SchedulerDecisionV1,
     "scheduler-decision.v2.schema.json": SchedulerDecision,
@@ -59,7 +60,8 @@ def export_json_schemas(destination: Path) -> list[Path]:
     for filename, model in PUBLIC_SCHEMAS.items():
         path = destination / filename
         path.write_text(
-            json.dumps(model.model_json_schema(), indent=2, sort_keys=True) + "\n",
+            json.dumps(model.model_json_schema(), indent=2, sort_keys=True) + "
+",
             encoding="utf-8",
         )
         written.append(path)
