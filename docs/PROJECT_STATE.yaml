@@ -1,0 +1,11 @@
+schema_kind: projectctl.project_state
+schema_version: 1
+project_id: projectctl
+current_goal: Complete the deterministic local-first control plane before enabling autonomous worker execution.
+active_milestone:
+  id: M0.5
+  title: Project State & Milestone Awareness
+  aliases:
+    - Project State
+    - Milestone Awareness
+updated_at: null

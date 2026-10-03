@@ -1,0 +1,27 @@
+{
+  "$defs": {
+    "MilestoneState": {
+      "additionalProperties": false,
+      "properties": {
+        "aliases": {"items": {"type": "string"}, "title": "Aliases", "type": "array"},
+        "id": {"minLength": 1, "title": "Id", "type": "string"},
+        "title": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null, "title": "Title"}
+      },
+      "required": ["id"],
+      "title": "MilestoneState",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "active_milestone": {"anyOf": [{"$ref": "#/$defs/MilestoneState"}, {"type": "null"}], "default": null},
+    "current_goal": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null, "title": "Current Goal"},
+    "project_id": {"minLength": 1, "title": "Project Id", "type": "string"},
+    "schema_kind": {"const": "projectctl.project_state", "default": "projectctl.project_state", "title": "Schema Kind", "type": "string"},
+    "schema_version": {"const": 1, "default": 1, "title": "Schema Version", "type": "integer"},
+    "updated_at": {"anyOf": [{"format": "date-time", "type": "string"}, {"type": "null"}], "default": null, "title": "Updated At"}
+  },
+  "required": ["project_id"],
+  "title": "ProjectState",
+  "type": "object"
+}

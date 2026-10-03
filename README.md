@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M0.4 — Resource & Scheduling Core**, building on adaptive brownfield onboarding and task-system integration.
+This repository currently implements **M0.5 — Project State & Milestone Awareness**, building on the deterministic resource scheduler.
 
 ## Implemented
 
@@ -179,3 +179,38 @@ projectctl explain-next --project /path/to/repo
 Scheduling is snapshot-first and deterministic: ProjectCTL captures the task state, reads the account-scoped quota snapshot, evaluates eligibility before scoring, applies stable tie-breaking, and records the resulting decision as telemetry. Unknown or stale quota enters conservation mode; only trivial/small work is auto-eligible until a fresh observation is available.
 
 Model routing uses logical profiles (`economical`, `balanced`, `strong`, `deep`) rather than hard-coded model names. M0.4 only recommends a profile and reasoning level; worker execution is a later milestone.
+
+
+## M0.5 — Project State & Milestone Awareness
+
+M0.5 adds a small Git-versioned, human-editable state contract at `docs/PROJECT_STATE.yaml`. ProjectCTL does not infer the active milestone from prose.
+
+```bash
+# Inspect structured state
+projectctl state
+
+# Record the current goal and active milestone
+projectctl state set \
+  --goal "Complete the deterministic control plane" \
+  --milestone M0.5 \
+  --milestone-title "Project State & Milestone Awareness" \
+  --alias "Project State"
+
+# Read a live project summary without materializing dashboards
+projectctl status
+
+# Materialize generated, non-authoritative dashboards
+projectctl refresh
+```
+
+`projectctl refresh` writes:
+
+- `docs/generated/STATUS.md`
+- `docs/generated/BUDGET.md`
+- `docs/generated/TASKBOARD.md`
+
+Each generated file carries a source digest. `projectctl doctor` warns when those dashboards are missing or stale.
+
+Scheduler milestone relevance is now deterministic: a task receives milestone relevance only when its milestone exactly matches the active milestone id, title, or an explicit alias after case/whitespace normalization. No fuzzy or LLM-based inference is used.
+
+`SchedulerDecision` is schema version 2 and records the `project_state_digest` because structured project state is now a decision input.

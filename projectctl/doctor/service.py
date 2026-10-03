@@ -6,6 +6,8 @@ from projectctl.doctor.checks import (
     check_config,
     check_global_home,
     check_optional_tools,
+    check_project_state,
+    check_generated_artifacts,
     check_repository,
     check_required_files,
     check_task_store,
@@ -18,10 +20,12 @@ def run_doctor(root: Path) -> HealthReport:
         check_repository(root),
         check_config(root),
         check_required_files(root),
+        check_project_state(root),
         _db_check(root, "state.sqlite"),
         _db_check(root, "telemetry.sqlite"),
         check_task_store(root),
         check_global_home(),
+        check_generated_artifacts(root),
     ]
     try:
         checks.extend(check_optional_tools(root))

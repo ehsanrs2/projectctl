@@ -47,14 +47,16 @@ class SchedulerCandidate(ProjectCtlModel):
 
 class SchedulerDecision(ProjectCtlModel):
     schema_kind: Literal["projectctl.scheduler_decision"] = "projectctl.scheduler_decision"
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     evaluated_at: AwareDatetime
     project_id: str
     policy: str
     policy_version: int
     config_digest: str
+    project_state_digest: str
     task_snapshot_digest: str
     quota_snapshot_digest: str
+    active_milestone_id: str | None = None
     selected_task_id: str | None = None
     quota_mode: QuotaMode
     candidates: list[SchedulerCandidate] = Field(default_factory=list)

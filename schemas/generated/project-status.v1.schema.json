@@ -1,0 +1,62 @@
+{
+  "$defs": {
+    "MilestoneState": {
+      "additionalProperties": false,
+      "properties": {
+        "aliases": {"items": {"type": "string"}, "title": "Aliases", "type": "array"},
+        "id": {"minLength": 1, "title": "Id", "type": "string"},
+        "title": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null, "title": "Title"}
+      },
+      "required": ["id"],
+      "title": "MilestoneState",
+      "type": "object"
+    },
+    "ModelProfile": {"enum": ["economical", "balanced", "strong", "deep"], "title": "ModelProfile", "type": "string"},
+    "QuotaMode": {"enum": ["normal", "conservation", "critical", "unknown"], "title": "QuotaMode", "type": "string"},
+    "ReasoningLevel": {"enum": ["low", "medium", "high"], "title": "ReasoningLevel", "type": "string"},
+    "StatusSourceDigests": {
+      "additionalProperties": false,
+      "properties": {
+        "project_state": {"title": "Project State", "type": "string"},
+        "quota": {"title": "Quota", "type": "string"},
+        "tasks": {"title": "Tasks", "type": "string"}
+      },
+      "required": ["project_state", "tasks", "quota"],
+      "title": "StatusSourceDigests",
+      "type": "object"
+    },
+    "TaskCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "blocked": {"default": 0, "title": "Blocked", "type": "integer"},
+        "done": {"default": 0, "title": "Done", "type": "integer"},
+        "failed": {"default": 0, "title": "Failed", "type": "integer"},
+        "needs_decision": {"default": 0, "title": "Needs Decision", "type": "integer"},
+        "ready": {"default": 0, "title": "Ready", "type": "integer"},
+        "running": {"default": 0, "title": "Running", "type": "integer"},
+        "total": {"default": 0, "title": "Total", "type": "integer"}
+      },
+      "title": "TaskCounts",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "active_milestone": {"anyOf": [{"$ref": "#/$defs/MilestoneState"}, {"type": "null"}], "default": null},
+    "current_goal": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null, "title": "Current Goal"},
+    "generated_at": {"format": "date-time", "title": "Generated At", "type": "string"},
+    "next_model_profile": {"anyOf": [{"$ref": "#/$defs/ModelProfile"}, {"type": "null"}], "default": null},
+    "next_reasoning": {"anyOf": [{"$ref": "#/$defs/ReasoningLevel"}, {"type": "null"}], "default": null},
+    "next_task_id": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null, "title": "Next Task Id"},
+    "project_id": {"title": "Project Id", "type": "string"},
+    "quota_mode": {"$ref": "#/$defs/QuotaMode"},
+    "quota_stale": {"title": "Quota Stale", "type": "boolean"},
+    "schema_kind": {"const": "projectctl.project_status", "default": "projectctl.project_status", "title": "Schema Kind", "type": "string"},
+    "schema_version": {"const": 1, "default": 1, "title": "Schema Version", "type": "integer"},
+    "source_digests": {"$ref": "#/$defs/StatusSourceDigests"},
+    "task_counts": {"$ref": "#/$defs/TaskCounts"}
+  },
+  "required": ["generated_at", "project_id", "task_counts", "quota_mode", "quota_stale", "source_digests"],
+  "title": "ProjectStatus",
+  "type": "object"
+}

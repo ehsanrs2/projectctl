@@ -6,6 +6,8 @@ from projectctl.core.errors import ConfigurationError, DatabaseVersionError, Rep
 from projectctl.core.paths import resolve_inside_repo
 from projectctl.project.bootstrap import projectctl_home
 from projectctl.project.loader import load_project_config
+from projectctl.project.state import PROJECT_STATE_PATH, load_project_state
+from projectctl.project.freshness import generated_freshness
 from projectctl.project.root import git_root
 from projectctl.schemas.health import HealthCheckResult
 from projectctl.storage.sqlite import APPLICATION_ID, DATABASE_VERSION, inspect_db
@@ -157,3 +159,66 @@ def check_global_home() -> HealthCheckResult:
     if not home.exists():
         return HealthCheckResult(check_id="global_home", status=HealthStatus.WARN, summary=f"Global home does not exist: {home}")
     return HealthCheckResult(check_id="global_home", status=HealthStatus.PASS, summary=f"Global home: {home}")
+
+
+def check_project_state(root: Path) -> HealthCheckResult:
+    path = root / PROJECT_STATE_PATH
+    if not path.exists():
+        return HealthCheckResult(
+            check_id="project_state",
+            status=HealthStatus.WARN,
+            summary=f"Structured project state is missing: {PROJECT_STATE_PATH}",
+            remediation=["Run projectctl state set to record the current goal and active milestone."],
+        )
+    try:
+        state = load_project_state(root, allow_missing=False)
+    except ConfigurationError as exc:
+        return HealthCheckResult(
+            check_id="project_state",
+            status=HealthStatus.ERROR,
+            summary=f"Invalid structured project state: {exc}",
+        )
+    missing = []
+    if not state.current_goal:
+        missing.append("current_goal")
+    if state.active_milestone is None:
+        missing.append("active_milestone")
+    if missing:
+        return HealthCheckResult(
+            check_id="project_state",
+            status=HealthStatus.WARN,
+            summary="Structured project state is valid but incomplete.",
+            details=missing,
+            remediation=["Use projectctl state set to fill the missing state fields."],
+        )
+    return HealthCheckResult(
+        check_id="project_state",
+        status=HealthStatus.PASS,
+        summary=f"Structured project state is valid: {PROJECT_STATE_PATH}",
+    )
+
+
+def check_generated_artifacts(root: Path) -> HealthCheckResult:
+    try:
+        missing, stale, _ = generated_freshness(root)
+    except Exception as exc:
+        return HealthCheckResult(
+            check_id="generated_artifacts",
+            status=HealthStatus.WARN,
+            summary=f"Could not evaluate generated artifact freshness: {exc}",
+            remediation=["Fix task/quota prerequisites, then run projectctl refresh."],
+        )
+    if missing or stale:
+        details = [f"missing: {name}" for name in missing] + [f"stale: {name}" for name in stale]
+        return HealthCheckResult(
+            check_id="generated_artifacts",
+            status=HealthStatus.WARN,
+            summary="Generated dashboards are missing or stale.",
+            details=details,
+            remediation=["Run projectctl refresh."],
+        )
+    return HealthCheckResult(
+        check_id="generated_artifacts",
+        status=HealthStatus.PASS,
+        summary="Generated dashboards are fresh.",
+    )

@@ -79,6 +79,7 @@ def test_init_interactive_adopts_without_touching_agents(tmp_path: Path, monkeyp
     assert (repo / "AGENTS.md").read_text() == original_agents
     assert not (repo / "docs" / "PROJECT.md").exists()
     assert (repo / ".projectctl" / "adoption.yaml").exists()
+    assert (repo / "docs" / "PROJECT_STATE.yaml").exists()
     config = load_project_config(repo)
     assert config.knowledge.project_overview.sources == ["README.md"]
     assert config.knowledge.roadmap.sources == ["docs/roadmap.md"]
@@ -192,3 +193,4 @@ def test_apply_rolls_back_local_artifacts_when_global_registration_fails(tmp_pat
     assert not (repo / ".projectctl").exists()
     assert not (repo / "evidence").exists()
     assert not (repo / "docs" / "generated").exists()
+    assert not (repo / "docs" / "PROJECT_STATE.yaml").exists()

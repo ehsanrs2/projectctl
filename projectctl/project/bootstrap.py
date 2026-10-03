@@ -13,6 +13,7 @@ from projectctl.core.errors import RepositoryContractError
 from projectctl.core.time import utc_now
 from projectctl.project.root import git_root
 from projectctl.project.loader import load_project_config
+from projectctl.project.state import PROJECT_STATE_PATH, initial_project_state
 from projectctl.schemas.config import ProjectConfig, ProjectIdentity
 from projectctl.storage.sqlite import initialize_global_state_db, initialize_project_state_db, initialize_telemetry_db
 
@@ -86,6 +87,13 @@ def initialize_project(target: Path) -> InitResult:
         result.created.append(".projectctl/config.yaml")
 
     config = load_project_config(root)
+
+    state_text = yaml.safe_dump(
+        initial_project_state(config.project.id).model_dump(mode="json"),
+        sort_keys=False,
+        allow_unicode=True,
+    )
+    _write_if_missing(root / PROJECT_STATE_PATH, state_text, result)
 
     _write_if_missing(root / "docs/PROJECT.md", "# Project\n\n## Objective\n\nDescribe the project objective.\n", result)
     _write_if_missing(root / "docs/ROADMAP.md", "# Roadmap\n\n## Current Milestone\n\nM0\n", result)
