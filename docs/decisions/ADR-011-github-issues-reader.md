@@ -23,7 +23,8 @@ M3.0a adds a **read-only GitHub Issues task-store adapter** and authority discov
 
 ### Runtime boundary
 
-ProjectCTL uses the authenticated GitHub CLI `gh api` surface.
+ProjectCTL uses the authenticated GitHub CLI `gh api` surface and pins
+`--hostname github.com`.
 
 ProjectCTL does not store GitHub tokens or implement a second credential store.
 Authentication and host credentials remain owned by GitHub CLI.
@@ -45,7 +46,21 @@ remote. Supported forms include HTTPS, SCP-style SSH, and `ssh://` GitHub URLs.
 The origin remote is included in the adoption repository fingerprint. A remote change
 between preview and apply therefore invalidates the adoption plan.
 
-Explicit repository overrides remain possible through onboarding.
+Explicit repository overrides remain possible through onboarding, but are validated as
+exact `owner/repository` identities. Repository overrides are rejected for non-GitHub
+task stores.
+
+### Contract versioning
+
+Adding repository identity changes persisted/public onboarding and project configuration
+contracts, so M3.0a does not mutate v1 schemas in place.
+
+- `ProjectConfig v1` remains readable; the loader upgrades it to v2 in memory without
+  rewriting the existing file.
+- new ProjectCTL configs are `ProjectConfig v2`
+- `ProjectInspection v1`, `AdoptionPlan v1`, and `AdoptionManifest v1` remain
+  exported for audit compatibility
+- current onboarding artifacts use v2 and add repository identity fields
 
 ### Read semantics
 
