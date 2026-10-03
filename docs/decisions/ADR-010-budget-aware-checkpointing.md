@@ -59,6 +59,9 @@ A successful quota interruption writes WorkerCheckpoint v2 containing:
 - exact partial-workspace digest
 - checkpoint time
 
+The checkpoint artifact digest is also anchored in the append-only run event stream. Resume
+and recovery require the file to match that durable event before trusting its contents.
+
 The run remains `RUNNING`, keeps its canonical task claim, releases its process lease,
 and records the checkpoint path in durable run state.
 
