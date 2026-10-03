@@ -276,6 +276,21 @@ def _claimer(project_root: Path):
     )
 
 
+def _assert_task_store_execution_capable(project_root: Path) -> None:
+    provider = load_project_config(project_root).task_store.provider
+    if provider == "beads":
+        return
+    if provider == "github":
+        raise ConfigurationError(
+            "GitHub Issues task authority is read-only in M3.0a. "
+            "Scheduling/status reads are supported, but run preparation requires "
+            "the M3.0b concurrency-safe claim protocol."
+        )
+    raise ConfigurationError(
+        f"Task execution is not implemented for provider {provider!r}."
+    )
+
+
 def prepare_next_run(
     project_root: Path,
     *,
@@ -285,6 +300,7 @@ def prepare_next_run(
 ) -> PreparedRun:
     root = project_root.resolve()
     actor = _actor()
+    _assert_task_store_execution_capable(root)
 
     with project_lock(root, "run-prepare"):
         planning = build_next_execution_bundle(
