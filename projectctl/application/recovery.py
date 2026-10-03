@@ -18,7 +18,13 @@ from projectctl.core.errors import RecoveryError, RunLeaseError
 from projectctl.core.time import utc_now
 from projectctl.git import WorktreeManager, resolve_commit
 from projectctl.schemas.evidence import EvidenceManifest
-from projectctl.schemas.execution import EvidenceReference, ExecutionPlan, WorkerResult
+from projectctl.schemas.execution import (
+    EvidenceReference,
+    ExecutionPlan,
+    WorkerCheckpoint,
+    WorkerResult,
+    parse_worker_checkpoint,
+)
 from projectctl.schemas.integration import IntegrationManifest, RecoveryAction
 from projectctl.storage.runs import RunStore
 
@@ -49,6 +55,84 @@ def recover_run(project_root: Path, run_id: str) -> RecoveryAction:
 
     try:
         if record.status == RunStatus.RUNNING:
+            if record.checkpoint_ref:
+                checkpoint_path = (root / record.checkpoint_ref).resolve()
+                if not checkpoint_path.is_relative_to(root) or not checkpoint_path.exists():
+                    final = store.transition(
+                        run_id,
+                        expected={RunStatus.RUNNING},
+                        status=RunStatus.NEEDS_DECISION,
+                        terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
+                    )
+                    final = reconcile_terminal_task(
+                        root,
+                        store=store,
+                        run_id=run_id,
+                        actor=actor,
+                    )
+                    details.append("Durable checkpoint reference is missing or unsafe.")
+                    return RecoveryAction(
+                        run_id=run_id,
+                        previous_status=previous.value,
+                        resolved_status=final.status.value,
+                        action="escalated_checkpoint_recovery",
+                        details=details,
+                    )
+
+                try:
+                    raw = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+                    checkpoint = parse_worker_checkpoint(raw)
+                except Exception as exc:
+                    raise RecoveryError(
+                        f"Checkpoint artifact cannot be read safely: {exc}"
+                    ) from exc
+
+                plan = _load_json_model(run_dir / "execution-plan.json", ExecutionPlan)
+                worktree = Path(record.worktree_path)
+                resumable = (
+                    isinstance(checkpoint, WorkerCheckpoint)
+                    and checkpoint.run_id == record.run_id
+                    and checkpoint.task_id == record.task_id
+                    and checkpoint.worktree_id == record.worktree_id
+                    and checkpoint.base_commit == record.base_commit
+                    and checkpoint.branch_name == record.branch_name
+                    and checkpoint.worker_thread_id == record.worker_thread_id
+                    and worktree.exists()
+                    and resolve_commit(worktree, "HEAD") == plan.base_commit
+                )
+                if resumable:
+                    details.append(
+                        "Durable M2.2 quota checkpoint is intact; worker resume is safe when quota permits."
+                    )
+                    return RecoveryAction(
+                        run_id=run_id,
+                        previous_status=previous.value,
+                        resolved_status=record.status.value,
+                        action="checkpoint_resume_ready",
+                        details=details,
+                    )
+
+                final = store.transition(
+                    run_id,
+                    expected={RunStatus.RUNNING},
+                    status=RunStatus.NEEDS_DECISION,
+                    terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
+                )
+                final = reconcile_terminal_task(
+                    root,
+                    store=store,
+                    run_id=run_id,
+                    actor=actor,
+                )
+                details.append("Checkpoint identity, worktree, or Git history cannot be reconciled safely.")
+                return RecoveryAction(
+                    run_id=run_id,
+                    previous_status=previous.value,
+                    resolved_status=final.status.value,
+                    action="escalated_checkpoint_recovery",
+                    details=details,
+                )
+
             result_path = run_dir / "worker-result.json"
             if not result_path.exists():
                 final = store.transition(
