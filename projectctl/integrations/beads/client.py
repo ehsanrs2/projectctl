@@ -94,20 +94,30 @@ class BeadsClient:
             raise TaskStoreError(f"Beads issue not found: {issue_id}")
         return issues[0]
 
-    def create_issue(self, *, title: str, description: str, issue_type: str = "task", priority: int = 2) -> str:
-        payload = self._run(
-            [
-                "create",
-                title,
-                "--description",
-                description,
-                "--type",
-                issue_type,
-                "--priority",
-                str(priority),
-                "--json",
-            ]
-        )
+    def create_issue(
+        self,
+        *,
+        title: str,
+        description: str,
+        issue_type: str = "task",
+        priority: int = 2,
+        labels: list[str] | None = None,
+    ) -> str:
+        args = [
+            "create",
+            title,
+            "--description",
+            description,
+            "--type",
+            issue_type,
+            "--priority",
+            str(priority),
+        ]
+        clean_labels = sorted({label.strip() for label in (labels or []) if label.strip()})
+        if clean_labels:
+            args.extend(["-l", ",".join(clean_labels)])
+        args.append("--json")
+        payload = self._run(args)
         issues = self.issue_list(payload)
         if not issues or not issues[0].get("id"):
             raise TaskStoreError("Beads create did not return an issue id.")

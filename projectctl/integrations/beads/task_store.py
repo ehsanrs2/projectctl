@@ -87,6 +87,19 @@ class BeadsTaskStore:
         issue_type = str(raw.get("issue_type") or raw.get("type") or "task").lower()
         ttype = _task_type(issue_type)
         tags = [str(v) for v in (raw.get("labels") or []) if isinstance(v, (str, int, float))]
+        milestone_labels = sorted({
+            tag.split(":", 1)[1].strip()
+            for tag in tags
+            if tag.casefold().startswith("milestone:") and ":" in tag and tag.split(":", 1)[1].strip()
+        })
+        milestone = None
+        if len(milestone_labels) == 1:
+            milestone = milestone_labels[0]
+        elif len(milestone_labels) > 1:
+            notes.append(
+                "Multiple explicit milestone labels found; milestone scoring disabled: "
+                + ", ".join(milestone_labels)
+            )
         if issue_type == "epic":
             tags.append("beads:epic")
             notes.append("Beads epic normalized with TaskType.UNKNOWN; epics are organizational work.")
@@ -112,7 +125,7 @@ class BeadsTaskStore:
             type=ttype,
             status=status,
             priority=priority,
-            milestone=None,
+            milestone=milestone,
             created_at=_date(raw.get("created_at")),
             ready_since=None,
             due_at=_date(raw.get("due_at")),

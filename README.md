@@ -214,3 +214,20 @@ Each generated file carries a source digest. `projectctl doctor` warns when thos
 Scheduler milestone relevance is now deterministic: a task receives milestone relevance only when its milestone exactly matches the active milestone id, title, or an explicit alias after case/whitespace normalization. No fuzzy or LLM-based inference is used.
 
 `SchedulerDecision` is schema version 2 and records the `project_state_digest` because structured project state is now a decision input.
+
+
+### Beads milestone metadata
+
+When Beads is the task authority, ProjectCTL uses one explicit metadata convention:
+
+```text
+milestone:<id>
+```
+
+For example, a task associated with the active M0.5 milestone carries:
+
+```text
+milestone:M0.5
+```
+
+ProjectCTL does not infer milestone membership from issue titles, phases, epics, or unrelated labels. If multiple conflicting `milestone:` labels are present, milestone scoring is disabled for that task and a normalization note is recorded. New Spec Kit tasks imported while an active milestone is set receive the corresponding Beads label. The import plan also records a project-state digest, so a milestone change between preview and apply invalidates the plan.
