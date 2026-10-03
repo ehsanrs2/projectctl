@@ -1,11 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Add budget-aware mid-turn checkpointing so long Codex runs stop gracefully near quota safety boundaries and resume from durable verified state.
+current_goal: Integrate external team task systems without weakening ProjectCTL deterministic scheduling or execution-safety boundaries.
 active_milestone:
-  id: M2.2
-  title: Budget-aware Checkpointing & Graceful Quota Stop
+  id: M3.0a
+  title: GitHub Issues Reader & Authority Discovery
   aliases:
-    - Quota Checkpointing
-    - Graceful Quota Stop
+    - GitHub Issues
+    - External Task Authority
+    - Read-only GitHub Adapter
 updated_at: null
