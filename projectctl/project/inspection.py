@@ -116,7 +116,13 @@ def _fingerprint_payload(root: Path, assets: list[DetectedAsset], head: str | No
         except OSError:
             pass
         dirty_entries.append({"status": line[:2], "path": rel, "stat": stat})
-    return {"head": head, "dirty": dirty, "git_status": dirty_entries, "assets": file_entries}
+    return {
+        "head": head,
+        "origin": _git_value(root, "remote", "get-url", "origin"),
+        "dirty": dirty,
+        "git_status": dirty_entries,
+        "assets": file_entries,
+    }
 
 
 def inspect_repository(target: Path) -> ProjectInspection:
