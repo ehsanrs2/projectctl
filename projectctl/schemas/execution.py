@@ -13,6 +13,7 @@ from projectctl.core.enums import (
 )
 from projectctl.schemas.base import ProjectCtlModel
 from projectctl.schemas.config import RepoRelativePath
+from projectctl.schemas.quota import QuotaSnapshot
 from projectctl.schemas.run import WorkerDescriptor
 
 
@@ -166,9 +167,11 @@ class WorkerCheckpoint(ProjectCtlModel):
     branch_name: str = Field(min_length=1)
     context_manifest_digest: str = Field(min_length=1)
     reason: CheckpointReason
+    quota_snapshot: QuotaSnapshot
     quota_snapshot_digest: str = Field(min_length=1)
     quota_mode: QuotaMode
     quota_stale: bool
+    workspace_digest: str | None = None
     checkpoint_at: AwareDatetime
 
 
