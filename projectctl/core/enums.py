@@ -193,6 +193,12 @@ class WorkerResultStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class CheckpointReason(StrEnum):
+    QUOTA_STALE = "quota_stale"
+    QUOTA_CRITICAL = "quota_critical"
+    QUOTA_BELOW_TASK_REQUIREMENT = "quota_below_task_requirement"
+
+
 class VerificationCheckStatus(StrEnum):
     PASSED = "passed"
     FAILED = "failed"
@@ -234,6 +240,7 @@ class AutoStopReason(StrEnum):
     NO_ELIGIBLE_TASK = "no_eligible_task"
     QUOTA_CRITICAL = "quota_critical"
     QUOTA_STALE = "quota_stale"
+    QUOTA_CHECKPOINTED = "quota_checkpointed"
     HUMAN_DECISION_REQUIRED = "human_decision_required"
     POLICY_BLOCKED = "policy_blocked"
     RUN_FAILED = "run_failed"
