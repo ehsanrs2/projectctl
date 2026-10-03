@@ -1,3 +1,4 @@
+import json
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,7 +29,12 @@ from projectctl.core.enums import (
     WorkerResultStatus,
     WorkerStrategyKind,
 )
-from projectctl.core.errors import CapabilityMismatchError, WorkerError, WorktreeError
+from projectctl.core.errors import (
+    CapabilityMismatchError,
+    RunStoreError,
+    WorkerError,
+    WorktreeError,
+)
 from projectctl.schemas.capabilities import (
     CapabilitySupport,
     PermissionCapabilities,
@@ -429,3 +435,36 @@ def test_checkpoint_resume_fails_closed_if_partial_workspace_was_modified(tmp_pa
     record = RunStore(repo).get(prepared.record.run_id)
     assert record.status == RunStatus.NEEDS_DECISION
     assert record.terminal_reason == RunTerminalReason.RECOVERY_UNSAFE
+
+
+def test_checkpoint_resume_rejects_tampered_worker_request(tmp_path: Path, monkeypatch):
+    repo, prepared, task, caps = setup_prepared(tmp_path, monkeypatch)
+    adapter = FakeAdapter(caps, checkpoint=True)
+    monkeypatch.setattr(
+        "projectctl.application.execution._adapter_for_provider",
+        lambda provider: adapter,
+    )
+    started = start_prepared_run(repo, prepared.record.run_id)
+
+    request_path = (
+        repo
+        / ".projectctl"
+        / "runs"
+        / prepared.record.run_id
+        / "worker-request.json"
+    )
+    raw = json.loads(request_path.read_text(encoding="utf-8"))
+    raw["objective"] = "tampered objective"
+    request_path.write_text(json.dumps(raw), encoding="utf-8")
+
+    adapter.checkpoint = False
+    monkeypatch.setattr(
+        "projectctl.application.execution.read_current_quota",
+        lambda account: fresh_quota(),
+    )
+    with pytest.raises(RunStoreError, match="original WorkerRequest"):
+        resume_checkpointed_run(repo, prepared.record.run_id)
+
+    record = RunStore(repo).get(prepared.record.run_id)
+    assert record.status == RunStatus.NEEDS_DECISION
+    assert record.terminal_reason == RunTerminalReason.CONTEXT_INVALID
