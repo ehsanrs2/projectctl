@@ -1,0 +1,39 @@
+schema_kind: projectctl.verification_catalog
+schema_version: 1
+default_profile: default
+profiles:
+  default:
+    id: default
+    diff_policy:
+      require_changes: true
+      allow_symlink_changes: false
+      max_changed_paths: 1000
+    commands:
+      - id: pytest
+        argv:
+          - python
+          - -m
+          - pytest
+          - -q
+        timeout_seconds: 1200
+        required: true
+      - id: compile
+        argv:
+          - python
+          - -m
+          - compileall
+          - -q
+          - projectctl
+        timeout_seconds: 600
+        required: true
+      - id: schema-export
+        argv:
+          - python
+          - -m
+          - projectctl
+          - schema
+          - export
+          - --destination
+          - /tmp/projectctl-verification-schemas
+        timeout_seconds: 600
+        required: true

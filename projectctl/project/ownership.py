@@ -6,6 +6,7 @@ DEFAULT_OWNERSHIP = {
     "docs/CONSTRAINTS.md": Ownership.HUMAN,
     "docs/PROJECT_STATE.yaml": Ownership.HUMAN,
     "AGENTS.md": Ownership.HUMAN,
+    "projectctl.verification.yaml": Ownership.HUMAN,
     "docs/generated/STATUS.md": Ownership.GENERATED,
     "docs/generated/BUDGET.md": Ownership.GENERATED,
     "docs/generated/TASKBOARD.md": Ownership.GENERATED,

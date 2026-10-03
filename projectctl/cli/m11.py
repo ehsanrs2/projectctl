@@ -16,6 +16,7 @@ from projectctl.storage.sqlite import migrate_project_state_db
 
 EXIT_REPOSITORY = 11
 EXIT_RUN = 17
+EXIT_VERIFICATION = 19
 
 
 def _json(value) -> str:

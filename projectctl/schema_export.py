@@ -4,7 +4,7 @@ from pathlib import Path
 from projectctl.schemas.artifact import ArtifactMetadata
 from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDecision
 from projectctl.schemas.config import ProjectConfig
-from projectctl.schemas.evidence import EvidenceManifest
+from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
 from projectctl.schemas.execution import (ExecutionPlan, ExecutionPlanV1, WorkerCheckpoint, WorkerRequest, WorkerRequestV1, WorkerResult)
 from projectctl.schemas.onboarding import AdoptionManifest, AdoptionPlan, ProjectInspection
 from projectctl.schemas.project_state import ProjectState
@@ -13,7 +13,7 @@ from projectctl.schemas.run import ContextManifest, ContextManifestV1, RunManife
 from projectctl.schemas.scheduler import SchedulerDecision, SchedulerDecisionV1
 from projectctl.schemas.status import ProjectStatus
 from projectctl.schemas.task import TaskSnapshot
-from projectctl.schemas.verification import VerificationManifest
+from projectctl.schemas.verification import VerificationCatalog, VerificationManifest, VerificationManifestV1
 
 PUBLIC_SCHEMAS = {
     "project-config.v1.schema.json": ProjectConfig,
@@ -35,8 +35,11 @@ PUBLIC_SCHEMAS = {
     "worker-request.v2.schema.json": WorkerRequest,
     "worker-result.v1.schema.json": WorkerResult,
     "worker-checkpoint.v1.schema.json": WorkerCheckpoint,
-    "verification-manifest.v1.schema.json": VerificationManifest,
-    "evidence-manifest.v1.schema.json": EvidenceManifest,
+    "verification-catalog.v1.schema.json": VerificationCatalog,
+    "verification-manifest.v1.schema.json": VerificationManifestV1,
+    "verification-manifest.v2.schema.json": VerificationManifest,
+    "evidence-manifest.v1.schema.json": EvidenceManifestV1,
+    "evidence-manifest.v2.schema.json": EvidenceManifest,
     "artifact-metadata.v1.schema.json": ArtifactMetadata,
     "project-inspection.v1.schema.json": ProjectInspection,
     "adoption-plan.v1.schema.json": AdoptionPlan,
