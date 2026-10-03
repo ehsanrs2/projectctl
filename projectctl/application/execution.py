@@ -410,6 +410,231 @@ def _mark_start_failure(
     )
 
 
+def _quota_monitor(project_root: Path, task) -> QuotaCheckpointMonitor:
+    config = load_project_config(project_root)
+    return QuotaCheckpointMonitor(
+        account=config.quota.account,
+        policy=config.quota,
+        resource_class=task.resource_class,
+    )
+
+
+def _load_worker_checkpoint(path: Path) -> WorkerCheckpoint:
+    if not path.exists():
+        raise RunStoreError(f"Missing worker checkpoint: {path}")
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        checkpoint = parse_worker_checkpoint(raw)
+    except Exception as exc:
+        raise RunStoreError(f"Invalid worker checkpoint {path.name}: {exc}") from exc
+    if not isinstance(checkpoint, WorkerCheckpoint):
+        raise RunStoreError(
+            "Legacy WorkerCheckpoint v1 is audit-readable but not automatically resumable."
+        )
+    return checkpoint
+
+
+def _checkpoint_artifact_ref(run_id: str) -> str:
+    return (
+        f".projectctl/runs/{run_id}/checkpoints/"
+        f"checkpoint-{uuid.uuid4().hex}.json"
+    )
+
+
+def _persist_checkpoint(
+    root: Path,
+    *,
+    store: RunStore,
+    run_id: str,
+    checkpoint: WorkerCheckpoint,
+) -> RunRecord:
+    checkpoint_ref = _checkpoint_artifact_ref(run_id)
+    _atomic_json(root / checkpoint_ref, checkpoint)
+    record = store.transition(
+        run_id,
+        expected={RunStatus.RUNNING},
+        status=RunStatus.RUNNING,
+        worker_thread_id=checkpoint.worker_thread_id,
+        checkpoint_at=checkpoint.checkpoint_at,
+        checkpoint_ref=checkpoint_ref,
+    )
+    store.append_event(
+        run_id,
+        "worker.checkpointed",
+        {
+            "checkpoint_ref": checkpoint_ref,
+            "checkpoint_digest": digest(checkpoint),
+            "reason": checkpoint.reason.value,
+            "quota_mode": checkpoint.quota_mode.value,
+            "quota_stale": checkpoint.quota_stale,
+            "quota_snapshot_digest": checkpoint.quota_snapshot_digest,
+            "worker_thread_id": checkpoint.worker_thread_id,
+            "worker_turn_id": checkpoint.worker_turn_id,
+        },
+    )
+    return record
+
+
+def _finalize_worker_outcome(
+    root: Path,
+    *,
+    store: RunStore,
+    run_id: str,
+    run_dir: Path,
+    actor: str,
+    actual_worktree: Path,
+    pre_head: str,
+    context: ContextBundle,
+    outcome: WorkerResult | WorkerCheckpoint,
+) -> StartedRun:
+    post_head = resolve_commit(actual_worktree, "HEAD")
+    if post_head != pre_head:
+        _mark_start_failure(
+            store,
+            run_id,
+            expected=RunStatus.RUNNING,
+            status=RunStatus.FAILED,
+            reason=RunTerminalReason.UNEXPECTED_GIT_HISTORY,
+        )
+        raise WorkerError(
+            "Worker changed Git HEAD/history. The worktree was preserved for inspection."
+        )
+
+    if isinstance(outcome, WorkerCheckpoint):
+        record = _persist_checkpoint(
+            root,
+            store=store,
+            run_id=run_id,
+            checkpoint=outcome,
+        )
+        return StartedRun(
+            record=record,
+            context=context,
+            checkpoint=outcome,
+        )
+
+    result = outcome
+    _atomic_json(run_dir / "worker-result.json", result)
+    store.append_event(
+        run_id,
+        "worker.result",
+        {
+            "status": result.status.value,
+            "worker_thread_id": result.worker_thread_id,
+            "worker_result_digest": digest(result),
+        },
+    )
+
+    if result.status == WorkerResultStatus.IMPLEMENTED:
+        final_record = store.transition(
+            run_id,
+            expected={RunStatus.RUNNING},
+            status=RunStatus.VERIFYING,
+            worker_thread_id=result.worker_thread_id,
+            clear_checkpoint=True,
+        )
+    elif result.status == WorkerResultStatus.BLOCKED:
+        reason = (
+            RunTerminalReason.POLICY_BLOCKED
+            if result.requested_permissions
+            else RunTerminalReason.WORKER_BLOCKED
+        )
+        status = (
+            RunStatus.BLOCKED_POLICY
+            if result.requested_permissions
+            else RunStatus.NEEDS_DECISION
+        )
+        final_record = store.transition(
+            run_id,
+            expected={RunStatus.RUNNING},
+            status=status,
+            terminal_reason=reason,
+            worker_thread_id=result.worker_thread_id,
+            clear_checkpoint=True,
+        )
+    elif result.status == WorkerResultStatus.CANCELLED:
+        final_record = store.transition(
+            run_id,
+            expected={RunStatus.RUNNING},
+            status=RunStatus.CANCELLED,
+            terminal_reason=RunTerminalReason.WORKER_CANCELLED,
+            worker_thread_id=result.worker_thread_id,
+            clear_checkpoint=True,
+        )
+    else:
+        final_record = store.transition(
+            run_id,
+            expected={RunStatus.RUNNING},
+            status=RunStatus.FAILED,
+            terminal_reason=RunTerminalReason.WORKER_ERROR,
+            worker_thread_id=result.worker_thread_id,
+            clear_checkpoint=True,
+        )
+
+    final_record = reconcile_terminal_task(
+        root,
+        store=store,
+        run_id=run_id,
+        actor=actor,
+    )
+    return StartedRun(
+        record=final_record,
+        context=context,
+        result=result,
+    )
+
+
+def _run_worker_operation(
+    root: Path,
+    *,
+    store: RunStore,
+    run_id: str,
+    run_dir: Path,
+    actor: str,
+    actual_worktree: Path,
+    context: ContextBundle,
+    operation,
+) -> StartedRun:
+    pre_head = resolve_commit(actual_worktree, "HEAD")
+    try:
+        with LeaseHeartbeat(store, run_id, owner=actor):
+            outcome = operation()
+    except Exception as exc:
+        if isinstance(exc, RunLeaseError):
+            raise
+        _mark_start_failure(
+            store,
+            run_id,
+            expected=RunStatus.RUNNING,
+            status=RunStatus.FAILED,
+            reason=RunTerminalReason.WORKER_ERROR,
+        )
+        store.append_event(
+            run_id,
+            "worker.error",
+            {"type": type(exc).__name__, "message": str(exc)},
+        )
+        reconcile_terminal_task(
+            root,
+            store=store,
+            run_id=run_id,
+            actor=actor,
+        )
+        raise
+
+    return _finalize_worker_outcome(
+        root,
+        store=store,
+        run_id=run_id,
+        run_dir=run_dir,
+        actor=actor,
+        actual_worktree=actual_worktree,
+        pre_head=pre_head,
+        context=context,
+        outcome=outcome,
+    )
+
+
 def start_prepared_run(project_root: Path, run_id: str) -> StartedRun:
     root = project_root.resolve()
     actor = _actor()
@@ -574,7 +799,6 @@ def start_prepared_run(project_root: Path, run_id: str) -> StartedRun:
             )
             raise
 
-        pre_head = resolve_commit(actual_worktree, "HEAD")
         store.transition(
             run_id,
             expected={RunStatus.CLAIMED},
@@ -590,99 +814,21 @@ def start_prepared_run(project_root: Path, run_id: str) -> StartedRun:
             },
         )
 
-        try:
-            with LeaseHeartbeat(store, run_id, owner=actor):
-                result = adapter.start(context.request, workspace=actual_worktree)
-        except Exception as exc:
-            if isinstance(exc, RunLeaseError):
-                raise
-            _mark_start_failure(
-                store,
-                run_id,
-                expected=RunStatus.RUNNING,
-                status=RunStatus.FAILED,
-                reason=RunTerminalReason.WORKER_ERROR,
-            )
-            store.append_event(
-                run_id,
-                "worker.error",
-                {"type": type(exc).__name__, "message": str(exc)},
-            )
-            raise
-
-        _atomic_json(run_dir / "worker-result.json", result)
-        store.append_event(
-            run_id,
-            "worker.result",
-            {
-                "status": result.status.value,
-                "worker_thread_id": result.worker_thread_id,
-                "worker_result_digest": digest(result),
-            },
-        )
-
-        post_head = resolve_commit(actual_worktree, "HEAD")
-        if post_head != pre_head:
-            final_record = _mark_start_failure(
-                store,
-                run_id,
-                expected=RunStatus.RUNNING,
-                status=RunStatus.FAILED,
-                reason=RunTerminalReason.UNEXPECTED_GIT_HISTORY,
-            )
-            raise WorkerError(
-                "Worker changed Git HEAD/history. The worktree was preserved for inspection."
-            )
-
-        if result.status == WorkerResultStatus.IMPLEMENTED:
-            final_record = store.transition(
-                run_id,
-                expected={RunStatus.RUNNING},
-                status=RunStatus.VERIFYING,
-                worker_thread_id=result.worker_thread_id,
-            )
-        elif result.status == WorkerResultStatus.BLOCKED:
-            reason = (
-                RunTerminalReason.POLICY_BLOCKED
-                if result.requested_permissions
-                else RunTerminalReason.WORKER_BLOCKED
-            )
-            status = (
-                RunStatus.BLOCKED_POLICY
-                if result.requested_permissions
-                else RunStatus.NEEDS_DECISION
-            )
-            final_record = store.transition(
-                run_id,
-                expected={RunStatus.RUNNING},
-                status=status,
-                terminal_reason=reason,
-                worker_thread_id=result.worker_thread_id,
-            )
-        elif result.status == WorkerResultStatus.CANCELLED:
-            final_record = store.transition(
-                run_id,
-                expected={RunStatus.RUNNING},
-                status=RunStatus.CANCELLED,
-                terminal_reason=RunTerminalReason.WORKER_CANCELLED,
-                worker_thread_id=result.worker_thread_id,
-            )
-        else:
-            final_record = store.transition(
-                run_id,
-                expected={RunStatus.RUNNING},
-                status=RunStatus.FAILED,
-                terminal_reason=RunTerminalReason.WORKER_ERROR,
-                worker_thread_id=result.worker_thread_id,
-            )
-
-        final_record = reconcile_terminal_task(
+        monitor = _quota_monitor(root, current_task)
+        return _run_worker_operation(
             root,
             store=store,
             run_id=run_id,
+            run_dir=run_dir,
             actor=actor,
+            actual_worktree=actual_worktree,
+            context=context,
+            operation=lambda: adapter.start(
+                context.request,
+                workspace=actual_worktree,
+                checkpoint_monitor=monitor,
+            ),
         )
-        return StartedRun(record=final_record, result=result, context=context)
     finally:
         if sys.exc_info()[0] is not None:
             try:
@@ -696,6 +842,193 @@ def start_prepared_run(project_root: Path, run_id: str) -> StartedRun:
                     )
             except Exception:
                 pass
+            try:
+                reconcile_terminal_task(
+                    root,
+                    store=store,
+                    run_id=run_id,
+                    actor=actor,
+                )
+            except Exception:
+                pass
+        try:
+            store.release_lease(run_id, owner=actor)
+        except Exception:
+            pass
+
+
+def resume_checkpointed_run(project_root: Path, run_id: str) -> StartedRun:
+    root = project_root.resolve()
+    actor = _actor()
+    store = RunStore(root)
+    record = store.acquire_lease(run_id, owner=actor)
+    run_dir = root / ".projectctl" / "runs" / run_id
+
+    try:
+        if record.status != RunStatus.RUNNING or not record.checkpoint_ref:
+            raise RunStoreError(
+                f"Run {run_id} is not a resumable checkpointed RUNNING run."
+            )
+
+        plan = _load_json_model(run_dir / "execution-plan.json", ExecutionPlan)
+        if digest(plan) != record.execution_plan_digest:
+            _mark_start_failure(
+                store,
+                run_id,
+                expected=RunStatus.RUNNING,
+                status=RunStatus.FAILED,
+                reason=RunTerminalReason.CONTEXT_INVALID,
+            )
+            raise RunStoreError("ExecutionPlan digest no longer matches the run record.")
+
+        checkpoint_path = (root / record.checkpoint_ref).resolve()
+        if not checkpoint_path.is_relative_to(root):
+            raise RunStoreError("Checkpoint path escapes the project root.")
+        checkpoint = _load_worker_checkpoint(checkpoint_path)
+        if (
+            checkpoint.run_id != record.run_id
+            or checkpoint.task_id != record.task_id
+            or checkpoint.worktree_id != record.worktree_id
+            or checkpoint.base_commit != record.base_commit
+            or checkpoint.branch_name != record.branch_name
+        ):
+            _mark_start_failure(
+                store,
+                run_id,
+                expected=RunStatus.RUNNING,
+                status=RunStatus.NEEDS_DECISION,
+                reason=RunTerminalReason.RECOVERY_UNSAFE,
+            )
+            raise RunStoreError("Worker checkpoint identity does not match durable run state.")
+
+        manager = WorktreeManager(root)
+        expected_worktree = manager.path_for(record.worktree_id)
+        actual_worktree = Path(record.worktree_path).resolve()
+        if actual_worktree != expected_worktree or not actual_worktree.exists():
+            _mark_start_failure(
+                store,
+                run_id,
+                expected=RunStatus.RUNNING,
+                status=RunStatus.NEEDS_DECISION,
+                reason=RunTerminalReason.RECOVERY_UNSAFE,
+            )
+            raise WorktreeError("Checkpoint worktree is missing or outside the expected run location.")
+        if resolve_commit(actual_worktree, "HEAD") != plan.base_commit:
+            _mark_start_failure(
+                store,
+                run_id,
+                expected=RunStatus.RUNNING,
+                status=RunStatus.FAILED,
+                reason=RunTerminalReason.UNEXPECTED_GIT_HISTORY,
+            )
+            raise WorkerError("Checkpointed worker changed Git history; resume is unsafe.")
+
+        context_manifest = _load_json_model(
+            run_dir / "context-manifest.json", ContextManifest
+        )
+        request = _load_json_model(run_dir / "worker-request.json", WorkerRequest)
+        if (
+            digest(context_manifest) != checkpoint.context_manifest_digest
+            or request.context_manifest_digest != checkpoint.context_manifest_digest
+            or request.run_id != run_id
+            or request.task_id != record.task_id
+        ):
+            _mark_start_failure(
+                store,
+                run_id,
+                expected=RunStatus.RUNNING,
+                status=RunStatus.NEEDS_DECISION,
+                reason=RunTerminalReason.CONTEXT_INVALID,
+            )
+            raise RunStoreError("Checkpoint context no longer matches the original WorkerRequest.")
+
+        current_task = task_store_for_project(root).get(plan.task_id)
+        config = load_project_config(root)
+        quota = read_current_quota(config.quota.account)
+        manager_quota = QuotaManager(config.quota)
+        quota_state = manager_quota.state(quota, now=utc_now())
+        if quota_state.stale or not manager_quota.eligible_for_resource(
+            current_task.resource_class, quota_state
+        ):
+            store.append_event(
+                run_id,
+                "worker.resume_deferred",
+                {
+                    "checkpoint_ref": record.checkpoint_ref,
+                    "quota_mode": quota_state.mode.value,
+                    "quota_stale": quota_state.stale,
+                    "quota_snapshot_digest": digest(quota),
+                },
+            )
+            raise QuotaError(
+                "Checkpoint resume deferred because current quota is stale or "
+                "insufficient for this task resource class."
+            )
+
+        adapter = _adapter_for_provider(plan.worker.provider)
+        live_capabilities = adapter.probe()
+        if effective_capability_digest(live_capabilities) != plan.capability_snapshot_digest:
+            _atomic_json(run_dir / "worker-capabilities-live.json", live_capabilities)
+            _mark_start_failure(
+                store,
+                run_id,
+                expected=RunStatus.RUNNING,
+                status=RunStatus.NEEDS_DECISION,
+                reason=RunTerminalReason.CAPABILITY_CHANGED,
+            )
+            raise CapabilityMismatchError(
+                "Worker capability surface changed before checkpoint resume."
+            )
+
+        live_strategy = negotiate_strategy(
+            current_task,
+            live_capabilities,
+            requested=plan.strategy,
+        )
+        if not live_strategy.compatible or live_strategy.resolved != plan.strategy:
+            _mark_start_failure(
+                store,
+                run_id,
+                expected=RunStatus.RUNNING,
+                status=RunStatus.NEEDS_DECISION,
+                reason=RunTerminalReason.CAPABILITY_CHANGED,
+            )
+            raise CapabilityMismatchError(
+                "Checkpointed worker strategy is no longer compatible."
+            )
+
+        context = ContextBundle(
+            task=current_task,
+            manifest=context_manifest,
+            request=request,
+        )
+        store.append_event(
+            run_id,
+            "worker.resumed",
+            {
+                "checkpoint_ref": record.checkpoint_ref,
+                "worker_thread_id": checkpoint.worker_thread_id,
+            },
+        )
+
+        monitor = _quota_monitor(root, current_task)
+        return _run_worker_operation(
+            root,
+            store=store,
+            run_id=run_id,
+            run_dir=run_dir,
+            actor=actor,
+            actual_worktree=actual_worktree,
+            context=context,
+            operation=lambda: adapter.resume(
+                checkpoint,
+                request,
+                workspace=actual_worktree,
+                checkpoint_monitor=monitor,
+            ),
+        )
+    finally:
+        if sys.exc_info()[0] is not None:
             try:
                 reconcile_terminal_task(
                     root,
