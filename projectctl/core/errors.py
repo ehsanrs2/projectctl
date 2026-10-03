@@ -82,5 +82,17 @@ class RecoveryError(ProjectCtlError):
     pass
 
 
+class RunStoreError(ProjectCtlError):
+    pass
+
+
+class RunLeaseError(RunStoreError):
+    pass
+
+
+class WorktreeError(ProjectCtlError):
+    pass
+
+
 class InternalProjectCtlError(ProjectCtlError):
     pass

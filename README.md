@@ -260,3 +260,33 @@ worker commit/merge/rebase/push: forbidden
 ```
 
 M1.0 still performs no Codex execution, task claim, integration, or task completion. Those capabilities are implemented incrementally in M1.1–M1.4.
+
+
+## M1.1 — Claim + Run Store + Isolated Worktrees
+
+M1.1 adds durable execution preparation without starting a worker.
+
+```bash
+# Upgrade an existing M0.x/M1.0 project state database explicitly.
+projectctl migrate --project /path/to/repo
+
+# Prepare the scheduler-selected task:
+# - requires a clean primary worktree
+# - revalidates plan inputs
+# - atomically claims the task
+# - creates an isolated ProjectCTL run branch/worktree
+projectctl run prepare --project /path/to/repo
+
+# Inspect durable run state and events.
+projectctl runs --project /path/to/repo
+projectctl run show RUN_ID --project /path/to/repo
+
+# Release a prepared claim and remove its isolated worktree.
+projectctl run abort RUN_ID --project /path/to/repo
+```
+
+Project state SQLite is now schema v2. Upgrades are never performed implicitly on normal reads or repeated init. `projectctl migrate` creates a consistent SQLite backup before applying v1 → v2.
+
+Each run branch is named `projectctl/run/<run-id>` and its worktree lives outside the repository under `$PROJECTCTL_HOME/worktrees/<project-instance-id>/<run-id>/`.
+
+M1.1 still starts no Codex worker. A successfully prepared run ends in `claimed`, ready for M1.2.

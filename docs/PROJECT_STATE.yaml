@@ -1,11 +1,11 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Freeze the autonomous execution contracts before enabling task claiming or Codex execution.
+current_goal: Add durable task claims, run leases, explicit DB migration, and isolated Git worktrees without starting a worker.
 active_milestone:
-  id: M1.0
-  title: Execution Contracts
+  id: M1.1
+  title: Claim + Run Store + Isolated Worktrees
   aliases:
-    - Execution Boundary
-    - Worker Contracts
+    - Run Store
+    - Worktree Isolation
 updated_at: null
