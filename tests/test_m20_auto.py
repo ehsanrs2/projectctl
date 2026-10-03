@@ -223,3 +223,49 @@ def test_auto_fails_closed_on_multiple_active_runs(tmp_path: Path, monkeypatch):
 def test_run_auto_cli_is_registered():
     result = runner.invoke(app, ["run", "auto", "--help"])
     assert result.exit_code == 0, result.output
+
+
+
+def test_resumed_run_honors_material_project_state_boundary(tmp_path: Path, monkeypatch):
+    setup_common(monkeypatch)
+    FakeStore.active = [
+        SimpleNamespace(
+            run_id="run-resume",
+            task_id="task-resume",
+            status=RunStatus.VERIFYING,
+            lease_owner=None,
+            lease_expires_at=None,
+        )
+    ]
+    monkeypatch.setattr(
+        auto_app,
+        "_advance_run",
+        lambda root, run_id: SimpleNamespace(
+            run_id=run_id,
+            task_id="task-resume",
+            status=RunStatus.PASSED,
+            terminal_reason=None,
+        ),
+    )
+    monkeypatch.setattr(
+        auto_app,
+        "_execution_plan_state_digest",
+        lambda root, run_id: "state-before",
+    )
+    monkeypatch.setattr(
+        auto_app,
+        "collect_status",
+        lambda root: status_bundle(
+            selected=None,
+            project_state_digest="state-after",
+            total=1,
+            done=1,
+        ),
+    )
+
+    report = auto_app.run_auto(tmp_path, AutoRunPolicy(max_tasks=2))
+
+    assert report.stop_reason == AutoStopReason.MATERIAL_PROJECT_STATE_CHANGE
+    assert report.completed_tasks == 1
+    assert report.steps[-1].project_state_digest_before == "state-before"
+    assert report.steps[-1].project_state_digest_after == "state-after"

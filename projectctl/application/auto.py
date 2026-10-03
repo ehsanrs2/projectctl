@@ -23,6 +23,7 @@ from projectctl.core.errors import ProjectCtlError
 from projectctl.core.time import utc_now
 from projectctl.project.locking import project_lock
 from projectctl.schemas.auto import AutoRunPolicy, AutoRunReport, AutoRunStep
+from projectctl.schemas.execution import ExecutionPlan
 from projectctl.schemas.capabilities import StrategyFallbackPolicy
 from projectctl.storage.runs import RunStore
 
@@ -79,6 +80,15 @@ def _has_live_lease(record, now: datetime) -> bool:
 
 def _active_runs(store: RunStore):
     return [record for record in store.list(limit=1000) if record.status in _ACTIVE_STATUSES]
+
+
+def _execution_plan_state_digest(project_root: Path, run_id: str) -> str | None:
+    path = project_root / ".projectctl" / "runs" / run_id / "execution-plan.json"
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return ExecutionPlan.model_validate(raw).project_state_digest
+    except Exception:
+        return None
 
 
 def _classify_terminal(record, attempts_for_task: int, policy: AutoRunPolicy):
@@ -249,9 +259,38 @@ def run_auto(project_root: Path, policy: AutoRunPolicy | None = None) -> AutoRun
                     details.append(str(exc))
                     final = RunStore(root).get(record.run_id)
 
-                if final.status == RunStatus.PASSED:
-                    completed_tasks += 1
+                stop = _classify_terminal(
+                    final,
+                    attempts_by_task[record.task_id],
+                    policy,
+                )
+                if final.status != RunStatus.PASSED:
+                    steps.append(
+                        AutoRunStep(
+                            iteration=len(steps) + 1,
+                            task_id=record.task_id,
+                            run_id=record.run_id,
+                            started_status=started_status,
+                            final_status=final.status,
+                            action="resume_run",
+                            details=details,
+                        )
+                    )
+                    if stop is not None:
+                        return _finalize(
+                            root,
+                            auto_run_id=auto_run_id,
+                            started_at=started_at,
+                            stop_reason=stop,
+                            completed_tasks=completed_tasks,
+                            attempted_tasks=attempted_tasks,
+                            steps=steps,
+                        )
+                    continue
 
+                completed_tasks += 1
+                status_after = collect_status(root)
+                original_state_digest = _execution_plan_state_digest(root, record.run_id)
                 steps.append(
                     AutoRunStep(
                         iteration=len(steps) + 1,
@@ -260,20 +299,24 @@ def run_auto(project_root: Path, policy: AutoRunPolicy | None = None) -> AutoRun
                         started_status=started_status,
                         final_status=final.status,
                         action="resume_run",
+                        project_state_digest_before=original_state_digest,
+                        project_state_digest_after=status_after.decision.project_state_digest,
+                        quota_mode=status_after.quota_state.mode,
+                        quota_stale=status_after.quota_state.stale,
                         details=details,
                     )
                 )
-                stop = _classify_terminal(
-                    final,
-                    attempts_by_task[record.task_id],
-                    policy,
-                )
-                if stop is not None:
+                if (
+                    policy.stop_on_material_project_state_change
+                    and original_state_digest is not None
+                    and original_state_digest
+                    != status_after.decision.project_state_digest
+                ):
                     return _finalize(
                         root,
                         auto_run_id=auto_run_id,
                         started_at=started_at,
-                        stop_reason=stop,
+                        stop_reason=AutoStopReason.MATERIAL_PROJECT_STATE_CHANGE,
                         completed_tasks=completed_tasks,
                         attempted_tasks=attempted_tasks,
                         steps=steps,
@@ -419,10 +462,40 @@ def run_auto(project_root: Path, policy: AutoRunPolicy | None = None) -> AutoRun
                     )
                 final = RunStore(root).get(run_id)
 
-            status_after = collect_status(root)
-            if final.status == RunStatus.PASSED:
-                completed_tasks += 1
+            stop = _classify_terminal(
+                final,
+                attempts_by_task[task_id],
+                policy,
+            )
+            if final.status != RunStatus.PASSED:
+                steps.append(
+                    AutoRunStep(
+                        iteration=len(steps) + 1,
+                        task_id=task_id,
+                        run_id=run_id,
+                        started_status=RunStatus.CLAIMED if run_id else None,
+                        final_status=final.status,
+                        action="execute_task",
+                        project_state_digest_before=status_before.decision.project_state_digest,
+                        quota_mode=status_before.quota_state.mode,
+                        quota_stale=status_before.quota_state.stale,
+                        details=details,
+                    )
+                )
+                if stop is not None:
+                    return _finalize(
+                        root,
+                        auto_run_id=auto_run_id,
+                        started_at=started_at,
+                        stop_reason=stop,
+                        completed_tasks=completed_tasks,
+                        attempted_tasks=attempted_tasks,
+                        steps=steps,
+                    )
+                continue
 
+            completed_tasks += 1
+            status_after = collect_status(root)
             steps.append(
                 AutoRunStep(
                     iteration=len(steps) + 1,
@@ -438,22 +511,6 @@ def run_auto(project_root: Path, policy: AutoRunPolicy | None = None) -> AutoRun
                     details=details,
                 )
             )
-
-            stop = _classify_terminal(
-                final,
-                attempts_by_task[task_id],
-                policy,
-            )
-            if stop is not None:
-                return _finalize(
-                    root,
-                    auto_run_id=auto_run_id,
-                    started_at=started_at,
-                    stop_reason=stop,
-                    completed_tasks=completed_tasks,
-                    attempted_tasks=attempted_tasks,
-                    steps=steps,
-                )
 
             if (
                 policy.stop_on_material_project_state_change
