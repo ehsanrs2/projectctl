@@ -96,7 +96,7 @@ def _execution_plan_state_digest(project_root: Path, run_id: str) -> str | None:
 
 
 def _classify_terminal(record, attempts_for_task: int, policy: AutoRunPolicy):
-    if record.status == RunStatus.RUNNING and record.checkpoint_ref:
+    if record.status == RunStatus.RUNNING and getattr(record, "checkpoint_ref", None):
         return AutoStopReason.QUOTA_CHECKPOINTED
     if record.status == RunStatus.PASSED:
         return None
