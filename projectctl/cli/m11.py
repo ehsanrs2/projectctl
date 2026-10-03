@@ -6,6 +6,7 @@ from pathlib import Path
 import typer
 
 from projectctl.application.execution import abort_prepared_run, prepare_next_run, start_prepared_run
+from projectctl.application.verification import verify_run
 from projectctl.core.enums import WorkerStrategyKind
 from projectctl.core.errors import ProjectCtlError
 from projectctl.project.root import find_project_root
@@ -150,6 +151,44 @@ def register_m11(app: typer.Typer) -> None:
             typer.echo(f"Run status: {started.record.status.value}")
             if started.record.status.value == "verifying":
                 typer.echo("Independent verification has not run yet; M1.3 owns that gate.")
+
+    @run_app.command("verify")
+    def verify_command(
+        run_id: str,
+        project: Path = typer.Option(
+            Path("."), "--project", exists=True, file_okay=False, resolve_path=True
+        ),
+        json_output: bool = typer.Option(False, "--json"),
+    ) -> None:
+        try:
+            root = find_project_root(project)
+            verified = verify_run(root, run_id)
+        except ProjectCtlError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(EXIT_RUN)
+
+        payload = {
+            "run": verified.record.model_dump(mode="json"),
+            "verification": verified.verification.model_dump(mode="json"),
+            "evidence": verified.evidence.model_dump(mode="json"),
+        }
+        if json_output:
+            typer.echo(_json(payload))
+        else:
+            typer.echo(f"Verification finished for run {verified.record.run_id}.")
+            typer.echo(
+                f"Overall: {'PASS' if verified.verification.overall_pass else 'FAIL'}"
+            )
+            typer.echo(f"Run status: {verified.record.status.value}")
+            if verified.record.candidate_commit:
+                typer.echo(f"Candidate: {verified.record.candidate_commit}")
+            if verified.verification.policy_violations:
+                typer.echo("Policy violations:")
+                for violation in verified.verification.policy_violations:
+                    typer.echo(f"  {violation}")
+
+        if not verified.verification.overall_pass:
+            raise typer.Exit(EXIT_VERIFICATION)
 
     @run_app.command("show")
     def show_command(

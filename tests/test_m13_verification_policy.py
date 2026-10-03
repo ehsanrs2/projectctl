@@ -85,3 +85,17 @@ def test_symlink_changes_fail_closed(tmp_path: Path):
     )
     assert any("symlink changes are not allowed" in v for v in inspection.violations)
     assert any("symlink escapes worktree" in v for v in inspection.violations)
+
+
+
+def test_rename_cannot_hide_protected_source_path(tmp_path: Path):
+    repo = make_repo(tmp_path)
+    git(repo, "mv", "AGENTS.md", "moved-rules.md")
+    inspection = inspect_workspace(
+        repo,
+        policy=DiffPolicy(),
+        strategy=WorkerStrategyKind.DIRECT,
+    )
+    assert "AGENTS.md" in inspection.changed_paths
+    assert "moved-rules.md" in inspection.changed_paths
+    assert any("protected path modified: AGENTS.md" in v for v in inspection.violations)

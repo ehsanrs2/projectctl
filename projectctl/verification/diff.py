@@ -69,9 +69,20 @@ def _nul_paths(data: bytes) -> set[str]:
 
 def changed_paths(worktree: Path) -> list[str]:
     paths = set()
-    paths |= _nul_paths(_git_bytes(worktree, "diff", "--name-only", "-z", "HEAD", "--"))
     paths |= _nul_paths(
-        _git_bytes(worktree, "diff", "--cached", "--name-only", "-z", "HEAD", "--")
+        _git_bytes(worktree, "diff", "--no-renames", "--name-only", "-z", "HEAD", "--")
+    )
+    paths |= _nul_paths(
+        _git_bytes(
+            worktree,
+            "diff",
+            "--cached",
+            "--no-renames",
+            "--name-only",
+            "-z",
+            "HEAD",
+            "--",
+        )
     )
     paths |= _nul_paths(
         _git_bytes(worktree, "ls-files", "--others", "--exclude-standard", "-z", "--")
