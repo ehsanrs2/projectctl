@@ -60,8 +60,7 @@ def export_json_schemas(destination: Path) -> list[Path]:
     for filename, model in PUBLIC_SCHEMAS.items():
         path = destination / filename
         path.write_text(
-            json.dumps(model.model_json_schema(), indent=2, sort_keys=True) + "
-",
+            json.dumps(model.model_json_schema(), indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
         written.append(path)
