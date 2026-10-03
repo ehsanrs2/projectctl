@@ -631,7 +631,7 @@ A checkpoint-aware Codex turn is monitored against fresh account quota while it 
 ProjectCTL requests a graceful interrupt when quota becomes stale/critical or the
 remaining effective budget no longer satisfies the current task's resource class.
 
-\`\`\`text
+```text
 RUNNING Codex turn
       ↓
 periodic live quota observation
@@ -651,7 +651,7 @@ fresh quota later
 thread_resume(original_thread_id)
       ↓
 continue same task
-\`\`\`
+```
 
 Checkpoint artifacts bind the provider thread to the exact run, context, quota snapshot,
 base commit, and partial workspace digest. Git-history changes remain forbidden. External
@@ -659,15 +659,15 @@ changes to the checkpointed workspace fail closed instead of being silently inco
 
 Operators can resume explicitly:
 
-\`\`\`bash
+```bash
 projectctl run resume RUN_ID --project /path/to/repo
-\`\`\`
+```
 
 The autonomous loop also resumes an intact checkpoint before scheduling new work. If
-quota is still insufficient, it exits cleanly with \`quota_checkpointed\`; this is a
+quota is still insufficient, it exits cleanly with `quota_checkpointed`; this is a
 planned budget stop, not a worker failure.
 
 Checkpointed runs may also be explicitly aborted with the existing
-\`projectctl run abort RUN_ID\` command.
+`projectctl run abort RUN_ID` command.
 
-M2.2 keeps the bounded \`--max-tasks\` contract and does not estimate future token cost.
+M2.2 keeps the bounded `--max-tasks` contract and does not estimate future token cost.
