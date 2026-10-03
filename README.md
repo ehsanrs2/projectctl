@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M2.0 — Bounded Autonomous Loop**, orchestrating recovery, scheduling, execution, verification, and integration under explicit stop policies.
+This repository currently implements **M2.1 — Automatic Codex Quota Provider**, adding supported account-level Codex quota observation to the bounded M2.0 lifecycle.
 
 ## Implemented
 
@@ -588,3 +588,36 @@ Every invocation writes an audit artifact under:
 ```
 
 using `AutoRunReport v1`.
+
+
+## M2.1 — Automatic Codex Quota Provider
+
+M2.1 removes the manual-only quota limitation from M2.0 without weakening its bounded
+autonomous safety contract.
+
+Quota provider selection is account-global:
+
+```bash
+projectctl quota provider --project /path/to/repo
+projectctl quota provider --set codex_app_server --project /path/to/repo
+projectctl quota provider --set manual --project /path/to/repo
+```
+
+When `codex_app_server` is selected, normal status/scheduling/auto evaluations obtain a
+fresh observation through the supported `codex app-server` JSON-RPC interface and
+`account/rateLimits/read`.
+
+ProjectCTL identifies five-hour and weekly windows by their reported duration (300 and
+10080 minutes), not by primary/secondary position. It prefers the explicit shared
+`codex` bucket when present and never infers model applicability from display names or
+opaque bucket IDs.
+
+`ordinaryUsageAllowed=false` is authoritative and places quota in critical mode.
+Provider/runtime failures become an unknown stale snapshot in scheduling paths, so M2.0
+stops rather than inventing available budget. `projectctl doctor` probes the configured
+provider separately and distinguishes temporary unavailability from malformed/unsafe
+protocol data.
+
+Successful official observations are persisted in the existing global ProjectCTL account
+database. Manual quota remains supported. M2.1 does not predict per-task token cost,
+remove `--max-tasks`, or call private OpenAI endpoints.
