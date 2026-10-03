@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M1.4.1 — Production Hardening Before M2**, closing lifecycle races discovered in the end-to-end M1 architecture review.
+This repository currently implements **M2.0 — Bounded Autonomous Loop**, orchestrating recovery, scheduling, execution, verification, and integration under explicit stop policies.
 
 ## Implemented
 
@@ -528,3 +528,63 @@ Project locks now contain host, PID, token, and acquisition metadata. A dead loc
 Lock cleanup is token-checked so one process cannot delete a lock that has already been reacquired by another owner.
 
 These changes do not add any M2 autonomous behavior; they strengthen the M1 invariants that M2 will rely on.
+
+
+## M2.0 — Bounded Autonomous Loop
+
+M2.0 introduces a bounded autonomous orchestrator over the complete M1 lifecycle.
+
+```bash
+projectctl run auto --project /path/to/repo
+
+# Permit more than one task attempt in the same invocation.
+projectctl run auto --max-tasks 3 --project /path/to/repo
+```
+
+The default is intentionally `--max-tasks 1`. Raising the bound is an explicit operator decision.
+
+Each autonomous iteration performs a fresh control-plane evaluation:
+
+```text
+unfinished run?
+   ├─ yes -> recover/resume deterministic phase
+   └─ no
+        ↓
+fresh project state + task snapshot + quota snapshot
+        ↓
+quota stop policy
+        ↓
+scheduler
+        ↓
+prepare
+        ↓
+worker
+        ↓
+verification
+        ↓
+integration
+        ↓
+fresh project state + quota snapshot
+        ↓
+material-change check
+        ↓
+next iteration or typed stop reason
+```
+
+The loop is project-serialized with the crash-safe `auto-loop` lock. It will not compete with another live run lease and fails closed if multiple active runs already exist.
+
+Typed stop reasons include quota stale/critical, no eligible task, all work complete, policy block, human decision, active/multiple run conflict, recovery required, retry-budget exhaustion, material project-state change, and the explicit max-task bound.
+
+Retry is conservative. Only infrastructure/timeouts/worker transport/claim/stale-context style failures are eligible, and only within `max_attempts_per_task`. Verification failures, policy blocks, unexpected Git history, and human-decision states do not auto-retry.
+
+If the structured Project State changes while a task is executing, autonomous continuation stops by default after the current task. This is the M2 material-change boundary; the next invocation replans from the new intent.
+
+Quota checkpoints currently re-read the configured ProjectCTL quota provider. The current provider is still manual, so M2.0 does not invent usage estimates or claim live provider accounting. The bounded task cap is therefore part of the safety contract until automatic quota accounting is added.
+
+Every invocation writes an audit artifact under:
+
+```text
+.projectctl/auto/auto-<id>.json
+```
+
+using `AutoRunReport v1`.

@@ -6,13 +6,15 @@ from pathlib import Path
 import typer
 
 from projectctl.application.execution import abort_prepared_run, prepare_next_run, start_prepared_run
+from projectctl.application.auto import run_auto
 from projectctl.application.verification import verify_run
 from projectctl.application.integration import integrate_run
 from projectctl.application.recovery import recover_run
-from projectctl.core.enums import WorkerStrategyKind
+from projectctl.core.enums import AutoStopReason, WorkerStrategyKind
 from projectctl.core.errors import ProjectCtlError
 from projectctl.project.root import find_project_root
 from projectctl.schemas.capabilities import StrategyFallbackPolicy
+from projectctl.schemas.auto import AutoRunPolicy
 from projectctl.project.locking import project_lock
 from projectctl.storage.runs import RunStore
 from projectctl.storage.sqlite import migrate_project_state_db
@@ -65,6 +67,92 @@ def register_m11(app: typer.Typer) -> None:
             typer.echo(
                 f"Project state database is already at v{result.to_version}; no migration needed."
             )
+
+    @run_app.command("auto")
+    def auto_command(
+        project: Path = typer.Option(
+            Path("."), "--project", exists=True, file_okay=False, resolve_path=True
+        ),
+        max_tasks: int = typer.Option(
+            1,
+            "--max-tasks",
+            min=1,
+            max=100,
+            help="Maximum task attempts for this bounded autonomous run.",
+        ),
+        max_attempts_per_task: int = typer.Option(
+            1,
+            "--max-attempts-per-task",
+            min=1,
+            max=10,
+        ),
+        strategy: str | None = typer.Option(
+            None,
+            "--strategy",
+            help="Requested strategy: direct, plan_then_execute, goal, review.",
+        ),
+        allow_goal_fallback: bool = typer.Option(False, "--allow-goal-fallback"),
+        allow_plan_fallback: bool = typer.Option(False, "--allow-plan-fallback"),
+        allow_stale_quota: bool = typer.Option(False, "--allow-stale-quota"),
+        allow_critical_quota: bool = typer.Option(False, "--allow-critical-quota"),
+        continue_on_project_state_change: bool = typer.Option(
+            False, "--continue-on-project-state-change"
+        ),
+        json_output: bool = typer.Option(False, "--json"),
+    ) -> None:
+        try:
+            root = find_project_root(project)
+            requested = WorkerStrategyKind(strategy) if strategy else None
+            report = run_auto(
+                root,
+                AutoRunPolicy(
+                    max_tasks=max_tasks,
+                    max_attempts_per_task=max_attempts_per_task,
+                    stop_on_critical_quota=not allow_critical_quota,
+                    stop_on_stale_quota=not allow_stale_quota,
+                    stop_on_material_project_state_change=not continue_on_project_state_change,
+                    requested_strategy=requested,
+                    allow_goal_fallback=allow_goal_fallback,
+                    allow_plan_fallback=allow_plan_fallback,
+                ),
+            )
+        except ValueError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(EXIT_RUN)
+        except ProjectCtlError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(EXIT_RUN)
+
+        if json_output:
+            typer.echo(_json(report))
+        else:
+            typer.echo(f"Auto run: {report.auto_run_id}")
+            typer.echo(f"Stop reason: {report.stop_reason.value}")
+            typer.echo(f"Attempts: {report.attempted_tasks}")
+            typer.echo(f"Completed: {report.completed_tasks}")
+            for step in report.steps:
+                identity = f" task={step.task_id}" if step.task_id else ""
+                run = f" run={step.run_id}" if step.run_id else ""
+                typer.echo(
+                    f"  [{step.iteration}] {step.action}{identity}{run}"
+                    + (
+                        f" -> {step.final_status.value}"
+                        if step.final_status is not None
+                        else ""
+                    )
+                )
+
+        hard_stops = {
+            AutoStopReason.HUMAN_DECISION_REQUIRED,
+            AutoStopReason.POLICY_BLOCKED,
+            AutoStopReason.RUN_FAILED,
+            AutoStopReason.RECOVERY_REQUIRED,
+            AutoStopReason.ACTIVE_RUN_PRESENT,
+            AutoStopReason.MULTIPLE_ACTIVE_RUNS,
+            AutoStopReason.RETRY_BUDGET_EXHAUSTED,
+        }
+        if report.stop_reason in hard_stops:
+            raise typer.Exit(16)
 
     @run_app.command("prepare")
     def prepare_command(

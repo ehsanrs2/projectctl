@@ -1,11 +1,11 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Harden M1 lease ownership, shared integration locking, canonical task reconciliation, and crash-safe project locks before autonomous orchestration.
+current_goal: Add a bounded autonomous orchestration loop over the hardened M1 lifecycle with explicit quota, recovery, retry, and human-decision stop boundaries.
 active_milestone:
-  id: M1.4.1
-  title: Production Hardening Before M2
+  id: M2.0
+  title: Bounded Autonomous Loop
   aliases:
-    - M1 Hardening
-    - Production Hardening
+    - Autonomous Loop
+    - Auto Orchestrator
 updated_at: null

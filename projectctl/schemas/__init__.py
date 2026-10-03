@@ -1,4 +1,5 @@
 from projectctl.schemas.artifact import ArtifactMetadata
+from projectctl.schemas.auto import AutoRunPolicy, AutoRunReport, AutoRunStep
 from projectctl.schemas.capabilities import (
     CapabilitySupport,
     GoalBudgetPolicy,
@@ -51,6 +52,9 @@ __all__ = [
     "AdoptionManifest",
     "AdoptionPlan",
     "ArtifactMetadata",
+    "AutoRunPolicy",
+    "AutoRunReport",
+    "AutoRunStep",
     "CapabilitySupport",
     "ClaimResult",
     "ContextManifest",

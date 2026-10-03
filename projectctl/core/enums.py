@@ -227,3 +227,19 @@ class RecommendationReason(StrEnum):
     ARCHITECTURE_TASK = "architecture_task"
     RESEARCH_TASK = "research_task"
     DEFAULT_POLICY = "default_policy"
+
+
+class AutoStopReason(StrEnum):
+    MAX_TASKS_REACHED = "max_tasks_reached"
+    NO_ELIGIBLE_TASK = "no_eligible_task"
+    QUOTA_CRITICAL = "quota_critical"
+    QUOTA_STALE = "quota_stale"
+    HUMAN_DECISION_REQUIRED = "human_decision_required"
+    POLICY_BLOCKED = "policy_blocked"
+    RUN_FAILED = "run_failed"
+    RECOVERY_REQUIRED = "recovery_required"
+    ACTIVE_RUN_PRESENT = "active_run_present"
+    MULTIPLE_ACTIVE_RUNS = "multiple_active_runs"
+    MATERIAL_PROJECT_STATE_CHANGE = "material_project_state_change"
+    RETRY_BUDGET_EXHAUSTED = "retry_budget_exhausted"
+    COMPLETED = "completed"

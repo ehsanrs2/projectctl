@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from projectctl.schemas.artifact import ArtifactMetadata
+from projectctl.schemas.auto import AutoRunPolicy, AutoRunReport
 from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDecision
 from projectctl.schemas.config import ProjectConfig
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
@@ -42,6 +43,8 @@ PUBLIC_SCHEMAS = {
     "evidence-manifest.v1.schema.json": EvidenceManifestV1,
     "evidence-manifest.v2.schema.json": EvidenceManifest,
     "artifact-metadata.v1.schema.json": ArtifactMetadata,
+    "auto-run-policy.v1.schema.json": AutoRunPolicy,
+    "auto-run-report.v1.schema.json": AutoRunReport,
     "integration-manifest.v1.schema.json": IntegrationManifest,
     "recovery-report.v1.schema.json": RecoveryReport,
     "project-inspection.v1.schema.json": ProjectInspection,
