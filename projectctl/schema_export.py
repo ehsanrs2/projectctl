@@ -10,7 +10,7 @@ from projectctl.schemas.execution import (ExecutionPlan, ExecutionPlanV1, Worker
 from projectctl.schemas.integration import IntegrationManifest, RecoveryReport
 from projectctl.schemas.onboarding import AdoptionManifest, AdoptionPlan, ProjectInspection
 from projectctl.schemas.project_state import ProjectState
-from projectctl.schemas.quota import QuotaSnapshot
+from projectctl.schemas.quota import QuotaSnapshot, QuotaSnapshotV1
 from projectctl.schemas.run import ContextManifest, ContextManifestV1, RunManifest, RunManifestV1
 from projectctl.schemas.scheduler import SchedulerDecision, SchedulerDecisionV1
 from projectctl.schemas.status import ProjectStatus
@@ -21,7 +21,7 @@ PUBLIC_SCHEMAS = {
     "project-config.v1.schema.json": ProjectConfig,
     "worker-capabilities.v1.schema.json": WorkerCapabilities,
     "worker-strategy-decision.v1.schema.json": WorkerStrategyDecision,
-    "quota-snapshot.v1.schema.json": QuotaSnapshot,
+    "quota-snapshot.v1.schema.json": QuotaSnapshotV1,\n    "quota-snapshot.v2.schema.json": QuotaSnapshot,
     "task-snapshot.v1.schema.json": TaskSnapshot,
     "scheduler-decision.v1.schema.json": SchedulerDecisionV1,
     "scheduler-decision.v2.schema.json": SchedulerDecision,
