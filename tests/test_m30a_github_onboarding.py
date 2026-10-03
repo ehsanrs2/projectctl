@@ -5,10 +5,12 @@ import subprocess
 from pathlib import Path
 
 import yaml
+import pytest
 from typer.testing import CliRunner
 
 from projectctl.cli.app import app
-from projectctl.project.adoption import plan_adoption
+from projectctl.core.errors import DigestMismatchError, RepositoryContractError
+from projectctl.project.adoption import apply_adoption, plan_adoption
 from projectctl.project.inspection import inspect_repository
 from projectctl.project.loader import load_project_config
 
@@ -218,3 +220,37 @@ def test_scheduler_can_select_normalized_github_issue(tmp_path: Path, monkeypatc
     assert decision.exit_code == 0, decision.output
     payload = json.loads(decision.output)
     assert payload["selected_task_id"] == "gh-11"
+
+
+def test_adoption_rejects_invalid_or_irrelevant_repository_override(tmp_path: Path):
+    repo = make_repo(tmp_path)
+    inspection = inspect_repository(repo)
+
+    with pytest.raises(RepositoryContractError, match="owner/repository"):
+        plan_adoption(
+            inspection,
+            task_store_provider="github",
+            task_store_repository="https://github.com/acme/widget",
+        )
+
+    with pytest.raises(RepositoryContractError, match="only supported"):
+        plan_adoption(
+            inspection,
+            task_store_provider="beads",
+            task_store_repository="acme/widget",
+        )
+
+
+def test_origin_change_invalidates_github_adoption_plan(tmp_path: Path, monkeypatch):
+    repo = make_repo(tmp_path)
+    monkeypatch.setenv("PROJECTCTL_HOME", str(tmp_path / "home"))
+    inspection = inspect_repository(repo)
+    plan = plan_adoption(inspection, task_store_provider="github")
+
+    subprocess.run(
+        ["git", "-C", str(repo), "remote", "set-url", "origin", "git@github.com:acme/other.git"],
+        check=True,
+    )
+
+    with pytest.raises(DigestMismatchError):
+        apply_adoption(plan)
