@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from projectctl.application.execution import _actor
+from projectctl.application.task_lifecycle import reconcile_terminal_task
 from projectctl.core.digest import digest
 from projectctl.core.enums import (
     RunStatus,
@@ -28,6 +30,7 @@ from projectctl.schemas.verification import (
     VerificationProfile,
 )
 from projectctl.storage.runs import RunStore
+from projectctl.runtime import LeaseHeartbeat
 from projectctl.verification import (
     committed_diff_digest,
     inspect_workspace,
@@ -304,16 +307,23 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
                 terminal_reason=RunTerminalReason.POLICY_BLOCKED,
                 evidence_manifest=evidence_rel,
             )
+            final = reconcile_terminal_task(
+                root,
+                store=store,
+                run_id=run_id,
+                actor=actor,
+            )
             return VerifiedRun(final, verification, evidence)
 
-        checks.extend(
-            run_verification_commands(
-                worktree,
-                run_dir=run_dir,
-                run_id=run_id,
-                profile=resolved.profile,
+        with LeaseHeartbeat(store, run_id, owner=actor):
+            checks.extend(
+                run_verification_commands(
+                    worktree,
+                    run_dir=run_dir,
+                    run_id=run_id,
+                    profile=resolved.profile,
+                )
             )
-        )
 
         after = inspect_workspace(
             worktree,
@@ -371,6 +381,12 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
                 status=RunStatus.FAILED,
                 terminal_reason=RunTerminalReason.VERIFICATION_FAILED,
                 evidence_manifest=evidence_rel,
+            )
+            final = reconcile_terminal_task(
+                root,
+                store=store,
+                run_id=run_id,
+                actor=actor,
             )
             return VerifiedRun(final, verification, evidence)
 
@@ -447,8 +463,24 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
             candidate_commit=candidate,
             evidence_manifest=evidence_rel,
         )
+        final = reconcile_terminal_task(
+            root,
+            store=store,
+            run_id=run_id,
+            actor=actor,
+        )
         return VerifiedRun(final, verification, evidence)
     finally:
+        if sys.exc_info()[0] is not None:
+            try:
+                reconcile_terminal_task(
+                    root,
+                    store=store,
+                    run_id=run_id,
+                    actor=actor,
+                )
+            except Exception:
+                pass
         try:
             store.release_lease(run_id, owner=actor)
         except Exception:

@@ -27,4 +27,6 @@ class BeadsTaskCompletionWriter:
         status = str(current.get("status") or "").lower()
         if status in {"closed", "done", "completed"}:
             return
+        # Human-decision work must not remain assigned to a dead/finished worker.
+        self.client.assign_issue(task_id, "")
         self.client.update_status(task_id, "blocked")

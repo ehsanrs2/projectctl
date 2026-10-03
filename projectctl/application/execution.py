@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import socket
+import sys
 import subprocess
 import tempfile
 import uuid
@@ -12,6 +13,7 @@ from pathlib import Path
 
 from projectctl.application.scheduling import collect_scheduling_bundle
 from projectctl.application.tasks import capture_task_snapshot, task_store_for_project
+from projectctl.application.task_lifecycle import reconcile_terminal_task
 from projectctl.context import ContextBundle, assemble_context
 from projectctl.core.digest import digest
 from projectctl.core.enums import (
@@ -25,6 +27,7 @@ from projectctl.core.errors import (
     ClaimConflictError,
     ConfigurationError,
     RunStoreError,
+    RunLeaseError,
     StaleSnapshotError,
     WorkerError,
     WorktreeError,
@@ -46,6 +49,7 @@ from projectctl.schemas.execution import ExecutionPlan, ExecutionPolicy, WorkerR
 from projectctl.schemas.run import RunManifest, WorkerDescriptor
 from projectctl.schemas.run_store import RunRecord
 from projectctl.storage.runs import RunStore
+from projectctl.runtime import LeaseHeartbeat
 from projectctl.workers.capability_digest import effective_capability_digest
 from projectctl.workers.codex import CodexWorkerAdapter
 from projectctl.workers.strategy import negotiate_strategy
@@ -570,8 +574,11 @@ def start_prepared_run(project_root: Path, run_id: str) -> StartedRun:
         )
 
         try:
-            result = adapter.start(context.request, workspace=actual_worktree)
+            with LeaseHeartbeat(store, run_id, owner=actor):
+                result = adapter.start(context.request, workspace=actual_worktree)
         except Exception as exc:
+            if isinstance(exc, RunLeaseError):
+                raise
             _mark_start_failure(
                 store,
                 run_id,
@@ -652,8 +659,35 @@ def start_prepared_run(project_root: Path, run_id: str) -> StartedRun:
                 worker_thread_id=result.worker_thread_id,
             )
 
+        final_record = reconcile_terminal_task(
+            root,
+            store=store,
+            run_id=run_id,
+            actor=actor,
+        )
         return StartedRun(record=final_record, result=result, context=context)
     finally:
+        if sys.exc_info()[0] is not None:
+            try:
+                current = store.get(run_id)
+                if current.status == RunStatus.CLAIMED:
+                    store.transition(
+                        run_id,
+                        expected={RunStatus.CLAIMED},
+                        status=RunStatus.FAILED,
+                        terminal_reason=RunTerminalReason.INFRASTRUCTURE_ERROR,
+                    )
+            except Exception:
+                pass
+            try:
+                reconcile_terminal_task(
+                    root,
+                    store=store,
+                    run_id=run_id,
+                    actor=actor,
+                )
+            except Exception:
+                pass
         try:
             store.release_lease(run_id, owner=actor)
         except Exception:

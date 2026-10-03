@@ -11,6 +11,7 @@ from projectctl.application.integration import (
     _completion_writer,
     _load_json_model,
 )
+from projectctl.application.task_lifecycle import reconcile_terminal_task
 from projectctl.core.digest import digest
 from projectctl.core.enums import RunStatus, RunTerminalReason, WorkerResultStatus
 from projectctl.core.errors import RecoveryError, RunLeaseError
@@ -56,6 +57,12 @@ def recover_run(project_root: Path, run_id: str) -> RecoveryAction:
                     status=RunStatus.NEEDS_DECISION,
                     terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
                 )
+                final = reconcile_terminal_task(
+                    root,
+                    store=store,
+                    run_id=run_id,
+                    actor=actor,
+                )
                 details.append("No durable WorkerResult exists; automatic worker resume is unsafe.")
                 return RecoveryAction(
                     run_id=run_id,
@@ -91,6 +98,12 @@ def recover_run(project_root: Path, run_id: str) -> RecoveryAction:
                 expected={RunStatus.RUNNING},
                 status=RunStatus.NEEDS_DECISION,
                 terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
+            )
+            final = reconcile_terminal_task(
+                root,
+                store=store,
+                run_id=run_id,
+                actor=actor,
             )
             details.append("WorkerResult/worktree state cannot be reconciled safely.")
             return RecoveryAction(
@@ -207,6 +220,12 @@ def recover_run(project_root: Path, run_id: str) -> RecoveryAction:
                 status=RunStatus.NEEDS_DECISION,
                 terminal_reason=RunTerminalReason.STALE_BASE,
             )
+            final = reconcile_terminal_task(
+                root,
+                store=store,
+                run_id=run_id,
+                actor=actor,
+            )
             details.append("Integration target differs from both base and candidate.")
             return RecoveryAction(
                 run_id=run_id,
@@ -247,6 +266,28 @@ def recover_run(project_root: Path, run_id: str) -> RecoveryAction:
                 previous_status=previous.value,
                 resolved_status=record.status.value,
                 action="lease_reclaimed",
+                details=details,
+            )
+
+        reconciled = reconcile_terminal_task(
+            root,
+            store=store,
+            run_id=run_id,
+            actor=actor,
+        )
+        if reconciled.status != record.status or reconciled.status in {
+            RunStatus.FAILED,
+            RunStatus.CANCELLED,
+            RunStatus.ABANDONED,
+            RunStatus.NEEDS_DECISION,
+            RunStatus.BLOCKED_POLICY,
+        }:
+            details.append("Canonical task state was reconciled with the terminal run.")
+            return RecoveryAction(
+                run_id=run_id,
+                previous_status=previous.value,
+                resolved_status=reconciled.status.value,
+                action="task_reconciled",
                 details=details,
             )
 

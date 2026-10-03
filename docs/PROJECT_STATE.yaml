@@ -1,11 +1,11 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Integrate only verified candidates, close canonical tasks after successful integration, and recover deterministic crash windows without invalidating evidence.
+current_goal: Harden M1 lease ownership, shared integration locking, canonical task reconciliation, and crash-safe project locks before autonomous orchestration.
 active_milestone:
-  id: M1.4
-  title: Integration + Recovery
+  id: M1.4.1
+  title: Production Hardening Before M2
   aliases:
-    - Integration
-    - Recovery
+    - M1 Hardening
+    - Production Hardening
 updated_at: null

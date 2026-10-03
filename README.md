@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M1.4 — Integration + Recovery**, completing the M1 execution loop with fail-closed fast-forward integration and deterministic crash recovery.
+This repository currently implements **M1.4.1 — Production Hardening Before M2**, closing lifecycle races discovered in the end-to-end M1 architecture review.
 
 ## Implemented
 
@@ -485,3 +485,46 @@ If a crash happens after the Git fast-forward but before task closure or run fin
 Recovery also reconciles a durable implemented WorkerResult left in `RUNNING` to `VERIFYING`, and a passing EvidenceManifest left in `VERIFYING` to `READY_TO_INTEGRATE`. A crashed worker without a durable trustworthy result is not automatically resumed; it moves to `NEEDS_DECISION / RECOVERY_UNSAFE`.
 
 A live, unexpired lease is never stolen by recovery.
+
+
+## M1.4.1 — Production Hardening Before M2
+
+An end-to-end M1 design review identified four races that must be closed before autonomous `run --auto` orchestration is safe.
+
+### Run lease heartbeat
+
+Worker execution and verification may run longer than the default five-minute lease TTL. Long synchronous operations now keep their lease alive with a periodic heartbeat.
+
+If heartbeat renewal fails, the old owner fails closed and must stop mutating run state. A newly recovered owner therefore cannot race the original process.
+
+### Serialized integration
+
+Per-run leases do not protect the shared integration target from two different runs. All target-branch integration now also acquires a project-wide `integration` lock.
+
+### Canonical task reconciliation
+
+Terminal run state and task authority must agree:
+
+```text
+FAILED / CANCELLED / ABANDONED
+        ↓
+release canonical task for retry
+
+NEEDS_DECISION / BLOCKED_POLICY
+        ↓
+unassign canonical task
+        ↓
+mark blocked for human decision
+```
+
+If task-store reconciliation itself fails, the run escalates to `NEEDS_DECISION / RECOVERY_UNSAFE` instead of silently leaving a stranded in-progress task.
+
+Recovery also reconciles terminal runs created before this rule.
+
+### Crash-safe project locks
+
+Project locks now contain host, PID, token, and acquisition metadata. A dead lock owned by a dead PID on the same host may be reclaimed. Live locks, malformed locks, and locks from another host remain fail-closed.
+
+Lock cleanup is token-checked so one process cannot delete a lock that has already been reacquired by another owner.
+
+These changes do not add any M2 autonomous behavior; they strengthen the M1 invariants that M2 will rely on.
