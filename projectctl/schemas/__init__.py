@@ -15,11 +15,14 @@ from projectctl.schemas.execution import (
     ClaimResult,
     EvidenceReference,
     ExecutionPlan,
+    ExecutionPlanV1,
     ExecutionPolicy,
     PermissionRequest,
     WorkerCheckpoint,
     WorkerRequest,
+    WorkerRequestV1,
     WorkerResult,
+    WorkerOutputPayload,
 )
 from projectctl.schemas.health import HealthCheckResult, HealthReport
 from projectctl.schemas.onboarding import AdoptionManifest, AdoptionPlan, ProjectInspection
@@ -51,6 +54,7 @@ __all__ = [
     "EvidenceManifest",
     "EvidenceReference",
     "ExecutionPlan",
+    "ExecutionPlanV1",
     "ExecutionPolicy",
     "GoalBudgetPolicy",
     "HealthCheckResult",
@@ -80,5 +84,7 @@ __all__ = [
     "WorkerRuntimeDescriptor",
     "WorkerStrategyDecision",
     "WorkerRequest",
+    "WorkerRequestV1",
+    "WorkerOutputPayload",
     "WorkerResult",
 ]

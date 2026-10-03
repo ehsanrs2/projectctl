@@ -6,12 +6,33 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from projectctl.application.execution import ExecutionPlanningBundle
 from projectctl.cli.entry import app
-from projectctl.core.enums import ModelProfile, ReasoningLevel, RunStatus, RunTerminalReason
+from projectctl.core.digest import digest
+from projectctl.core.enums import (
+    ApprovalPolicy,
+    CapabilityState,
+    ExecutionSandboxMode,
+    ModelProfile,
+    ReasoningLevel,
+    RunStatus,
+    RunTerminalReason,
+    WorkerMode,
+    WorkerStrategyKind,
+)
 from projectctl.core.errors import RunStoreError
+from projectctl.schemas.capabilities import (
+    CapabilitySupport,
+    PermissionCapabilities,
+    WorkerCapabilities,
+    WorkerPhasePolicy,
+    WorkerRuntimeDescriptor,
+    WorkerStrategyDecision,
+)
 from projectctl.schemas.execution import ClaimResult, ExecutionPlan
 from projectctl.schemas.run import RunManifest, WorkerDescriptor
 from projectctl.storage.runs import RunStore
+from projectctl.workers.capability_digest import effective_capability_digest
 
 runner = CliRunner()
 NOW = datetime(2026, 10, 3, 6, 0, tzinfo=timezone.utc)
@@ -68,6 +89,47 @@ def test_prepare_and_abort_use_durable_run_state_and_external_worktree(
         model_profile=ModelProfile.BALANCED,
         reasoning=ReasoningLevel.MEDIUM,
     )
+    support = CapabilitySupport(
+        runtime=CapabilityState.SUPPORTED,
+        adapter=CapabilityState.SUPPORTED,
+    )
+    capabilities = WorkerCapabilities(
+        probe_kind="test",
+        runtime=WorkerRuntimeDescriptor(
+            provider="codex",
+            sdk_name="openai-codex",
+            sdk_version="0.160.0",
+            runtime_name="openai-codex-cli-bin",
+            runtime_version="0.160.0",
+            adapter_name="test",
+            adapter_version="1",
+            observed_at=NOW,
+        ),
+        modes={
+            WorkerMode.DEFAULT: support,
+            WorkerMode.PLAN: CapabilitySupport(),
+            WorkerMode.GOAL: CapabilitySupport(),
+        },
+        permissions=PermissionCapabilities(
+            sandboxes={
+                ExecutionSandboxMode.WORKSPACE_WRITE: support,
+                ExecutionSandboxMode.READ_ONLY: support,
+            },
+            approvals={ApprovalPolicy.DENY_ALL: support},
+        ),
+    )
+    strategy = WorkerStrategyDecision(
+        task_id="bd-1",
+        requested=WorkerStrategyKind.DIRECT,
+        resolved=WorkerStrategyKind.DIRECT,
+        compatible=True,
+        capability_snapshot_digest=effective_capability_digest(capabilities),
+        execution=WorkerPhasePolicy(
+            mode=WorkerMode.DEFAULT,
+            sandbox=ExecutionSandboxMode.WORKSPACE_WRITE,
+            approval=ApprovalPolicy.DENY_ALL,
+        ),
+    )
     plan = ExecutionPlan(
         plan_id="ep-test",
         project_id="repo",
@@ -77,6 +139,9 @@ def test_prepare_and_abort_use_durable_run_state_and_external_worktree(
         task_snapshot_digest="tasks",
         project_state_digest="state",
         quota_snapshot_digest="quota",
+        capability_snapshot_digest=effective_capability_digest(capabilities),
+        strategy_decision_digest=digest(strategy),
+        strategy=WorkerStrategyKind.DIRECT,
         base_commit=base,
         integration_target_ref=git(repo, "branch", "--show-current"),
         worker=worker,
@@ -84,8 +149,12 @@ def test_prepare_and_abort_use_durable_run_state_and_external_worktree(
     )
     claimer = FakeClaimer()
     monkeypatch.setattr(
-        "projectctl.application.execution.build_next_execution_plan",
-        lambda root, integration_target_ref=None: plan,
+        "projectctl.application.execution.build_next_execution_bundle",
+        lambda root, **kwargs: ExecutionPlanningBundle(
+            plan=plan,
+            capabilities=capabilities,
+            strategy=strategy,
+        ),
     )
     monkeypatch.setattr(
         "projectctl.application.execution._validate_plan_inputs",

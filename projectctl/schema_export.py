@@ -5,7 +5,7 @@ from projectctl.schemas.artifact import ArtifactMetadata
 from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDecision
 from projectctl.schemas.config import ProjectConfig
 from projectctl.schemas.evidence import EvidenceManifest
-from projectctl.schemas.execution import ExecutionPlan, WorkerCheckpoint, WorkerRequest, WorkerResult
+from projectctl.schemas.execution import (ExecutionPlan, ExecutionPlanV1, WorkerCheckpoint, WorkerRequest, WorkerRequestV1, WorkerResult)
 from projectctl.schemas.onboarding import AdoptionManifest, AdoptionPlan, ProjectInspection
 from projectctl.schemas.project_state import ProjectState
 from projectctl.schemas.quota import QuotaSnapshot
@@ -29,8 +29,10 @@ PUBLIC_SCHEMAS = {
     "run-manifest.v2.schema.json": RunManifest,
     "context-manifest.v1.schema.json": ContextManifestV1,
     "context-manifest.v2.schema.json": ContextManifest,
-    "execution-plan.v1.schema.json": ExecutionPlan,
-    "worker-request.v1.schema.json": WorkerRequest,
+    "execution-plan.v1.schema.json": ExecutionPlanV1,
+    "execution-plan.v2.schema.json": ExecutionPlan,
+    "worker-request.v1.schema.json": WorkerRequestV1,
+    "worker-request.v2.schema.json": WorkerRequest,
     "worker-result.v1.schema.json": WorkerResult,
     "worker-checkpoint.v1.schema.json": WorkerCheckpoint,
     "verification-manifest.v1.schema.json": VerificationManifest,

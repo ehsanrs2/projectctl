@@ -5,9 +5,11 @@ from pathlib import Path
 
 import typer
 
-from projectctl.application.execution import abort_prepared_run, prepare_next_run
+from projectctl.application.execution import abort_prepared_run, prepare_next_run, start_prepared_run
+from projectctl.core.enums import WorkerStrategyKind
 from projectctl.core.errors import ProjectCtlError
 from projectctl.project.root import find_project_root
+from projectctl.schemas.capabilities import StrategyFallbackPolicy
 from projectctl.project.locking import project_lock
 from projectctl.storage.runs import RunStore
 from projectctl.storage.sqlite import migrate_project_state_db
@@ -70,11 +72,30 @@ def register_m11(app: typer.Typer) -> None:
             "--target",
             help="Integration target ref. Defaults to the current branch.",
         ),
+        strategy: str | None = typer.Option(
+            None,
+            "--strategy",
+            help="Requested strategy: direct, plan_then_execute, goal, review.",
+        ),
+        allow_goal_fallback: bool = typer.Option(False, "--allow-goal-fallback"),
+        allow_plan_fallback: bool = typer.Option(False, "--allow-plan-fallback"),
         json_output: bool = typer.Option(False, "--json"),
     ) -> None:
         try:
             root = find_project_root(project)
-            prepared = prepare_next_run(root, integration_target_ref=target)
+            requested = WorkerStrategyKind(strategy) if strategy else None
+            prepared = prepare_next_run(
+                root,
+                integration_target_ref=target,
+                requested_strategy=requested,
+                fallback=StrategyFallbackPolicy(
+                    allow_goal_to_plan_then_execute=allow_goal_fallback,
+                    allow_plan_to_direct=allow_plan_fallback,
+                ),
+            )
+        except ValueError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(EXIT_RUN)
         except ProjectCtlError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(EXIT_RUN)
@@ -97,7 +118,37 @@ def register_m11(app: typer.Typer) -> None:
             typer.echo(f"Status: {prepared.record.status.value}")
             typer.echo(f"Branch: {prepared.record.branch_name}")
             typer.echo(f"Worktree: {prepared.record.worktree_path}")
+            typer.echo(f"Strategy: {prepared.plan.strategy.value}")
             typer.echo("No worker has been started.")
+
+    @run_app.command("start")
+    def start_command(
+        run_id: str,
+        project: Path = typer.Option(
+            Path("."), "--project", exists=True, file_okay=False, resolve_path=True
+        ),
+        json_output: bool = typer.Option(False, "--json"),
+    ) -> None:
+        try:
+            root = find_project_root(project)
+            started = start_prepared_run(root, run_id)
+        except ProjectCtlError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(EXIT_RUN)
+
+        payload = {
+            "run": started.record.model_dump(mode="json"),
+            "worker_result": started.result.model_dump(mode="json"),
+            "context_manifest": started.context.manifest.model_dump(mode="json"),
+        }
+        if json_output:
+            typer.echo(_json(payload))
+        else:
+            typer.echo(f"Worker finished for run {started.record.run_id}.")
+            typer.echo(f"Worker status: {started.result.status.value}")
+            typer.echo(f"Run status: {started.record.status.value}")
+            if started.record.status.value == "verifying":
+                typer.echo("Independent verification has not run yet; M1.3 owns that gate.")
 
     @run_app.command("show")
     def show_command(

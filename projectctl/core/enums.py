@@ -135,6 +135,9 @@ class RunTerminalReason(StrEnum):
     INFRASTRUCTURE_ERROR = "infrastructure_error"
     USER_CANCELLED = "user_cancelled"
     RECOVERY_UNSAFE = "recovery_unsafe"
+    CAPABILITY_CHANGED = "capability_changed"
+    WORKER_BLOCKED = "worker_blocked"
+    WORKER_CANCELLED = "worker_cancelled"
 
 
 class ExecutionSandboxMode(StrEnum):

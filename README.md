@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M1.2a — Codex Capability & Strategy Layer**, building on durable run preparation and isolated worktrees.
+This repository currently implements **M1.2b — Context + Codex WorkerAdapter**, enabling bounded Codex execution for stable SDK modes while keeping verification separate.
 
 ## Implemented
 
@@ -326,3 +326,62 @@ pip install -e ".[codex]"
 ```
 
 M1.2a performs only capability discovery and strategy negotiation. It still does not start a Codex worker. M1.2b will add ContextAssembler, live capability probing, and the actual Codex WorkerAdapter.
+
+
+## M1.2b — Context + Codex WorkerAdapter
+
+M1.2b enables the first real worker execution path.
+
+```bash
+# Prepare a run. Many Beads tasks still have unknown resource metadata,
+# so an explicit direct strategy is useful until richer task metadata lands.
+projectctl run prepare --strategy direct
+
+# Start the already-claimed worker in its isolated worktree.
+projectctl run start RUN_ID
+
+# Inspect the installed adapter/runtime surface without running a task.
+projectctl worker capabilities
+
+# Start the Codex runtime and verify the live surface.
+projectctl worker capabilities --live
+```
+
+The context assembler writes deterministic control-plane artifacts under:
+
+```text
+.projectctl/runs/<run-id>/
+├── execution-plan.json
+├── worker-capabilities.json
+├── worker-strategy.json
+├── worker-capabilities-live.json
+├── context-manifest.json
+├── worker-request.json
+└── worker-result.json
+```
+
+Context manifests record paths, roles/scopes, and digests. Project documentation and specs are not copied wholesale into prompts. The worker reads relevant paths from the isolated worktree.
+
+Task/spec content is delivered to Codex as an `ExternalMessage`, while ProjectCTL execution restrictions are developer instructions. Repository content therefore cannot grant itself additional authority.
+
+M1.2b uses the documented high-level `openai-codex` SDK for real execution:
+
+- persistent Codex thread
+- explicit `ApprovalMode.deny_all`
+- explicit `Sandbox.read_only` or `Sandbox.workspace_write`
+- workspace-write network access explicitly disabled
+- structured `WorkerOutputPayload`
+- external/untrusted task message
+- configured reasoning level
+- isolated worktree cwd
+
+The stable adapter currently executes:
+
+- `direct` — Default mode + workspace-write
+- `review` — Default mode + read-only
+
+Native Codex Plan collaboration mode and Goal operations remain modeled and visible but are **not emulated** through prompts. Their current APIs live outside the documented high-level execution surface used by this adapter, so they remain fail-closed until a dedicated adapter bridge is implemented.
+
+A worker returning `implemented` moves the run only to `VERIFYING`. ProjectCTL does not trust the worker's own success claim. M1.3 performs independent diff/test/evidence verification.
+
+ProjectCTL also compares Git HEAD before and after worker execution. Any worker-created commit, rebase, merge, or other history mutation fails the run with `unexpected_git_history`.

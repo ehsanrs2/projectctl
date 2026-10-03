@@ -40,3 +40,22 @@ jobs:
           written = export_json_schemas(Path("/tmp/projectctl-schemas"))
           assert written
           PY
+
+  codex-sdk-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install pinned Codex SDK
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,codex]"
+
+      - name: Validate Codex public API contract
+        run: |
+          pytest -q             tests/test_m12b_codex_sdk_contract.py             tests/test_m12b_codex_adapter.py

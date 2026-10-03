@@ -178,6 +178,7 @@ class RunStore:
         terminal_reason: RunTerminalReason | None = None,
         candidate_commit: str | None = None,
         worker_thread_id: str | None = None,
+        context_manifest: str | None = None,
         checkpoint_at: datetime | None = None,
         checkpoint_ref: str | None = None,
         now: datetime | None = None,
@@ -211,6 +212,7 @@ class RunStore:
                     "terminal_reason": terminal_reason,
                     "candidate_commit": candidate_commit if candidate_commit is not None else manifest.candidate_commit,
                     "worker_thread_id": worker_thread_id if worker_thread_id is not None else manifest.worker_thread_id,
+                    "context_manifest": context_manifest if context_manifest is not None else manifest.context_manifest,
                     "started_at": started_at,
                     "completed_at": completed_at,
                     "checkpoint_at": checkpoint_at if checkpoint_at is not None else manifest.checkpoint_at,
@@ -385,3 +387,39 @@ class RunStore:
             )
             for row in rows
         ]
+
+
+    def append_event(
+        self,
+        run_id: str,
+        event_type: str,
+        payload: dict | None = None,
+        *,
+        now: datetime | None = None,
+    ) -> RunEventRecord:
+        now = now or datetime.now(timezone.utc)
+        body = json.dumps(payload or {}, sort_keys=True, separators=(",", ":"))
+        conn = connect_db(self.db_path)
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            exists = conn.execute("SELECT 1 FROM runs WHERE run_id=?", (run_id,)).fetchone()
+            if exists is None:
+                raise RunStoreError(f"Unknown run: {run_id}")
+            cursor = conn.execute(
+                "INSERT INTO run_events(run_id, created_at, event_type, payload_json) VALUES (?, ?, ?, ?)",
+                (run_id, _iso(now), event_type, body),
+            )
+            event_id = int(cursor.lastrowid)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+        return RunEventRecord(
+            id=event_id,
+            run_id=run_id,
+            created_at=now,
+            event_type=event_type,
+            payload=payload or {},
+        )
