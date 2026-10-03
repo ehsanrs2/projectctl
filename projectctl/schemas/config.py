@@ -17,6 +17,7 @@ class ProjectIdentity(ProjectCtlModel):
 
 class TaskStoreConfig(ProjectCtlModel):
     provider: str = "beads"
+    repository: str | None = None
 
 
 class ProjectPaths(ProjectCtlModel):
