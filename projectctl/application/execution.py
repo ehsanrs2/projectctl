@@ -1135,10 +1135,18 @@ def abort_prepared_run(project_root: Path, run_id: str) -> RunRecord:
     actor = _actor()
     store = RunStore(root)
     record = store.acquire_lease(run_id, owner=actor)
-    if record.status not in {RunStatus.PLANNED, RunStatus.PREPARING, RunStatus.CLAIMED}:
+    abortable = record.status in {
+        RunStatus.PLANNED,
+        RunStatus.PREPARING,
+        RunStatus.CLAIMED,
+    } or (
+        record.status == RunStatus.RUNNING and record.checkpoint_ref is not None
+    )
+    if not abortable:
         store.release_lease(run_id, owner=actor)
         raise RunStoreError(
-            f"Run {run_id} cannot be aborted from status {record.status.value} in M1.2b."
+            f"Run {run_id} cannot be aborted from status {record.status.value}; "
+            "RUNNING is abortable only when a durable checkpoint exists."
         )
 
     manager = WorktreeManager(root)
@@ -1150,13 +1158,13 @@ def abort_prepared_run(project_root: Path, run_id: str) -> RunRecord:
         force=True,
     )
 
-    if record.status == RunStatus.CLAIMED:
+    if record.status in {RunStatus.CLAIMED, RunStatus.RUNNING}:
         try:
             claimer.release(record.task_id, actor=actor)
         except Exception as exc:
             store.transition(
                 run_id,
-                expected={RunStatus.CLAIMED},
+                expected={record.status},
                 status=RunStatus.NEEDS_DECISION,
                 terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
             )
@@ -1171,6 +1179,7 @@ def abort_prepared_run(project_root: Path, run_id: str) -> RunRecord:
             expected={record.status},
             status=RunStatus.CANCELLED,
             terminal_reason=RunTerminalReason.USER_CANCELLED,
+            clear_checkpoint=True,
         )
     except Exception as exc:
         try:
