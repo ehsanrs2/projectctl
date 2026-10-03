@@ -1,11 +1,11 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Replace manual-only quota observations with an account-global, fail-closed Codex App Server quota provider while preserving M2.0 safety boundaries.
+current_goal: Add budget-aware mid-turn checkpointing so long Codex runs stop gracefully near quota safety boundaries and resume from durable verified state.
 active_milestone:
-  id: M2.1
-  title: Automatic Codex Quota Provider
+  id: M2.2
+  title: Budget-aware Checkpointing & Graceful Quota Stop
   aliases:
-    - Automatic Quota
-    - Codex Quota Provider
+    - Quota Checkpointing
+    - Graceful Quota Stop
 updated_at: null

@@ -99,6 +99,7 @@ class QuotaPolicy(ProjectCtlModel):
     resource_requirements: ResourceBudgetPolicy = Field(default_factory=ResourceBudgetPolicy)
     unknown_quota_mode: QuotaMode = QuotaMode.CONSERVATION
     max_snapshot_age_seconds: int = Field(default=900, ge=1)
+    execution_monitor_interval_seconds: float = Field(default=60.0, gt=0, le=600)
 
 
 class SchedulerWeights(ProjectCtlModel):

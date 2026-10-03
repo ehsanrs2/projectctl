@@ -4,13 +4,16 @@ from pydantic import AwareDatetime, Field
 
 from projectctl.core.enums import (
     ApprovalPolicy,
+    CheckpointReason,
     ExecutionSandboxMode,
     NetworkPolicy,
+    QuotaMode,
     WorkerResultStatus,
     WorkerStrategyKind,
 )
 from projectctl.schemas.base import ProjectCtlModel
 from projectctl.schemas.config import RepoRelativePath
+from projectctl.schemas.quota import QuotaSnapshot
 from projectctl.schemas.run import WorkerDescriptor
 
 
@@ -139,7 +142,7 @@ class WorkerResult(ProjectCtlModel):
     completed_at: AwareDatetime
 
 
-class WorkerCheckpoint(ProjectCtlModel):
+class WorkerCheckpointV1(ProjectCtlModel):
     schema_kind: Literal["projectctl.worker_checkpoint"] = "projectctl.worker_checkpoint"
     schema_version: Literal[1] = 1
     run_id: str = Field(min_length=1)
@@ -150,6 +153,38 @@ class WorkerCheckpoint(ProjectCtlModel):
     branch_name: str = Field(min_length=1)
     context_manifest_digest: str = Field(min_length=1)
     checkpoint_at: AwareDatetime
+
+
+class WorkerCheckpoint(ProjectCtlModel):
+    schema_kind: Literal["projectctl.worker_checkpoint"] = "projectctl.worker_checkpoint"
+    schema_version: Literal[2] = 2
+    run_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    worker_thread_id: str = Field(min_length=1)
+    worker_turn_id: str | None = None
+    worktree_id: str = Field(min_length=1)
+    base_commit: str = Field(min_length=7)
+    branch_name: str = Field(min_length=1)
+    context_manifest_digest: str = Field(min_length=1)
+    worker_request_digest: str = Field(min_length=1)
+    reason: CheckpointReason
+    quota_snapshot: QuotaSnapshot
+    quota_snapshot_digest: str = Field(min_length=1)
+    quota_mode: QuotaMode
+    quota_stale: bool
+    workspace_digest: str | None = None
+    checkpoint_at: AwareDatetime
+
+
+def parse_worker_checkpoint(raw: object) -> WorkerCheckpoint | WorkerCheckpointV1:
+    if not isinstance(raw, dict):
+        raise ValueError("Worker checkpoint must be an object.")
+    version = raw.get("schema_version", 1)
+    if version == 2:
+        return WorkerCheckpoint.model_validate(raw)
+    if version == 1:
+        return WorkerCheckpointV1.model_validate(raw)
+    raise ValueError(f"Unsupported worker checkpoint schema version: {version}")
 
 
 class ClaimResult(ProjectCtlModel):

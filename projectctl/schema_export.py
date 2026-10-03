@@ -6,7 +6,7 @@ from projectctl.schemas.auto import AutoRunPolicy, AutoRunReport
 from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDecision
 from projectctl.schemas.config import ProjectConfig
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
-from projectctl.schemas.execution import (ExecutionPlan, ExecutionPlanV1, WorkerCheckpoint, WorkerRequest, WorkerRequestV1, WorkerResult)
+from projectctl.schemas.execution import (ExecutionPlan, ExecutionPlanV1, WorkerCheckpoint, WorkerCheckpointV1, WorkerRequest, WorkerRequestV1, WorkerResult)
 from projectctl.schemas.integration import IntegrationManifest, RecoveryReport
 from projectctl.schemas.onboarding import AdoptionManifest, AdoptionPlan, ProjectInspection
 from projectctl.schemas.project_state import ProjectState
@@ -37,7 +37,8 @@ PUBLIC_SCHEMAS = {
     "worker-request.v1.schema.json": WorkerRequestV1,
     "worker-request.v2.schema.json": WorkerRequest,
     "worker-result.v1.schema.json": WorkerResult,
-    "worker-checkpoint.v1.schema.json": WorkerCheckpoint,
+    "worker-checkpoint.v1.schema.json": WorkerCheckpointV1,
+    "worker-checkpoint.v2.schema.json": WorkerCheckpoint,
     "verification-catalog.v1.schema.json": VerificationCatalog,
     "verification-manifest.v1.schema.json": VerificationManifestV1,
     "verification-manifest.v2.schema.json": VerificationManifest,

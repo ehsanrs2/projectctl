@@ -5,7 +5,12 @@ from pathlib import Path
 
 import typer
 
-from projectctl.application.execution import abort_prepared_run, prepare_next_run, start_prepared_run
+from projectctl.application.execution import (
+    abort_prepared_run,
+    prepare_next_run,
+    resume_checkpointed_run,
+    start_prepared_run,
+)
 from projectctl.application.auto import run_auto
 from projectctl.application.verification import verify_run
 from projectctl.application.integration import integrate_run
@@ -230,17 +235,66 @@ def register_m11(app: typer.Typer) -> None:
 
         payload = {
             "run": started.record.model_dump(mode="json"),
-            "worker_result": started.result.model_dump(mode="json"),
+            "worker_result": (
+                started.result.model_dump(mode="json") if started.result is not None else None
+            ),
+            "checkpoint": (
+                started.checkpoint.model_dump(mode="json")
+                if started.checkpoint is not None
+                else None
+            ),
             "context_manifest": started.context.manifest.model_dump(mode="json"),
         }
         if json_output:
             typer.echo(_json(payload))
+        elif started.checkpoint is not None:
+            typer.echo(f"Worker checkpointed for run {started.record.run_id}.")
+            typer.echo(f"Reason: {started.checkpoint.reason.value}")
+            typer.echo(f"Run status: {started.record.status.value}")
+            typer.echo("Resume with projectctl run resume RUN_ID when quota is sufficient.")
         else:
             typer.echo(f"Worker finished for run {started.record.run_id}.")
             typer.echo(f"Worker status: {started.result.status.value}")
             typer.echo(f"Run status: {started.record.status.value}")
             if started.record.status.value == "verifying":
                 typer.echo("Independent verification has not run yet; M1.3 owns that gate.")
+
+    @run_app.command("resume")
+    def resume_command(
+        run_id: str,
+        project: Path = typer.Option(
+            Path("."), "--project", exists=True, file_okay=False, resolve_path=True
+        ),
+        json_output: bool = typer.Option(False, "--json"),
+    ) -> None:
+        try:
+            root = find_project_root(project)
+            resumed = resume_checkpointed_run(root, run_id)
+        except ProjectCtlError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(EXIT_RUN)
+
+        payload = {
+            "run": resumed.record.model_dump(mode="json"),
+            "worker_result": (
+                resumed.result.model_dump(mode="json") if resumed.result is not None else None
+            ),
+            "checkpoint": (
+                resumed.checkpoint.model_dump(mode="json")
+                if resumed.checkpoint is not None
+                else None
+            ),
+            "context_manifest": resumed.context.manifest.model_dump(mode="json"),
+        }
+        if json_output:
+            typer.echo(_json(payload))
+        elif resumed.checkpoint is not None:
+            typer.echo(f"Worker checkpointed again for run {resumed.record.run_id}.")
+            typer.echo(f"Reason: {resumed.checkpoint.reason.value}")
+        else:
+            typer.echo(f"Worker resumed and finished for run {resumed.record.run_id}.")
+            typer.echo(f"Worker status: {resumed.result.status.value}")
+            typer.echo(f"Run status: {resumed.record.status.value}")
 
     @run_app.command("verify")
     def verify_command(

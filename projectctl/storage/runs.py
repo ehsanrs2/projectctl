@@ -182,6 +182,7 @@ class RunStore:
         evidence_manifest: str | None = None,
         checkpoint_at: datetime | None = None,
         checkpoint_ref: str | None = None,
+        clear_checkpoint: bool = False,
         now: datetime | None = None,
     ) -> RunRecord:
         now = now or datetime.now(timezone.utc)
@@ -217,8 +218,16 @@ class RunStore:
                     "evidence_manifest": evidence_manifest if evidence_manifest is not None else manifest.evidence_manifest,
                     "started_at": started_at,
                     "completed_at": completed_at,
-                    "checkpoint_at": checkpoint_at if checkpoint_at is not None else manifest.checkpoint_at,
-                    "checkpoint_ref": checkpoint_ref if checkpoint_ref is not None else manifest.checkpoint_ref,
+                    "checkpoint_at": (
+                        None
+                        if clear_checkpoint
+                        else checkpoint_at if checkpoint_at is not None else manifest.checkpoint_at
+                    ),
+                    "checkpoint_ref": (
+                        None
+                        if clear_checkpoint
+                        else checkpoint_ref if checkpoint_ref is not None else manifest.checkpoint_ref
+                    ),
                 }
             )
             updated = RunManifest.model_validate(updated_data)

@@ -1,3 +1,4 @@
+import json
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -7,14 +8,18 @@ import pytest
 from projectctl.application.execution import (
     ExecutionPlanningBundle,
     prepare_next_run,
+    resume_checkpointed_run,
     start_prepared_run,
 )
 from projectctl.core.digest import digest
 from projectctl.core.enums import (
     ApprovalPolicy,
     CapabilityState,
+    CheckpointReason,
     ExecutionSandboxMode,
     ModelProfile,
+    QuotaMode,
+    ResourceClass,
     ReasoningLevel,
     RunStatus,
     RunTerminalReason,
@@ -24,7 +29,12 @@ from projectctl.core.enums import (
     WorkerResultStatus,
     WorkerStrategyKind,
 )
-from projectctl.core.errors import CapabilityMismatchError, WorkerError
+from projectctl.core.errors import (
+    CapabilityMismatchError,
+    RunStoreError,
+    WorkerError,
+    WorktreeError,
+)
 from projectctl.schemas.capabilities import (
     CapabilitySupport,
     PermissionCapabilities,
@@ -33,7 +43,14 @@ from projectctl.schemas.capabilities import (
     WorkerRuntimeDescriptor,
     WorkerStrategyDecision,
 )
-from projectctl.schemas.execution import ClaimResult, ExecutionPlan, WorkerResult
+from projectctl.schemas.execution import (
+    ClaimResult,
+    ExecutionPlan,
+    WorkerCheckpoint,
+    WorkerResult,
+)
+from projectctl.application.recovery import recover_run
+from projectctl.schemas.quota import QuotaSnapshot, QuotaWindow
 from projectctl.schemas.run import WorkerDescriptor
 from projectctl.schemas.task import NormalizedTask, TaskSource
 from projectctl.storage.runs import RunStore
@@ -111,24 +128,69 @@ class FakeTaskStore:
 
 
 class FakeAdapter:
-    def __init__(self, caps, *, commit=False):
+    def __init__(self, caps, *, commit=False, checkpoint=False):
         self.caps = caps
         self.commit = commit
+        self.checkpoint = checkpoint
 
     def probe(self):
         return self.caps
 
-    def start(self, request, *, workspace: Path):
+    def start(self, request, *, workspace: Path, checkpoint_monitor=None):
         (workspace / "worker_output.py").write_text("value = 1\n", encoding="utf-8")
         if self.commit:
             git(workspace, "add", "worker_output.py")
             git(workspace, "commit", "-q", "-m", "worker must not commit")
+        if self.checkpoint:
+            return WorkerCheckpoint(
+                run_id=request.run_id,
+                task_id=request.task_id,
+                worker_thread_id="thr-test",
+                worker_turn_id="turn-test",
+                worktree_id=request.worktree_id,
+                base_commit=request.base_commit,
+                branch_name=request.branch_name,
+                context_manifest_digest=request.context_manifest_digest,
+                worker_request_digest=digest(request),
+                reason=CheckpointReason.QUOTA_BELOW_TASK_REQUIREMENT,
+                quota_snapshot=QuotaSnapshot(
+                    provider="test",
+                    account="acct",
+                    observed_at=NOW,
+                    five_hour=QuotaWindow(),
+                    weekly=QuotaWindow(),
+                ),
+                quota_snapshot_digest=digest(
+                    QuotaSnapshot(
+                        provider="test",
+                        account="acct",
+                        observed_at=NOW,
+                        five_hour=QuotaWindow(),
+                        weekly=QuotaWindow(),
+                    )
+                ),
+                quota_mode=QuotaMode.CONSERVATION,
+                quota_stale=False,
+                checkpoint_at=NOW,
+            )
         return WorkerResult(
             run_id=request.run_id,
             task_id=request.task_id,
             status=WorkerResultStatus.IMPLEMENTED,
             summary="implemented",
             worker_thread_id="thr-test",
+            completed_at=NOW,
+        )
+
+    def resume(self, checkpoint, request, *, workspace: Path, checkpoint_monitor=None):
+        self.resumed_checkpoint = checkpoint
+        (workspace / "worker_output.py").write_text("value = 2\n", encoding="utf-8")
+        return WorkerResult(
+            run_id=request.run_id,
+            task_id=request.task_id,
+            status=WorkerResultStatus.IMPLEMENTED,
+            summary="resumed and implemented",
+            worker_thread_id=checkpoint.worker_thread_id,
             completed_at=NOW,
         )
 
@@ -154,6 +216,7 @@ def setup_prepared(tmp_path: Path, monkeypatch):
         source=TaskSource(provider="test", external_id="bd-1"),
         type=TaskType.FEATURE,
         status=TaskStatus.RUNNING,
+        resource_class=ResourceClass.SMALL,
     )
     caps = supported_capabilities()
     strategy = WorkerStrategyDecision(
@@ -277,3 +340,157 @@ def test_live_capability_drift_requires_decision(tmp_path: Path, monkeypatch):
     record = RunStore(repo).get(prepared.record.run_id)
     assert record.status == RunStatus.NEEDS_DECISION
     assert record.terminal_reason == RunTerminalReason.CAPABILITY_CHANGED
+
+
+def test_worker_quota_checkpoint_is_durable_and_keeps_run_resumable(tmp_path: Path, monkeypatch):
+    repo, prepared, task, caps = setup_prepared(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "projectctl.application.execution._adapter_for_provider",
+        lambda provider: FakeAdapter(caps, checkpoint=True),
+    )
+
+    started = start_prepared_run(repo, prepared.record.run_id)
+
+    assert started.result is None
+    assert started.checkpoint is not None
+    assert started.record.status == RunStatus.RUNNING
+    assert started.record.worker_thread_id == "thr-test"
+    assert started.record.checkpoint_ref is not None
+    checkpoint_path = repo / started.record.checkpoint_ref
+    assert checkpoint_path.exists()
+    persisted = WorkerCheckpoint.model_validate_json(checkpoint_path.read_text())
+    assert persisted.worker_thread_id == "thr-test"
+    assert persisted.worker_turn_id == "turn-test"
+    assert persisted.reason == CheckpointReason.QUOTA_BELOW_TASK_REQUIREMENT
+    assert persisted.workspace_digest is not None
+    assert digest(persisted.quota_snapshot) == persisted.quota_snapshot_digest
+
+    worktree = Path(started.record.worktree_path)
+    assert (worktree / "worker_output.py").exists()
+    assert git(worktree, "rev-parse", "HEAD") == prepared.plan.base_commit
+    events = RunStore(repo).events(prepared.record.run_id)
+    assert any(event.event_type == "worker.checkpointed" for event in events)
+
+
+def fresh_quota():
+    now = datetime.now(timezone.utc)
+    return QuotaSnapshot(
+        provider="test",
+        account="openai-default",
+        observed_at=now,
+        five_hour=QuotaWindow(remaining_ratio=.90),
+        weekly=QuotaWindow(remaining_ratio=.90),
+    )
+
+
+def test_checkpoint_recovery_is_safe_and_resume_continues_same_run(tmp_path: Path, monkeypatch):
+    repo, prepared, task, caps = setup_prepared(tmp_path, monkeypatch)
+    adapter = FakeAdapter(caps, checkpoint=True)
+    monkeypatch.setattr(
+        "projectctl.application.execution._adapter_for_provider",
+        lambda provider: adapter,
+    )
+
+    started = start_prepared_run(repo, prepared.record.run_id)
+    assert started.checkpoint is not None
+
+    recovery = recover_run(repo, prepared.record.run_id)
+    assert recovery.action == "checkpoint_resume_ready"
+    assert recovery.resolved_status == RunStatus.RUNNING.value
+
+    adapter.checkpoint = False
+    monkeypatch.setattr(
+        "projectctl.application.execution.read_current_quota",
+        lambda account: fresh_quota(),
+    )
+    resumed = resume_checkpointed_run(repo, prepared.record.run_id)
+
+    assert resumed.result is not None
+    assert resumed.result.status == WorkerResultStatus.IMPLEMENTED
+    assert resumed.record.status == RunStatus.VERIFYING
+    assert resumed.record.checkpoint_ref is None
+    assert resumed.record.checkpoint_at is None
+    assert adapter.resumed_checkpoint.worker_thread_id == "thr-test"
+
+
+def test_checkpoint_resume_fails_closed_if_partial_workspace_was_modified(tmp_path: Path, monkeypatch):
+    repo, prepared, task, caps = setup_prepared(tmp_path, monkeypatch)
+    adapter = FakeAdapter(caps, checkpoint=True)
+    monkeypatch.setattr(
+        "projectctl.application.execution._adapter_for_provider",
+        lambda provider: adapter,
+    )
+    started = start_prepared_run(repo, prepared.record.run_id)
+    worktree = Path(started.record.worktree_path)
+    (worktree / "worker_output.py").write_text("tampered = True\n", encoding="utf-8")
+
+    adapter.checkpoint = False
+    monkeypatch.setattr(
+        "projectctl.application.execution.read_current_quota",
+        lambda account: fresh_quota(),
+    )
+    with pytest.raises(WorktreeError, match="workspace changed"):
+        resume_checkpointed_run(repo, prepared.record.run_id)
+
+    record = RunStore(repo).get(prepared.record.run_id)
+    assert record.status == RunStatus.NEEDS_DECISION
+    assert record.terminal_reason == RunTerminalReason.RECOVERY_UNSAFE
+
+
+def test_checkpoint_resume_rejects_tampered_worker_request(tmp_path: Path, monkeypatch):
+    repo, prepared, task, caps = setup_prepared(tmp_path, monkeypatch)
+    adapter = FakeAdapter(caps, checkpoint=True)
+    monkeypatch.setattr(
+        "projectctl.application.execution._adapter_for_provider",
+        lambda provider: adapter,
+    )
+    started = start_prepared_run(repo, prepared.record.run_id)
+
+    request_path = (
+        repo
+        / ".projectctl"
+        / "runs"
+        / prepared.record.run_id
+        / "worker-request.json"
+    )
+    raw = json.loads(request_path.read_text(encoding="utf-8"))
+    raw["objective"] = "tampered objective"
+    request_path.write_text(json.dumps(raw), encoding="utf-8")
+
+    adapter.checkpoint = False
+    monkeypatch.setattr(
+        "projectctl.application.execution.read_current_quota",
+        lambda account: fresh_quota(),
+    )
+    with pytest.raises(RunStoreError, match="original WorkerRequest"):
+        resume_checkpointed_run(repo, prepared.record.run_id)
+
+    record = RunStore(repo).get(prepared.record.run_id)
+    assert record.status == RunStatus.NEEDS_DECISION
+    assert record.terminal_reason == RunTerminalReason.CONTEXT_INVALID
+
+
+def test_checkpoint_resume_rejects_tampered_checkpoint_artifact(tmp_path: Path, monkeypatch):
+    repo, prepared, task, caps = setup_prepared(tmp_path, monkeypatch)
+    adapter = FakeAdapter(caps, checkpoint=True)
+    monkeypatch.setattr(
+        "projectctl.application.execution._adapter_for_provider",
+        lambda provider: adapter,
+    )
+    started = start_prepared_run(repo, prepared.record.run_id)
+    checkpoint_path = repo / started.record.checkpoint_ref
+    raw = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    raw["quota_stale"] = not raw["quota_stale"]
+    checkpoint_path.write_text(json.dumps(raw), encoding="utf-8")
+
+    adapter.checkpoint = False
+    monkeypatch.setattr(
+        "projectctl.application.execution.read_current_quota",
+        lambda account: fresh_quota(),
+    )
+    with pytest.raises(RunStoreError, match="identity does not match"):
+        resume_checkpointed_run(repo, prepared.record.run_id)
+
+    record = RunStore(repo).get(prepared.record.run_id)
+    assert record.status == RunStatus.NEEDS_DECISION
+    assert record.terminal_reason == RunTerminalReason.RECOVERY_UNSAFE
