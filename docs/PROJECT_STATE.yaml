@@ -1,11 +1,11 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Execute bounded Codex workers with deterministic context and live capability revalidation while keeping verification independent.
+current_goal: Independently verify worker changes, create auditable evidence, and mint candidate commits only after deterministic policy and test gates pass.
 active_milestone:
-  id: M1.2b
-  title: Context + Codex WorkerAdapter
+  id: M1.3
+  title: Verification + Evidence
   aliases:
-    - Context Assembler
-    - Codex Worker
+    - Verification
+    - Evidence
 updated_at: null

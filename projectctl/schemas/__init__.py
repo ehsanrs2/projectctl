@@ -10,7 +10,7 @@ from projectctl.schemas.capabilities import (
     WorkerStrategyDecision,
 )
 from projectctl.schemas.config import ProjectConfig
-from projectctl.schemas.evidence import EvidenceManifest
+from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
 from projectctl.schemas.execution import (
     ClaimResult,
     EvidenceReference,
@@ -38,8 +38,11 @@ from projectctl.schemas.scheduler import SchedulerDecision, SchedulerDecisionV1
 from projectctl.schemas.status import ProjectStatus, TaskCounts
 from projectctl.schemas.task import NormalizedTask, TaskSnapshot
 from projectctl.schemas.verification import (
+    DiffPolicy,
+    VerificationCatalog,
     VerificationCommand,
     VerificationManifest,
+    VerificationManifestV1,
     VerificationProfile,
 )
 
@@ -51,7 +54,9 @@ __all__ = [
     "ClaimResult",
     "ContextManifest",
     "ContextManifestV1",
+    "DiffPolicy",
     "EvidenceManifest",
+    "EvidenceManifestV1",
     "EvidenceReference",
     "ExecutionPlan",
     "ExecutionPlanV1",
@@ -75,8 +80,10 @@ __all__ = [
     "TaskCounts",
     "StrategyFallbackPolicy",
     "TaskSnapshot",
+    "VerificationCatalog",
     "VerificationCommand",
     "VerificationManifest",
+    "VerificationManifestV1",
     "VerificationProfile",
     "WorkerCapabilities",
     "WorkerCheckpoint",

@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M1.2b — Context + Codex WorkerAdapter**, enabling bounded Codex execution for stable SDK modes while keeping verification separate.
+This repository currently implements **M1.3 — Verification + Evidence**, adding independent policy/test verification and ProjectCTL-owned candidate commits.
 
 ## Implemented
 
@@ -385,3 +385,54 @@ Native Codex Plan collaboration mode and Goal operations remain modeled and visi
 A worker returning `implemented` moves the run only to `VERIFYING`. ProjectCTL does not trust the worker's own success claim. M1.3 performs independent diff/test/evidence verification.
 
 ProjectCTL also compares Git HEAD before and after worker execution. Any worker-created commit, rebase, merge, or other history mutation fails the run with `unexpected_git_history`.
+
+
+## M1.3 — Verification + Evidence
+
+M1.3 makes successful execution evidence-driven.
+
+```bash
+# Inspect the authoritative verification profile.
+projectctl verification profile --project /path/to/repo
+
+# Verify a worker-completed run.
+projectctl run verify RUN_ID --project /path/to/repo
+```
+
+Verification is independent from the worker. `WorkerResult.suggested_verification` remains advisory and is never executed as authority.
+
+Verification policy comes from the human-managed `projectctl.verification.yaml` catalog when present. If the catalog is absent, ProjectCTL only uses a small deterministic built-in resolver for conventional Python-with-tests, npm-test, Go, or Cargo projects. If no safe profile can be resolved, verification fails closed.
+
+The M1.3 verification pipeline is:
+
+```text
+VERIFYING
+   ↓
+Diff / ownership policy
+   ↓
+Configured commands (argv, no shell)
+   ↓
+Workspace stability check
+   ↓
+ProjectCTL candidate commit
+   ↓
+VerificationManifest v2
+   ↓
+EvidenceManifest v2
+   ↓
+READY_TO_INTEGRATE
+```
+
+Workers cannot define their own required verification commands. Required checks must come from the verification profile.
+
+System-protected paths include ProjectCTL operational state, evidence/generated output, AGENTS instruction files, Project State, specs, architecture decisions, and the verification catalog itself. Profiles can add additional protected paths but cannot remove these system invariants.
+
+Verification command stdout/stderr is written under `.projectctl/runs/<run-id>/verification/`; manifests store digests rather than embedding logs.
+
+A verification command may not silently rewrite the candidate. ProjectCTL snapshots the workspace before commands and verifies the tracked/untracked state and Git HEAD are unchanged afterward. If a verifier mutates tracked state, the run fails.
+
+Only after all required checks pass does ProjectCTL stage the worker changes and create a single-parent candidate commit directly on the run base. The commit is created by ProjectCTL with hooks/signing disabled; workers remain forbidden from committing.
+
+Passing implementation runs move to `READY_TO_INTEGRATE`. Review-mode runs must leave the worktree unchanged and can finish as `PASSED` with the base commit recorded as their candidate reference.
+
+Failed and policy-blocked runs also receive `EvidenceManifest v2`, with `candidate_commit: null`, so rejection is auditable as well as acceptance.
