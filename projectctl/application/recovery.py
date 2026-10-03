@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from projectctl.application.execution import _actor
+from projectctl.application.execution import _actor, _worktree_state_digest
 from projectctl.application.integration import (
     _atomic_json,
     _cleanup_verified_worktree,
@@ -97,8 +97,11 @@ def recover_run(project_root: Path, run_id: str) -> RecoveryAction:
                     and checkpoint.base_commit == record.base_commit
                     and checkpoint.branch_name == record.branch_name
                     and checkpoint.worker_thread_id == record.worker_thread_id
+                    and digest(checkpoint.quota_snapshot) == checkpoint.quota_snapshot_digest
+                    and checkpoint.workspace_digest is not None
                     and worktree.exists()
                     and resolve_commit(worktree, "HEAD") == plan.base_commit
+                    and _worktree_state_digest(worktree) == checkpoint.workspace_digest
                 )
                 if resumable:
                     details.append(
