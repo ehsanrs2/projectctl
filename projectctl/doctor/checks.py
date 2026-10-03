@@ -2,8 +2,9 @@ import shutil
 from pathlib import Path
 
 from projectctl.core.enums import HealthStatus
-from projectctl.core.errors import ConfigurationError, DatabaseVersionError, ProviderUnavailableError, QuotaError, RepositoryContractError, UnsafePathError
+from projectctl.core.errors import ConfigurationError, DatabaseVersionError, ProviderUnavailableError, QuotaError, RepositoryContractError, TaskStoreError, UnsafePathError
 from projectctl.core.paths import resolve_inside_repo
+from projectctl.integrations.github import GitHubIssuesClient
 from projectctl.project.bootstrap import projectctl_home
 from projectctl.project.loader import load_project_config
 from projectctl.project.state import PROJECT_STATE_PATH, load_project_state
@@ -125,6 +126,41 @@ def check_task_store(root: Path) -> HealthCheckResult:
             summary="Task authority is not configured.",
             remediation=["Choose exactly one task authority before scheduling or importing tasks."],
         )
+    if provider == "github":
+        executable = shutil.which("gh")
+        if not executable:
+            return HealthCheckResult(
+                check_id="task_store",
+                status=HealthStatus.ERROR,
+                summary="GitHub task store is configured but `gh` was not found in PATH.",
+                remediation=["Install GitHub CLI and authenticate it, or configure a different task store."],
+            )
+        try:
+            config = load_project_config(root)
+            client = GitHubIssuesClient(
+                root,
+                repository=config.task_store.repository,
+                executable=executable,
+            )
+            info = client.repository_info()
+        except (ProviderUnavailableError, TaskStoreError) as exc:
+            return HealthCheckResult(
+                check_id="task_store",
+                status=HealthStatus.ERROR,
+                summary=f"GitHub Issues task authority is not readable: {exc}",
+                remediation=["Verify `gh auth status`, repository access, and task_store.repository."],
+            )
+        full_name = str(info.get("full_name") or client.repository)
+        return HealthCheckResult(
+            check_id="task_store",
+            status=HealthStatus.WARN,
+            summary=f"GitHub Issues is readable for {full_name}; M3.0a is read-only.",
+            details=[
+                "Scheduling/status reads are enabled.",
+                "Claim, completion, and remote task mutation remain disabled until M3.0b.",
+            ],
+        )
+
     if provider == "beads":
         executable = shutil.which("bd")
         if not executable:
