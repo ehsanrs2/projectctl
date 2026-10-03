@@ -33,6 +33,7 @@ class ProjectInspection(ProjectCtlModel):
     assets: list[DetectedAsset] = Field(default_factory=list)
     suggested_bindings: list[KnowledgeBinding] = Field(default_factory=list)
     detected_task_systems: list[str] = Field(default_factory=list)
+    github_repository: str | None = None
     unresolved_decisions: list[str] = Field(default_factory=list)
     conflicts: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
@@ -52,6 +53,7 @@ class AdoptionPlan(ProjectCtlModel):
     create: list[RepoRelativePath] = Field(default_factory=list)
     knowledge_bindings: list[KnowledgeBinding] = Field(default_factory=list)
     task_store_provider: str | None = None
+    task_store_repository: str | None = None
     unresolved_decisions: list[str] = Field(default_factory=list)
     conflicts: list[str] = Field(default_factory=list)
 
@@ -69,4 +71,5 @@ class AdoptionManifest(ProjectCtlModel):
     created: list[RepoRelativePath] = Field(default_factory=list)
     knowledge_bindings: list[KnowledgeBinding] = Field(default_factory=list)
     task_store_provider: str | None = None
+    task_store_repository: str | None = None
     unresolved_decisions: list[str] = Field(default_factory=list)
