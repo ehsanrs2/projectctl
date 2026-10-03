@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -441,21 +442,89 @@ def _checkpoint_artifact_ref(run_id: str) -> str:
     )
 
 
+def _worktree_state_digest(worktree: Path) -> str:
+    diff = subprocess.run(
+        ["git", "-C", str(worktree), "diff", "--binary", "HEAD"],
+        capture_output=True,
+        check=False,
+    )
+    if diff.returncode != 0:
+        raise WorktreeError(
+            (diff.stderr or diff.stdout or b"git diff failed").decode(
+                "utf-8", errors="replace"
+            ).strip()
+        )
+
+    untracked = subprocess.run(
+        ["git", "-C", str(worktree), "ls-files", "--others", "--exclude-standard", "-z"],
+        capture_output=True,
+        check=False,
+    )
+    if untracked.returncode != 0:
+        raise WorktreeError(
+            (untracked.stderr or untracked.stdout or b"git ls-files failed").decode(
+                "utf-8", errors="replace"
+            ).strip()
+        )
+
+    entries: list[dict[str, str]] = []
+    for raw in untracked.stdout.split(b"\0"):
+        if not raw:
+            continue
+        relative = raw.decode("utf-8", errors="surrogateescape")
+        path = worktree / relative
+        try:
+            if path.is_symlink():
+                payload = os.readlink(path).encode("utf-8", errors="surrogateescape")
+                kind = "symlink"
+            elif path.is_file():
+                payload = path.read_bytes()
+                kind = "file"
+            else:
+                continue
+        except OSError as exc:
+            raise WorktreeError(
+                f"Could not hash untracked workspace path {relative}: {exc}"
+            ) from exc
+        entries.append(
+            {
+                "path": relative,
+                "kind": kind,
+                "sha256": hashlib.sha256(payload).hexdigest(),
+            }
+        )
+
+    return digest(
+        {
+            "head": resolve_commit(worktree, "HEAD"),
+            "diff_sha256": hashlib.sha256(diff.stdout).hexdigest(),
+            "untracked": sorted(entries, key=lambda item: item["path"]),
+        }
+    )
+
+
 def _persist_checkpoint(
     root: Path,
     *,
     store: RunStore,
     run_id: str,
+    worktree: Path,
     checkpoint: WorkerCheckpoint,
-) -> RunRecord:
+) -> tuple[RunRecord, WorkerCheckpoint]:
+    if digest(checkpoint.quota_snapshot) != checkpoint.quota_snapshot_digest:
+        raise WorkerError("Checkpoint quota snapshot digest does not match its payload.")
+
+    durable = checkpoint.model_copy(
+        update={"workspace_digest": _worktree_state_digest(worktree)}
+    )
     checkpoint_ref = _checkpoint_artifact_ref(run_id)
-    _atomic_json(root / checkpoint_ref, checkpoint)
+    _atomic_json(root / checkpoint_ref, durable)
     record = store.transition(
         run_id,
         expected={RunStatus.RUNNING},
         status=RunStatus.RUNNING,
-        worker_thread_id=checkpoint.worker_thread_id,
-        checkpoint_at=checkpoint.checkpoint_at,
+        worker_thread_id=durable.worker_thread_id,
+        checkpoint_at=durable.checkpoint_at,
         checkpoint_ref=checkpoint_ref,
     )
     store.append_event(
@@ -463,16 +532,17 @@ def _persist_checkpoint(
         "worker.checkpointed",
         {
             "checkpoint_ref": checkpoint_ref,
-            "checkpoint_digest": digest(checkpoint),
-            "reason": checkpoint.reason.value,
-            "quota_mode": checkpoint.quota_mode.value,
-            "quota_stale": checkpoint.quota_stale,
-            "quota_snapshot_digest": checkpoint.quota_snapshot_digest,
-            "worker_thread_id": checkpoint.worker_thread_id,
-            "worker_turn_id": checkpoint.worker_turn_id,
+            "checkpoint_digest": digest(durable),
+            "workspace_digest": durable.workspace_digest,
+            "reason": durable.reason.value,
+            "quota_mode": durable.quota_mode.value,
+            "quota_stale": durable.quota_stale,
+            "quota_snapshot_digest": durable.quota_snapshot_digest,
+            "worker_thread_id": durable.worker_thread_id,
+            "worker_turn_id": durable.worker_turn_id,
         },
     )
-    return record
+    return record, durable
 
 
 def _finalize_worker_outcome(
@@ -501,16 +571,17 @@ def _finalize_worker_outcome(
         )
 
     if isinstance(outcome, WorkerCheckpoint):
-        record = _persist_checkpoint(
+        record, durable_checkpoint = _persist_checkpoint(
             root,
             store=store,
             run_id=run_id,
+            worktree=actual_worktree,
             checkpoint=outcome,
         )
         return StartedRun(
             record=record,
             context=context,
-            checkpoint=outcome,
+            checkpoint=durable_checkpoint,
         )
 
     result = outcome
@@ -891,6 +962,7 @@ def resume_checkpointed_run(project_root: Path, run_id: str) -> StartedRun:
             or checkpoint.worktree_id != record.worktree_id
             or checkpoint.base_commit != record.base_commit
             or checkpoint.branch_name != record.branch_name
+            or digest(checkpoint.quota_snapshot) != checkpoint.quota_snapshot_digest
         ):
             _mark_start_failure(
                 store,
@@ -922,6 +994,20 @@ def resume_checkpointed_run(project_root: Path, run_id: str) -> StartedRun:
                 reason=RunTerminalReason.UNEXPECTED_GIT_HISTORY,
             )
             raise WorkerError("Checkpointed worker changed Git history; resume is unsafe.")
+        if (
+            not checkpoint.workspace_digest
+            or _worktree_state_digest(actual_worktree) != checkpoint.workspace_digest
+        ):
+            _mark_start_failure(
+                store,
+                run_id,
+                expected=RunStatus.RUNNING,
+                status=RunStatus.NEEDS_DECISION,
+                reason=RunTerminalReason.RECOVERY_UNSAFE,
+            )
+            raise WorktreeError(
+                "Checkpointed workspace changed after the durable checkpoint; resume is unsafe."
+            )
 
         context_manifest = _load_json_model(
             run_dir / "context-manifest.json", ContextManifest
