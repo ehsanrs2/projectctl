@@ -11,6 +11,7 @@ from openai_codex import (
     ExternalMessage,
     Sandbox,
     Thread,
+    TurnHandle,
 )
 
 
@@ -54,3 +55,24 @@ def test_pinned_codex_public_surface_matches_adapter_contract():
         "output_schema",
         "sandbox",
     } <= run_params
+
+    turn_params = set(inspect.signature(Thread.turn).parameters)
+    assert {
+        "approval_mode",
+        "cwd",
+        "model",
+        "output_schema",
+        "sandbox",
+    } <= turn_params
+
+    resume_params = set(inspect.signature(Codex.thread_resume).parameters)
+    assert {
+        "approval_mode",
+        "cwd",
+        "developer_instructions",
+        "model",
+        "sandbox",
+        "config",
+    } <= resume_params
+
+    assert "self" in inspect.signature(TurnHandle.interrupt).parameters
