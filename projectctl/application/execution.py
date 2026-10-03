@@ -28,6 +28,7 @@ from projectctl.core.errors import (
     ConfigurationError,
     RunStoreError,
     RunLeaseError,
+    QuotaError,
     StaleSnapshotError,
     WorkerError,
     WorktreeError,
@@ -38,15 +39,22 @@ from projectctl.integrations.beads.claim import BeadsTaskClaimer
 from projectctl.project.loader import load_project_config
 from projectctl.project.locking import project_lock
 from projectctl.project.state import load_project_state, semantic_project_state_digest
-from projectctl.quota.manual import ManualQuotaProvider
+from projectctl.quota import QuotaCheckpointMonitor, QuotaManager, read_current_quota
 from projectctl.scheduler.digests import semantic_task_snapshot_digest
 from projectctl.schemas.capabilities import (
     StrategyFallbackPolicy,
     WorkerCapabilities,
     WorkerStrategyDecision,
 )
-from projectctl.schemas.execution import ExecutionPlan, ExecutionPolicy, WorkerRequest, WorkerResult
-from projectctl.schemas.run import RunManifest, WorkerDescriptor
+from projectctl.schemas.execution import (
+    ExecutionPlan,
+    ExecutionPolicy,
+    WorkerCheckpoint,
+    WorkerRequest,
+    WorkerResult,
+    parse_worker_checkpoint,
+)
+from projectctl.schemas.run import ContextManifest, RunManifest, WorkerDescriptor
 from projectctl.schemas.run_store import RunRecord
 from projectctl.storage.runs import RunStore
 from projectctl.runtime import LeaseHeartbeat
@@ -72,8 +80,9 @@ class PreparedRun:
 @dataclass(frozen=True)
 class StartedRun:
     record: RunRecord
-    result: WorkerResult
     context: ContextBundle
+    result: WorkerResult | None = None
+    checkpoint: WorkerCheckpoint | None = None
 
 
 def _actor() -> str:
@@ -241,9 +250,17 @@ def _validate_plan_inputs(project_root: Path, plan: ExecutionPlan) -> RunTermina
     if semantic_project_state_digest(state) != plan.project_state_digest:
         return RunTerminalReason.CONTEXT_INVALID
 
+    task = next((item for item in tasks.tasks if item.id == plan.task_id), None)
+    if task is None:
+        return RunTerminalReason.CONTEXT_INVALID
+
     config = load_project_config(project_root)
-    quota = ManualQuotaProvider().get_snapshot(config.quota.account)
-    if digest(quota) != plan.quota_snapshot_digest:
+    quota = read_current_quota(config.quota.account)
+    quota_manager = QuotaManager(config.quota)
+    quota_state = quota_manager.state(quota, now=utc_now())
+    if quota_state.stale or not quota_manager.eligible_for_resource(
+        task.resource_class, quota_state
+    ):
         return RunTerminalReason.QUOTA_EXHAUSTED
 
     return None
