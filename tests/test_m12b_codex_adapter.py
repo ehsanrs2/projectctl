@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from projectctl.core.digest import digest
 from projectctl.core.enums import (
     ApprovalPolicy,
     CheckpointReason,
@@ -235,7 +236,6 @@ class FakeCheckpointMonitor:
             five_hour=QuotaWindow(),
             weekly=QuotaWindow(),
         )
-        from projectctl.core.digest import digest
         self.decision = SimpleNamespace(
             reason=CheckpointReason.QUOTA_BELOW_TASK_REQUIREMENT,
             snapshot=quota,
@@ -279,6 +279,7 @@ def test_codex_adapter_resumes_same_thread_after_checkpoint(tmp_path: Path):
         base_commit=req.base_commit,
         branch_name=req.branch_name,
         context_manifest_digest=req.context_manifest_digest,
+        worker_request_digest=digest(req),
         reason=CheckpointReason.QUOTA_CRITICAL,
         quota_snapshot=QuotaSnapshot(
             provider="test",
@@ -287,9 +288,7 @@ def test_codex_adapter_resumes_same_thread_after_checkpoint(tmp_path: Path):
             five_hour=QuotaWindow(),
             weekly=QuotaWindow(),
         ),
-        quota_snapshot_digest=__import__(
-            "projectctl.core.digest", fromlist=["digest"]
-        ).digest(
+        quota_snapshot_digest=digest(
             QuotaSnapshot(
                 provider="test",
                 account="acct",
