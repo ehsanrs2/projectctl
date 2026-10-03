@@ -7,7 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from projectctl.core.errors import ProviderUnavailableError, TaskStoreError
-from projectctl.integrations.github.repository import infer_github_repository
+from projectctl.integrations.github.repository import (
+    infer_github_repository,
+    normalize_github_repository,
+)
 
 
 class GitHubIssuesClient:
@@ -31,8 +34,9 @@ class GitHubIssuesClient:
             raise ProviderUnavailableError(
                 "GitHub CLI `gh` was not found in PATH."
             )
-        self.repository = (repository or infer_github_repository(self.project_root) or "").strip()
-        if not self.repository or self.repository.count("/") != 1:
+        inferred = repository or infer_github_repository(self.project_root)
+        self.repository = normalize_github_repository(inferred)
+        if self.repository is None:
             raise TaskStoreError(
                 "GitHub task store requires an owner/repository identity. "
                 "Set task_store.repository or configure a github.com origin remote."
