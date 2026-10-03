@@ -154,6 +154,35 @@ class ApprovalPolicy(StrEnum):
     AUTO_REVIEW = "auto_review"
 
 
+class CapabilityState(StrEnum):
+    SUPPORTED = "supported"
+    UNSUPPORTED = "unsupported"
+    UNKNOWN = "unknown"
+
+
+class WorkerMode(StrEnum):
+    DEFAULT = "default"
+    PLAN = "plan"
+    GOAL = "goal"
+
+
+class WorkerStrategyKind(StrEnum):
+    DIRECT = "direct"
+    PLAN_THEN_EXECUTE = "plan_then_execute"
+    GOAL = "goal"
+    REVIEW = "review"
+
+
+class GoalStopCondition(StrEnum):
+    OBJECTIVE_MET = "objective_met"
+    PERMISSION_BLOCKED = "permission_blocked"
+    QUOTA_THRESHOLD = "quota_threshold"
+    REPEATED_FAILURE = "repeated_failure"
+    HUMAN_DECISION_REQUIRED = "human_decision_required"
+    BUDGET_EXHAUSTED = "budget_exhausted"
+    BLOCKED = "blocked"
+
+
 class WorkerResultStatus(StrEnum):
     IMPLEMENTED = "implemented"
     BLOCKED = "blocked"
