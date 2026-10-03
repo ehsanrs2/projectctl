@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from projectctl import __version__
+from projectctl.core.digest import digest
 from projectctl.core.enums import (
     ApprovalPolicy,
     ExecutionSandboxMode,
@@ -223,6 +224,24 @@ class CodexWorkerAdapter:
             )
 
     @staticmethod
+    def _validate_execution_policy(request: WorkerRequest) -> None:
+        if request.execution_policy.network.value != "disabled":
+            raise CapabilityMismatchError(
+                "Codex adapter does not enable network access."
+            )
+        if any(
+            [
+                request.execution_policy.git.allow_commit,
+                request.execution_policy.git.allow_merge,
+                request.execution_policy.git.allow_rebase,
+                request.execution_policy.git.allow_push,
+            ]
+        ):
+            raise CapabilityMismatchError(
+                "Codex adapter refuses worker Git-history or push permissions."
+            )
+
+    @staticmethod
     def _turn_kwargs(
         request: WorkerRequest,
         *,
@@ -257,6 +276,7 @@ class CodexWorkerAdapter:
             base_commit=request.base_commit,
             branch_name=request.branch_name,
             context_manifest_digest=request.context_manifest_digest,
+            worker_request_digest=digest(request),
             reason=decision.reason,
             quota_snapshot=decision.snapshot,
             quota_snapshot_digest=decision.snapshot_digest,
@@ -370,21 +390,7 @@ class CodexWorkerAdapter:
         approval = self._approval(bindings, request)
         sandbox = self._sandbox(bindings, request)
 
-        if request.execution_policy.network.value != "disabled":
-            raise CapabilityMismatchError(
-                "M1.2b Codex adapter does not enable network access."
-            )
-        if any(
-            [
-                request.execution_policy.git.allow_commit,
-                request.execution_policy.git.allow_merge,
-                request.execution_policy.git.allow_rebase,
-                request.execution_policy.git.allow_push,
-            ]
-        ):
-            raise CapabilityMismatchError(
-                "M1.2b Codex adapter refuses worker Git-history or push permissions."
-            )
+        self._validate_execution_policy(request)
 
         config = self._config(bindings, cwd=workspace)
         thread_config = {
@@ -431,10 +437,13 @@ class CodexWorkerAdapter:
         checkpoint_monitor: QuotaCheckpointMonitor | None = None,
     ) -> WorkerResult | WorkerCheckpoint:
         self._validate_strategy(request)
+        self._validate_execution_policy(request)
         bindings = self._bindings_loader()
         approval = self._approval(bindings, request)
         sandbox = self._sandbox(bindings, request)
 
+        if digest(request) != checkpoint.worker_request_digest:
+            raise WorkerError("Checkpoint does not match the original WorkerRequest.")
         if not checkpoint.worker_thread_id:
             raise WorkerError("Checkpoint has no resumable Codex thread id.")
         if checkpoint.run_id != request.run_id or checkpoint.task_id != request.task_id:
