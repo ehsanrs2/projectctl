@@ -57,23 +57,23 @@ def _single_prefixed(
     prefix: str,
     *,
     notes: list[str],
-) -> str | None:
-    values = sorted(
-        {
-            label.split(":", 1)[1].strip().casefold()
-            for label in labels
-            if label.casefold().startswith(prefix.casefold())
-            and ":" in label
-            and label.split(":", 1)[1].strip()
-        }
-    )
+) -> tuple[str | None, bool]:
+    by_folded: dict[str, str] = {}
+    for label in labels:
+        if not label.casefold().startswith(prefix.casefold()) or ":" not in label:
+            continue
+        raw = label.split(":", 1)[1].strip()
+        if raw:
+            by_folded.setdefault(raw.casefold(), raw)
+    values = [by_folded[key] for key in sorted(by_folded)]
     if len(values) == 1:
-        return values[0]
+        return values[0], False
     if len(values) > 1:
         notes.append(
             f"Conflicting {prefix.rstrip(':')} labels: {', '.join(values)}."
         )
-    return None
+        return None, True
+    return None, False
 
 
 class GitHubIssuesTaskStore:
@@ -131,7 +131,10 @@ class GitHubIssuesTaskStore:
         else:
             status = TaskStatus.READY
 
-        explicit_type = _single_prefixed(labels, "type:", notes=notes)
+        metadata_conflict = False
+
+        explicit_type, conflicted = _single_prefixed(labels, "type:", notes=notes)
+        metadata_conflict = metadata_conflict or conflicted
         if explicit_type is not None:
             task_type = _TYPE.get(explicit_type, TaskType.UNKNOWN)
             if task_type == TaskType.UNKNOWN:
@@ -147,25 +150,29 @@ class GitHubIssuesTaskStore:
         else:
             task_type = TaskType.UNKNOWN
 
-        priority_key = _single_prefixed(labels, "priority:", notes=notes)
+        priority_key, conflicted = _single_prefixed(labels, "priority:", notes=notes)
+        metadata_conflict = metadata_conflict or conflicted
         priority = _PRIORITY.get(priority_key or "", 5)
         if priority_key is not None and priority_key not in _PRIORITY:
             notes.append(
                 f"Unknown GitHub priority label: priority:{priority_key}; using medium."
             )
 
-        resource_key = _single_prefixed(labels, "resource:", notes=notes)
+        resource_key, conflicted = _single_prefixed(labels, "resource:", notes=notes)
+        metadata_conflict = metadata_conflict or conflicted
         resource = _RESOURCE.get(resource_key or "", ResourceClass.UNKNOWN)
         if resource_key is not None and resource_key not in _RESOURCE:
             notes.append(f"Unknown GitHub resource label: resource:{resource_key}.")
 
-        risk_key = _single_prefixed(labels, "risk:", notes=notes)
+        risk_key, conflicted = _single_prefixed(labels, "risk:", notes=notes)
+        metadata_conflict = metadata_conflict or conflicted
         risk = _RISK.get(risk_key or "", RiskLevel.UNKNOWN)
         if risk_key is not None and risk_key not in _RISK:
             notes.append(f"Unknown GitHub risk label: risk:{risk_key}.")
 
         information_gain = 0
-        info_key = _single_prefixed(labels, "info-gain:", notes=notes)
+        info_key, conflicted = _single_prefixed(labels, "info-gain:", notes=notes)
+        metadata_conflict = metadata_conflict or conflicted
         if info_key is not None:
             try:
                 parsed = int(info_key)
@@ -184,7 +191,8 @@ class GitHubIssuesTaskStore:
             if isinstance(native_milestone, dict) and native_milestone.get("title")
             else None
         )
-        label_milestone = _single_prefixed(labels, "milestone:", notes=notes)
+        label_milestone, conflicted = _single_prefixed(labels, "milestone:", notes=notes)
+        metadata_conflict = metadata_conflict or conflicted
         milestone = native_title or label_milestone
         if (
             native_title
@@ -192,8 +200,16 @@ class GitHubIssuesTaskStore:
             and native_title.casefold() != label_milestone.casefold()
         ):
             milestone = None
+            metadata_conflict = True
             notes.append(
                 "GitHub milestone and milestone: label disagree; milestone scoring disabled."
+            )
+
+        if state != "closed" and metadata_conflict:
+            status = TaskStatus.NEEDS_DECISION
+            human_decision = True
+            notes.append(
+                "Conflicting GitHub scheduling metadata requires human normalization."
             )
 
         return NormalizedTask(
