@@ -15,6 +15,7 @@ from projectctl.core.time import utc_now
 from projectctl.git import WorktreeManager, current_branch, resolve_commit
 from projectctl.integrations.beads.completion import BeadsTaskCompletionWriter
 from projectctl.project.loader import load_project_config
+from projectctl.project.locking import project_lock
 from projectctl.schemas.evidence import EvidenceManifest
 from projectctl.schemas.execution import EvidenceReference, ExecutionPlan
 from projectctl.schemas.integration import IntegrationManifest
@@ -191,7 +192,7 @@ def _cleanup_verified_worktree(
         return False
 
 
-def integrate_run(project_root: Path, run_id: str) -> IntegratedRun:
+def _integrate_run_locked(project_root: Path, run_id: str) -> IntegratedRun:
     root = project_root.resolve()
     actor = _actor()
     store = RunStore(root)
@@ -329,3 +330,12 @@ def integrate_run(project_root: Path, run_id: str) -> IntegratedRun:
             store.release_lease(run_id, owner=actor)
         except Exception:
             pass
+
+
+
+def integrate_run(project_root: Path, run_id: str) -> IntegratedRun:
+    root = project_root.resolve()
+    # Git target mutation is project-global, not merely run-local. Serialize all
+    # integrations even when they belong to different tasks/runs.
+    with project_lock(root, "integration"):
+        return _integrate_run_locked(root, run_id)

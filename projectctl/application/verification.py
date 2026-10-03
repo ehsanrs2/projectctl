@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from projectctl.application.execution import _actor
+from projectctl.application.task_lifecycle import reconcile_terminal_task
 from projectctl.core.digest import digest
 from projectctl.core.enums import (
     RunStatus,
@@ -28,6 +29,7 @@ from projectctl.schemas.verification import (
     VerificationProfile,
 )
 from projectctl.storage.runs import RunStore
+from projectctl.runtime import LeaseHeartbeat
 from projectctl.verification import (
     committed_diff_digest,
     inspect_workspace,
@@ -306,14 +308,15 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
             )
             return VerifiedRun(final, verification, evidence)
 
-        checks.extend(
-            run_verification_commands(
-                worktree,
-                run_dir=run_dir,
-                run_id=run_id,
-                profile=resolved.profile,
+        with LeaseHeartbeat(store, run_id, owner=actor):
+            checks.extend(
+                run_verification_commands(
+                    worktree,
+                    run_dir=run_dir,
+                    run_id=run_id,
+                    profile=resolved.profile,
+                )
             )
-        )
 
         after = inspect_workspace(
             worktree,
@@ -449,6 +452,15 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
         )
         return VerifiedRun(final, verification, evidence)
     finally:
+        try:
+            reconcile_terminal_task(
+                root,
+                store=store,
+                run_id=run_id,
+                actor=actor,
+            )
+        except Exception:
+            pass
         try:
             store.release_lease(run_id, owner=actor)
         except Exception:
