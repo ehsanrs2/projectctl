@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import AwareDatetime, model_validator
+from pydantic import AwareDatetime, Field, model_validator
 
 from projectctl.core.enums import ConfidenceLevel, QuotaSource
 from projectctl.schemas.base import ProjectCtlModel, Ratio
@@ -19,7 +19,7 @@ class QuotaWindow(ProjectCtlModel):
         return self
 
 
-class QuotaSnapshot(ProjectCtlModel):
+class QuotaSnapshotV1(ProjectCtlModel):
     schema_kind: Literal["projectctl.quota_snapshot"] = "projectctl.quota_snapshot"
     schema_version: Literal[1] = 1
     provider: str
@@ -27,3 +27,34 @@ class QuotaSnapshot(ProjectCtlModel):
     observed_at: AwareDatetime
     five_hour: QuotaWindow
     weekly: QuotaWindow
+
+
+class QuotaSnapshot(ProjectCtlModel):
+    schema_kind: Literal["projectctl.quota_snapshot"] = "projectctl.quota_snapshot"
+    schema_version: Literal[2] = 2
+    provider: str
+    account: str
+    observed_at: AwareDatetime
+    five_hour: QuotaWindow
+    weekly: QuotaWindow
+    ordinary_usage_allowed: bool | None = None
+    selected_limit_id: str | None = None
+    available_limit_ids: list[str] = Field(default_factory=list)
+
+
+def parse_quota_snapshot(raw: object) -> QuotaSnapshot:
+    if not isinstance(raw, dict):
+        raise ValueError("Quota snapshot must be an object.")
+    version = raw.get("schema_version", 1)
+    if version == 2:
+        return QuotaSnapshot.model_validate(raw)
+    if version == 1:
+        legacy = QuotaSnapshotV1.model_validate(raw)
+        return QuotaSnapshot(
+            provider=legacy.provider,
+            account=legacy.account,
+            observed_at=legacy.observed_at,
+            five_hour=legacy.five_hour,
+            weekly=legacy.weekly,
+        )
+    raise ValueError(f"Unsupported quota snapshot schema version: {version}")

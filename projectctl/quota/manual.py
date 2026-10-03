@@ -9,7 +9,7 @@ from projectctl.core.enums import ConfidenceLevel, QuotaSource
 from projectctl.core.errors import QuotaError
 from projectctl.core.time import utc_now
 from projectctl.project.bootstrap import _global_init, projectctl_home
-from projectctl.schemas.quota import QuotaSnapshot, QuotaWindow
+from projectctl.schemas.quota import QuotaSnapshot, QuotaWindow, parse_quota_snapshot
 
 
 class ManualQuotaProvider:
@@ -88,6 +88,6 @@ class ManualQuotaProvider:
                 weekly=QuotaWindow(),
             )
         try:
-            return QuotaSnapshot.model_validate(json.loads(row[0]))
+            return parse_quota_snapshot(json.loads(row[0]))
         except Exception as exc:  # corrupt persistent state must fail loudly
             raise QuotaError(f"Invalid stored quota snapshot for account {account}: {exc}") from exc

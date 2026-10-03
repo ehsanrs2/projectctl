@@ -14,6 +14,7 @@ class QuotaState:
     stale: bool
     five_hour_effective: float | None
     weekly_effective: float | None
+    ordinary_usage_allowed: bool | None
 
 
 class QuotaManager:
@@ -33,7 +34,9 @@ class QuotaManager:
         five = self._effective(snapshot.five_hour.remaining_ratio, self.policy.reserve.five_hour)
         weekly = self._effective(snapshot.weekly.remaining_ratio, self.policy.reserve.weekly)
 
-        if stale or five is None or weekly is None:
+        if snapshot.ordinary_usage_allowed is False:
+            mode = QuotaMode.CRITICAL
+        elif stale or five is None or weekly is None:
             mode = self.policy.unknown_quota_mode
         elif weekly <= self.policy.thresholds.critical_weekly_below:
             mode = QuotaMode.CRITICAL
@@ -44,7 +47,13 @@ class QuotaManager:
             mode = QuotaMode.CONSERVATION
         else:
             mode = QuotaMode.NORMAL
-        return QuotaState(mode=mode, stale=stale, five_hour_effective=five, weekly_effective=weekly)
+        return QuotaState(
+            mode=mode,
+            stale=stale,
+            five_hour_effective=five,
+            weekly_effective=weekly,
+            ordinary_usage_allowed=snapshot.ordinary_usage_allowed,
+        )
 
     @staticmethod
     def _effective(value: float | None, reserve: float) -> float | None:
@@ -53,6 +62,8 @@ class QuotaManager:
         return max(0.0, value - reserve)
 
     def eligible_for_resource(self, resource: ResourceClass, state: QuotaState) -> bool:
+        if state.ordinary_usage_allowed is False:
+            return False
         if resource == ResourceClass.UNKNOWN:
             return False
         if state.five_hour_effective is None or state.weekly_effective is None or state.stale:

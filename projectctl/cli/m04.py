@@ -10,7 +10,13 @@ from projectctl.application.scheduling import current_quota, scheduling_decision
 from projectctl.core.errors import ProjectCtlError, QuotaError, TaskStoreError
 from projectctl.project.loader import load_project_config
 from projectctl.project.root import find_project_root
-from projectctl.quota import ManualQuotaProvider, QuotaManager
+from projectctl.quota import (
+    ManualQuotaProvider,
+    QuotaManager,
+    SUPPORTED_QUOTA_PROVIDERS,
+    get_account_quota_provider,
+    set_account_quota_provider,
+)
 
 EXIT_REPOSITORY = 11
 EXIT_TASK_STORE = 12
@@ -87,14 +93,48 @@ def register_m04(app: typer.Typer) -> None:
             return
         snap = payload["snapshot"]
         typer.echo(f"Quota account: {snap['account']}")
+        typer.echo(f"Provider: {snap['provider']}")
+        typer.echo(f"Observed: {snap['observed_at']}")
         typer.echo(f"Mode: {payload['mode']}" + (" (stale)" if payload["stale"] else ""))
+        allowed = snap.get("ordinary_usage_allowed")
+        typer.echo("Ordinary usage allowed: " + ("unknown" if allowed is None else str(allowed).lower()))
         for key, label in [("five_hour", "Five-hour"), ("weekly", "Weekly")]:
             window = snap[key]
             remaining = window["remaining_ratio"]
             text = "unknown" if remaining is None else f"{remaining * 100:.1f}%"
             effective = payload["effective"][key]
             effective_text = "unknown" if effective is None else f"{effective * 100:.1f}%"
-            typer.echo(f"{label:10} remaining={text:>8} effective={effective_text:>8} source={window['source']}")
+            reset = window.get("reset_at") or "unknown"
+            typer.echo(
+                f"{label:10} remaining={text:>8} effective={effective_text:>8} "
+                f"source={window['source']} confidence={window['confidence']} reset={reset}"
+            )
+
+    @quota_app.command("provider")
+    def quota_provider_command(
+        project: Path = typer.Option(Path("."), "--project", exists=True, file_okay=False, resolve_path=True),
+        set_provider: str | None = typer.Option(None, "--set", help="Set account-level quota provider."),
+        json_output: bool = typer.Option(False, "--json"),
+    ) -> None:
+        try:
+            root = find_project_root(project)
+            config = load_project_config(root)
+            if set_provider is not None:
+                if set_provider not in SUPPORTED_QUOTA_PROVIDERS:
+                    raise QuotaError(
+                        "Unsupported quota provider. Choose one of: "
+                        + ", ".join(sorted(SUPPORTED_QUOTA_PROVIDERS))
+                    )
+                set_account_quota_provider(config.quota.account, set_provider)
+            provider = get_account_quota_provider(config.quota.account)
+        except ProjectCtlError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(EXIT_QUOTA)
+        payload = {"account": config.quota.account, "provider": provider}
+        if json_output:
+            typer.echo(_json(payload))
+        else:
+            typer.echo(f"Quota provider for {config.quota.account}: {provider}")
 
     @quota_app.command("set")
     def quota_set_command(
