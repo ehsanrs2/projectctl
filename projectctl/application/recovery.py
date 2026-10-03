@@ -22,10 +22,12 @@ from projectctl.schemas.execution import (
     EvidenceReference,
     ExecutionPlan,
     WorkerCheckpoint,
+    WorkerRequest,
     WorkerResult,
     parse_worker_checkpoint,
 )
 from projectctl.schemas.integration import IntegrationManifest, RecoveryAction
+from projectctl.schemas.run import ContextManifest
 from projectctl.storage.runs import RunStore
 
 
@@ -88,6 +90,8 @@ def recover_run(project_root: Path, run_id: str) -> RecoveryAction:
                     ) from exc
 
                 plan = _load_json_model(run_dir / "execution-plan.json", ExecutionPlan)
+                request = _load_json_model(run_dir / "worker-request.json", WorkerRequest)
+                context = _load_json_model(run_dir / "context-manifest.json", ContextManifest)
                 worktree = Path(record.worktree_path)
                 resumable = (
                     isinstance(checkpoint, WorkerCheckpoint)
@@ -98,6 +102,9 @@ def recover_run(project_root: Path, run_id: str) -> RecoveryAction:
                     and checkpoint.branch_name == record.branch_name
                     and checkpoint.worker_thread_id == record.worker_thread_id
                     and digest(checkpoint.quota_snapshot) == checkpoint.quota_snapshot_digest
+                    and digest(request) == checkpoint.worker_request_digest
+                    and digest(context) == checkpoint.context_manifest_digest
+                    and request.context_manifest_digest == checkpoint.context_manifest_digest
                     and checkpoint.workspace_digest is not None
                     and worktree.exists()
                     and resolve_commit(worktree, "HEAD") == plan.base_commit
