@@ -1,11 +1,11 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Independently verify worker changes, create auditable evidence, and mint candidate commits only after deterministic policy and test gates pass.
+current_goal: Integrate only verified candidates, close canonical tasks after successful integration, and recover deterministic crash windows without invalidating evidence.
 active_milestone:
-  id: M1.3
-  title: Verification + Evidence
+  id: M1.4
+  title: Integration + Recovery
   aliases:
-    - Verification
-    - Evidence
+    - Integration
+    - Recovery
 updated_at: null

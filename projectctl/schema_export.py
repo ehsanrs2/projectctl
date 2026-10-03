@@ -41,6 +41,8 @@ PUBLIC_SCHEMAS = {
     "evidence-manifest.v1.schema.json": EvidenceManifestV1,
     "evidence-manifest.v2.schema.json": EvidenceManifest,
     "artifact-metadata.v1.schema.json": ArtifactMetadata,
+    "integration-manifest.v1.schema.json": IntegrationManifest,
+    "recovery-report.v1.schema.json": RecoveryReport,
     "project-inspection.v1.schema.json": ProjectInspection,
     "adoption-plan.v1.schema.json": AdoptionPlan,
     "adoption-manifest.v1.schema.json": AdoptionManifest,

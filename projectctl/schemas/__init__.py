@@ -25,6 +25,7 @@ from projectctl.schemas.execution import (
     WorkerOutputPayload,
 )
 from projectctl.schemas.health import HealthCheckResult, HealthReport
+from projectctl.schemas.integration import IntegrationManifest, RecoveryAction, RecoveryReport
 from projectctl.schemas.onboarding import AdoptionManifest, AdoptionPlan, ProjectInspection
 from projectctl.schemas.project_state import MilestoneState, ProjectState
 from projectctl.schemas.quota import QuotaSnapshot
@@ -64,6 +65,7 @@ __all__ = [
     "GoalBudgetPolicy",
     "HealthCheckResult",
     "HealthReport",
+    "IntegrationManifest",
     "MilestoneState",
     "NormalizedTask",
     "PermissionCapabilities",
@@ -73,6 +75,8 @@ __all__ = [
     "ProjectState",
     "ProjectStatus",
     "QuotaSnapshot",
+    "RecoveryAction",
+    "RecoveryReport",
     "RunManifest",
     "RunManifestV1",
     "SchedulerDecision",
