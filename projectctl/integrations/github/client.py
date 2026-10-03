@@ -109,7 +109,7 @@ class GitHubIssuesClient:
         return first[0].strip() if first else None
 
     def repository_info(self) -> dict[str, Any]:
-        payload = self._run(["api", "--method", "GET", f"repos/{self.repository}"])
+        payload = self._run(["api", "--hostname", "github.com", "--method", "GET", f"repos/{self.repository}"])
         if not isinstance(payload, dict):
             raise TaskStoreError("GitHub repository endpoint returned an invalid payload.")
         return payload
@@ -118,6 +118,8 @@ class GitHubIssuesClient:
         payload = self._run(
             [
                 "api",
+                "--hostname",
+                "github.com",
                 "--method",
                 "GET",
                 "--paginate",
@@ -140,7 +142,7 @@ class GitHubIssuesClient:
         if not value.isdigit() or int(value) <= 0:
             raise TaskStoreError(f"Invalid GitHub issue id: {issue_number!r}")
         payload = self._run(
-            ["api", "--method", "GET", f"repos/{self.repository}/issues/{int(value)}"]
+            ["api", "--hostname", "github.com", "--method", "GET", f"repos/{self.repository}/issues/{int(value)}"]
         )
         if not isinstance(payload, dict) or not payload.get("number"):
             raise TaskStoreError(f"GitHub issue not found: {issue_number}")
