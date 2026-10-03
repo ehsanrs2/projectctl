@@ -16,6 +16,7 @@ from projectctl import __version__
 from projectctl.core.errors import DigestMismatchError, RepositoryContractError
 from projectctl.core.paths import resolve_inside_repo
 from projectctl.core.time import utc_now
+from projectctl.integrations.github.repository import normalize_github_repository
 from projectctl.project.bootstrap import _global_init, _slug, projectctl_home
 from projectctl.project.inspection import inspect_repository
 from projectctl.project.state import PROJECT_STATE_PATH, initial_project_state, write_project_state
@@ -93,9 +94,20 @@ def plan_adoption(
     if provider is None and len(detected) == 1:
         provider = detected[0]
 
-    repository = task_store_repository
-    if provider == "github" and repository is None:
-        repository = inspection.github_repository
+    if provider != "github" and task_store_repository is not None:
+        raise RepositoryContractError(
+            "task_store_repository is only supported with the GitHub task store."
+        )
+
+    repository = None
+    if provider == "github":
+        raw_repository = task_store_repository or inspection.github_repository
+        if raw_repository is not None:
+            repository = normalize_github_repository(raw_repository)
+            if repository is None:
+                raise RepositoryContractError(
+                    "GitHub task repository must use the owner/repository form."
+                )
 
     unresolved = [d for d in inspection.unresolved_decisions if not d.startswith("task_store")]
     if provider is None:
