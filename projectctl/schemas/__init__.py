@@ -10,7 +10,7 @@ from projectctl.schemas.capabilities import (
     WorkerRuntimeDescriptor,
     WorkerStrategyDecision,
 )
-from projectctl.schemas.config import ProjectConfig
+from projectctl.schemas.config import ProjectConfig, ProjectConfigV1
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
 from projectctl.schemas.execution import (
     ClaimResult,
@@ -28,7 +28,14 @@ from projectctl.schemas.execution import (
 )
 from projectctl.schemas.health import HealthCheckResult, HealthReport
 from projectctl.schemas.integration import IntegrationManifest, RecoveryAction, RecoveryReport
-from projectctl.schemas.onboarding import AdoptionManifest, AdoptionPlan, ProjectInspection
+from projectctl.schemas.onboarding import (
+    AdoptionManifest,
+    AdoptionManifestV1,
+    AdoptionPlan,
+    AdoptionPlanV1,
+    ProjectInspection,
+    ProjectInspectionV1,
+)
 from projectctl.schemas.project_state import MilestoneState, ProjectState
 from projectctl.schemas.quota import QuotaSnapshot, QuotaSnapshotV1
 from projectctl.schemas.run import (
@@ -51,7 +58,9 @@ from projectctl.schemas.verification import (
 
 __all__ = [
     "AdoptionManifest",
+    "AdoptionManifestV1",
     "AdoptionPlan",
+    "AdoptionPlanV1",
     "ArtifactMetadata",
     "AutoRunPolicy",
     "AutoRunReport",
@@ -76,7 +85,9 @@ __all__ = [
     "PermissionCapabilities",
     "PermissionRequest",
     "ProjectConfig",
+    "ProjectConfigV1",
     "ProjectInspection",
+    "ProjectInspectionV1",
     "ProjectState",
     "ProjectStatus",
     "QuotaSnapshot",
