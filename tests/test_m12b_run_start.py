@@ -145,6 +145,7 @@ class FakeAdapter:
                 base_commit=request.base_commit,
                 branch_name=request.branch_name,
                 context_manifest_digest=request.context_manifest_digest,
+                worker_request_digest=digest(request),
                 reason=CheckpointReason.QUOTA_BELOW_TASK_REQUIREMENT,
                 quota_snapshot=QuotaSnapshot(
                     provider="test",
