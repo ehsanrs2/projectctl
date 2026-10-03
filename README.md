@@ -653,8 +653,8 @@ thread_resume(original_thread_id)
 continue same task
 ```
 
-Checkpoint artifacts bind the provider thread to the exact run, context, quota snapshot,
-base commit, and partial workspace digest. Git-history changes remain forbidden. External
+Checkpoint artifacts bind the provider thread to the exact run, context, complete worker
+request, quota snapshot, base commit, and partial workspace digest. Git-history changes remain forbidden. External
 changes to the checkpointed workspace fail closed instead of being silently incorporated.
 
 Operators can resume explicitly:
