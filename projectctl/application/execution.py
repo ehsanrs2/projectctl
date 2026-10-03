@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import socket
+import sys
 import subprocess
 import tempfile
 import uuid
@@ -658,28 +659,35 @@ def start_prepared_run(project_root: Path, run_id: str) -> StartedRun:
                 worker_thread_id=result.worker_thread_id,
             )
 
+        final_record = reconcile_terminal_task(
+            root,
+            store=store,
+            run_id=run_id,
+            actor=actor,
+        )
         return StartedRun(record=final_record, result=result, context=context)
     finally:
-        try:
-            current = store.get(run_id)
-            if current.status == RunStatus.CLAIMED:
-                store.transition(
-                    run_id,
-                    expected={RunStatus.CLAIMED},
-                    status=RunStatus.FAILED,
-                    terminal_reason=RunTerminalReason.INFRASTRUCTURE_ERROR,
+        if sys.exc_info()[0] is not None:
+            try:
+                current = store.get(run_id)
+                if current.status == RunStatus.CLAIMED:
+                    store.transition(
+                        run_id,
+                        expected={RunStatus.CLAIMED},
+                        status=RunStatus.FAILED,
+                        terminal_reason=RunTerminalReason.INFRASTRUCTURE_ERROR,
+                    )
+            except Exception:
+                pass
+            try:
+                reconcile_terminal_task(
+                    root,
+                    store=store,
+                    run_id=run_id,
+                    actor=actor,
                 )
-        except Exception:
-            pass
-        try:
-            reconcile_terminal_task(
-                root,
-                store=store,
-                run_id=run_id,
-                actor=actor,
-            )
-        except Exception:
-            pass
+            except Exception:
+                pass
         try:
             store.release_lease(run_id, owner=actor)
         except Exception:

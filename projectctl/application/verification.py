@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import dataclass
@@ -306,6 +307,12 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
                 terminal_reason=RunTerminalReason.POLICY_BLOCKED,
                 evidence_manifest=evidence_rel,
             )
+            final = reconcile_terminal_task(
+                root,
+                store=store,
+                run_id=run_id,
+                actor=actor,
+            )
             return VerifiedRun(final, verification, evidence)
 
         with LeaseHeartbeat(store, run_id, owner=actor):
@@ -374,6 +381,12 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
                 status=RunStatus.FAILED,
                 terminal_reason=RunTerminalReason.VERIFICATION_FAILED,
                 evidence_manifest=evidence_rel,
+            )
+            final = reconcile_terminal_task(
+                root,
+                store=store,
+                run_id=run_id,
+                actor=actor,
             )
             return VerifiedRun(final, verification, evidence)
 
@@ -450,17 +463,24 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
             candidate_commit=candidate,
             evidence_manifest=evidence_rel,
         )
+        final = reconcile_terminal_task(
+            root,
+            store=store,
+            run_id=run_id,
+            actor=actor,
+        )
         return VerifiedRun(final, verification, evidence)
     finally:
-        try:
-            reconcile_terminal_task(
-                root,
-                store=store,
-                run_id=run_id,
-                actor=actor,
-            )
-        except Exception:
-            pass
+        if sys.exc_info()[0] is not None:
+            try:
+                reconcile_terminal_task(
+                    root,
+                    store=store,
+                    run_id=run_id,
+                    actor=actor,
+                )
+            except Exception:
+                pass
         try:
             store.release_lease(run_id, owner=actor)
         except Exception:

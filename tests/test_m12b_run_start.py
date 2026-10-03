@@ -210,6 +210,14 @@ def setup_prepared(tmp_path: Path, monkeypatch):
         "projectctl.context.assembler.task_store_for_project",
         lambda root: FakeTaskStore(task),
     )
+    monkeypatch.setattr(
+        "projectctl.application.task_lifecycle.release_task_for_retry",
+        lambda root, task_id, actor: None,
+    )
+    monkeypatch.setattr(
+        "projectctl.application.task_lifecycle.block_task_for_decision",
+        lambda root, task_id, reason: None,
+    )
 
     prepared = prepare_next_run(repo)
     return repo, prepared, task, caps

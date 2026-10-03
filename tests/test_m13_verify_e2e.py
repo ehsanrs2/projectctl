@@ -151,6 +151,14 @@ def setup_run(
         worker_thread_id="thr-test",
     )
     RunStore(repo).create(manifest, worktree_path=worktree, now=NOW)
+    monkeypatch.setattr(
+        "projectctl.application.task_lifecycle.release_task_for_retry",
+        lambda root, task_id, actor: None,
+    )
+    monkeypatch.setattr(
+        "projectctl.application.task_lifecycle.block_task_for_decision",
+        lambda root, task_id, reason: None,
+    )
     return repo, worktree, base, run_id
 
 
