@@ -45,7 +45,26 @@ class SchedulerCandidate(ProjectCtlModel):
     model: ModelRecommendation | None = None
 
 
+class SchedulerDecisionV1(ProjectCtlModel):
+    """Legacy M0.4 decision contract retained for historical/audit reads."""
+
+    schema_kind: Literal["projectctl.scheduler_decision"] = "projectctl.scheduler_decision"
+    schema_version: Literal[1] = 1
+    evaluated_at: AwareDatetime
+    project_id: str
+    policy: str
+    policy_version: int
+    config_digest: str
+    task_snapshot_digest: str
+    quota_snapshot_digest: str
+    selected_task_id: str | None = None
+    quota_mode: QuotaMode
+    candidates: list[SchedulerCandidate] = Field(default_factory=list)
+
+
 class SchedulerDecision(ProjectCtlModel):
+    """Current scheduler decision contract."""
+
     schema_kind: Literal["projectctl.scheduler_decision"] = "projectctl.scheduler_decision"
     schema_version: Literal[2] = 2
     evaluated_at: AwareDatetime
