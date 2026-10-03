@@ -4,7 +4,11 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from projectctl.application.execution import _actor, _worktree_state_digest
+from projectctl.application.execution import (
+    _actor,
+    _checkpoint_event_matches,
+    _worktree_state_digest,
+)
 from projectctl.application.integration import (
     _atomic_json,
     _cleanup_verified_worktree,
@@ -95,6 +99,9 @@ def recover_run(project_root: Path, run_id: str) -> RecoveryAction:
                 worktree = Path(record.worktree_path)
                 resumable = (
                     isinstance(checkpoint, WorkerCheckpoint)
+                    and _checkpoint_event_matches(
+                        store, run_id, record.checkpoint_ref, checkpoint
+                    )
                     and checkpoint.run_id == record.run_id
                     and checkpoint.task_id == record.task_id
                     and checkpoint.worktree_id == record.worktree_id
