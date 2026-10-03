@@ -340,7 +340,6 @@ class CodexWorkerAdapter:
         finally:
             checkpoint_monitor.stop()
 
-        checkpoint_monitor.assert_healthy()
         status = getattr(result.status, "value", str(result.status)).lower()
         if status == "completed":
             return self._parse_completed_result(
@@ -348,6 +347,8 @@ class CodexWorkerAdapter:
                 result,
                 thread_id=thread.id,
             )
+
+        checkpoint_monitor.assert_healthy()
         if checkpoint_monitor.decision is not None:
             return self._checkpoint(
                 request,
