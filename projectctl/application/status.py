@@ -10,7 +10,7 @@ from projectctl.core.enums import TaskStatus
 from projectctl.core.time import utc_now
 from projectctl.project.loader import load_project_config
 from projectctl.project.state import load_project_state
-from projectctl.quota import ManualQuotaProvider, QuotaManager, QuotaState
+from projectctl.quota import QuotaManager, QuotaState, read_current_quota
 from projectctl.scheduler import SchedulerService
 from projectctl.schemas.project_state import ProjectState
 from projectctl.schemas.quota import QuotaSnapshot
@@ -59,7 +59,7 @@ def collect_status(
     config = load_project_config(project_root)
     project_state = load_project_state(project_root, allow_missing=True)
     tasks = capture_task_snapshot(project_root, state="all")
-    quota = ManualQuotaProvider().get_snapshot(config.quota.account)
+    quota = read_current_quota(config.quota.account)
     quota_state = QuotaManager(config.quota).state(quota, now=now)
     decision = SchedulerService().decide(
         config=config,
