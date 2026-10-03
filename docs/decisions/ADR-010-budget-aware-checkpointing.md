@@ -14,9 +14,9 @@ recovery incident.
 
 The pinned Codex Python SDK exposes supported turn controls:
 
-- \`Thread.turn(...)\`
-- \`TurnHandle.interrupt()\`
-- \`Codex.thread_resume(...)\`
+- `Thread.turn(...)`
+- `TurnHandle.interrupt()`
+- `Codex.thread_resume(...)`
 
 ProjectCTL already has durable run checkpoint columns, isolated worktrees, run leases, and
 a WorkerCheckpoint schema boundary.
@@ -39,8 +39,8 @@ its existing resource requirement is still satisfied.
 
 ### Safe interruption
 
-Checkpoint-aware execution uses \`Thread.turn(...)\` and the public
-\`TurnHandle.interrupt()\` method. ProjectCTL does not kill Codex or emulate interruption
+Checkpoint-aware execution uses `Thread.turn(...)` and the public
+`TurnHandle.interrupt()` method. ProjectCTL does not kill Codex or emulate interruption
 with a prompt.
 
 If the turn completes naturally during an interrupt race, the completed result wins.
@@ -58,7 +58,7 @@ A successful quota interruption writes WorkerCheckpoint v2 containing:
 - exact partial-workspace digest
 - checkpoint time
 
-The run remains \`RUNNING\`, keeps its canonical task claim, releases its process lease,
+The run remains `RUNNING`, keeps its canonical task claim, releases its process lease,
 and records the checkpoint path in durable run state.
 
 The worker may modify files before checkpointing but may never change Git HEAD/history.
@@ -76,14 +76,14 @@ A checkpoint is resumable only if:
 - the live worker capability/strategy surface is still compatible
 
 External edits to the partial worktree after checkpointing fail closed as
-\`RECOVERY_UNSAFE\`.
+`RECOVERY_UNSAFE`.
 
 ### Resume gate
 
-\`projectctl run resume RUN_ID\` reads fresh quota before contacting Codex. Resume is
+`projectctl run resume RUN_ID` reads fresh quota before contacting Codex. Resume is
 deferred when quota is stale or insufficient for the task's resource class.
 
-When eligible, ProjectCTL calls \`thread_resume\` with the original Codex thread id and
+When eligible, ProjectCTL calls `thread_resume` with the original Codex thread id and
 continues the same authorized task from the preserved worktree. A resumed turn can finish
 or checkpoint again.
 
@@ -93,16 +93,16 @@ The M2 auto loop recognizes a durable checkpoint as a planned stop:
 
 - if quota permits, an expired-lease checkpointed run is resumed before new work
 - if quota still does not permit resume, the loop stops with
-  \`quota_checkpointed\`
+  `quota_checkpointed`
 - a new checkpoint produced during autonomous execution also stops with
-  \`quota_checkpointed\`
+  `quota_checkpointed`
 
 This stop is graceful, not a worker failure or human-decision state.
 
 ### Recovery
 
 Crash recovery recognizes intact WorkerCheckpoint v2 artifacts as
-\`checkpoint_resume_ready\`. A checkpoint with a missing artifact, mismatched identity,
+`checkpoint_resume_ready`. A checkpoint with a missing artifact, mismatched identity,
 changed Git history, or changed workspace escalates fail-closed.
 
 Legacy WorkerCheckpoint v1 remains schema-readable for audit but is not automatically
