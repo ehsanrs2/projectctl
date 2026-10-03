@@ -468,3 +468,29 @@ def test_checkpoint_resume_rejects_tampered_worker_request(tmp_path: Path, monke
     record = RunStore(repo).get(prepared.record.run_id)
     assert record.status == RunStatus.NEEDS_DECISION
     assert record.terminal_reason == RunTerminalReason.CONTEXT_INVALID
+
+
+def test_checkpoint_resume_rejects_tampered_checkpoint_artifact(tmp_path: Path, monkeypatch):
+    repo, prepared, task, caps = setup_prepared(tmp_path, monkeypatch)
+    adapter = FakeAdapter(caps, checkpoint=True)
+    monkeypatch.setattr(
+        "projectctl.application.execution._adapter_for_provider",
+        lambda provider: adapter,
+    )
+    started = start_prepared_run(repo, prepared.record.run_id)
+    checkpoint_path = repo / started.record.checkpoint_ref
+    raw = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    raw["quota_stale"] = not raw["quota_stale"]
+    checkpoint_path.write_text(json.dumps(raw), encoding="utf-8")
+
+    adapter.checkpoint = False
+    monkeypatch.setattr(
+        "projectctl.application.execution.read_current_quota",
+        lambda account: fresh_quota(),
+    )
+    with pytest.raises(RunStoreError, match="identity does not match"):
+        resume_checkpointed_run(repo, prepared.record.run_id)
+
+    record = RunStore(repo).get(prepared.record.run_id)
+    assert record.status == RunStatus.NEEDS_DECISION
+    assert record.terminal_reason == RunTerminalReason.RECOVERY_UNSAFE
