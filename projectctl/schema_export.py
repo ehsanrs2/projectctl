@@ -8,7 +8,14 @@ from projectctl.schemas.config import ProjectConfig
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
 from projectctl.schemas.execution import (ExecutionPlan, ExecutionPlanV1, WorkerCheckpoint, WorkerCheckpointV1, WorkerRequest, WorkerRequestV1, WorkerResult)
 from projectctl.schemas.integration import IntegrationManifest, RecoveryReport
-from projectctl.schemas.onboarding import AdoptionManifest, AdoptionPlan, ProjectInspection
+from projectctl.schemas.onboarding import (
+    AdoptionManifest,
+    AdoptionManifestV1,
+    AdoptionPlan,
+    AdoptionPlanV1,
+    ProjectInspection,
+    ProjectInspectionV1,
+)
 from projectctl.schemas.project_state import ProjectState
 from projectctl.schemas.quota import QuotaSnapshot, QuotaSnapshotV1
 from projectctl.schemas.run import ContextManifest, ContextManifestV1, RunManifest, RunManifestV1
@@ -49,9 +56,12 @@ PUBLIC_SCHEMAS = {
     "auto-run-report.v1.schema.json": AutoRunReport,
     "integration-manifest.v1.schema.json": IntegrationManifest,
     "recovery-report.v1.schema.json": RecoveryReport,
-    "project-inspection.v1.schema.json": ProjectInspection,
-    "adoption-plan.v1.schema.json": AdoptionPlan,
-    "adoption-manifest.v1.schema.json": AdoptionManifest,
+    "project-inspection.v1.schema.json": ProjectInspectionV1,
+    "project-inspection.v2.schema.json": ProjectInspection,
+    "adoption-plan.v1.schema.json": AdoptionPlanV1,
+    "adoption-plan.v2.schema.json": AdoptionPlan,
+    "adoption-manifest.v1.schema.json": AdoptionManifestV1,
+    "adoption-manifest.v2.schema.json": AdoptionManifest,
 }
 
 
