@@ -2,13 +2,14 @@ import shutil
 from pathlib import Path
 
 from projectctl.core.enums import HealthStatus
-from projectctl.core.errors import ConfigurationError, DatabaseVersionError, RepositoryContractError, UnsafePathError
+from projectctl.core.errors import ConfigurationError, DatabaseVersionError, ProviderUnavailableError, QuotaError, RepositoryContractError, UnsafePathError
 from projectctl.core.paths import resolve_inside_repo
 from projectctl.project.bootstrap import projectctl_home
 from projectctl.project.loader import load_project_config
 from projectctl.project.state import PROJECT_STATE_PATH, load_project_state
 from projectctl.project.freshness import generated_freshness
 from projectctl.project.root import git_root
+from projectctl.quota import get_account_quota_provider, resolve_quota_provider
 from projectctl.schemas.health import HealthCheckResult
 from projectctl.storage.sqlite import (APPLICATION_ID, GLOBAL_STATE_DB_VERSION, PROJECT_STATE_DB_VERSION, TELEMETRY_DB_VERSION, inspect_db)
 
@@ -236,4 +237,53 @@ def check_generated_artifacts(root: Path) -> HealthCheckResult:
         check_id="generated_artifacts",
         status=HealthStatus.PASS,
         summary="Generated dashboards are fresh.",
+    )
+
+
+def check_quota_provider(root: Path) -> HealthCheckResult:
+    try:
+        config = load_project_config(root)
+        provider_name = get_account_quota_provider(config.quota.account)
+    except ConfigurationError as exc:
+        return HealthCheckResult(
+            check_id="quota_provider",
+            status=HealthStatus.ERROR,
+            summary=f"Could not resolve quota provider: {exc}",
+        )
+
+    if provider_name == "manual":
+        return HealthCheckResult(
+            check_id="quota_provider",
+            status=HealthStatus.PASS,
+            summary="Manual account quota provider is configured.",
+        )
+
+    try:
+        snapshot = resolve_quota_provider(config.quota.account).get_snapshot(config.quota.account)
+    except ProviderUnavailableError as exc:
+        return HealthCheckResult(
+            check_id="quota_provider",
+            status=HealthStatus.WARN,
+            summary=f"Configured quota provider is temporarily unavailable: {exc}",
+            remediation=["Restore Codex App Server availability or switch the account provider to manual."],
+        )
+    except QuotaError as exc:
+        return HealthCheckResult(
+            check_id="quota_provider",
+            status=HealthStatus.ERROR,
+            summary=f"Configured quota provider returned malformed or unsafe data: {exc}",
+            remediation=["Update Codex/ProjectCTL or switch to manual quota until the protocol is compatible."],
+        )
+
+    details = [
+        f"provider={snapshot.provider}",
+        f"observed_at={snapshot.observed_at.isoformat()}",
+        f"ordinary_usage_allowed={snapshot.ordinary_usage_allowed}",
+        f"selected_limit_id={snapshot.selected_limit_id}",
+    ]
+    return HealthCheckResult(
+        check_id="quota_provider",
+        status=HealthStatus.PASS,
+        summary="Configured quota provider is readable through the supported interface.",
+        details=details,
     )
