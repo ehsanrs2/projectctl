@@ -57,7 +57,16 @@ class WorktreeManager:
         self.project_root = project_root.resolve()
         self.home = (home or projectctl_home()).resolve()
         instance = project_instance_id(self.project_root)
-        self.root = (self.home / "worktrees" / instance).resolve()
+        if not _SAFE_ID.fullmatch(instance):
+            raise WorktreeError(f"Unsafe project instance id: {instance!r}")
+        worktrees_root = (self.home / "worktrees").resolve()
+        self.root = (worktrees_root / instance).resolve()
+        if not self.root.is_relative_to(worktrees_root):
+            raise WorktreeError("Project worktree root escapes PROJECTCTL_HOME/worktrees.")
+        if self.root.is_relative_to(self.project_root) or self.project_root.is_relative_to(self.root):
+            raise WorktreeError(
+                "ProjectCTL worktree storage must be outside and independent from the project repository."
+            )
         self.root.mkdir(parents=True, exist_ok=True)
 
     def path_for(self, worktree_id: str) -> Path:

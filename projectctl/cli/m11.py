@@ -8,6 +8,7 @@ import typer
 from projectctl.application.execution import abort_prepared_run, prepare_next_run
 from projectctl.core.errors import ProjectCtlError
 from projectctl.project.root import find_project_root
+from projectctl.project.locking import project_lock
 from projectctl.storage.runs import RunStore
 from projectctl.storage.sqlite import migrate_project_state_db
 
@@ -34,7 +35,8 @@ def register_m11(app: typer.Typer) -> None:
     ) -> None:
         try:
             root = find_project_root(project)
-            result = migrate_project_state_db(root / ".projectctl" / "state.sqlite")
+            with project_lock(root, "db-migrate"):
+                result = migrate_project_state_db(root / ".projectctl" / "state.sqlite")
         except ProjectCtlError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(EXIT_REPOSITORY)

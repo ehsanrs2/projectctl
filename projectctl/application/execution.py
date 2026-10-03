@@ -196,8 +196,19 @@ def prepare_next_run(
                 worktree_path=worktree_path,
                 lease_owner=actor,
             )
+        except Exception:
+            shutil.rmtree(run_dir, ignore_errors=True)
+            raise
+        try:
             _atomic_json(run_dir / "execution-plan.json", plan)
         except Exception:
+            store.transition(
+                run_id,
+                expected={RunStatus.PLANNED},
+                status=RunStatus.FAILED,
+                terminal_reason=RunTerminalReason.INFRASTRUCTURE_ERROR,
+            )
+            store.release_lease(run_id, owner=actor)
             shutil.rmtree(run_dir, ignore_errors=True)
             raise
 
@@ -284,25 +295,49 @@ def abort_prepared_run(project_root: Path, run_id: str) -> RunRecord:
 
     manager = WorktreeManager(root)
     claimer = _claimer(root)
-    try:
-        manager.remove(
-            worktree_id=record.worktree_id,
-            branch_name=record.branch_name,
-            force=True,
-        )
-        if record.status == RunStatus.CLAIMED:
+
+    manager.remove(
+        worktree_id=record.worktree_id,
+        branch_name=record.branch_name,
+        force=True,
+    )
+
+    if record.status == RunStatus.CLAIMED:
+        try:
             claimer.release(record.task_id, actor=actor)
+        except Exception as exc:
+            store.transition(
+                run_id,
+                expected={RunStatus.CLAIMED},
+                status=RunStatus.NEEDS_DECISION,
+                terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
+            )
+            store.release_lease(run_id, owner=actor)
+            raise RunStoreError(
+                f"Worktree was removed but task claim could not be released: {exc}"
+            ) from exc
+
+    try:
         result = store.transition(
             run_id,
             expected={record.status},
             status=RunStatus.CANCELLED,
             terminal_reason=RunTerminalReason.USER_CANCELLED,
         )
-        store.release_lease(run_id, owner=actor)
-        return result
-    except Exception:
+    except Exception as exc:
         try:
-            store.release_lease(run_id, owner=actor)
+            store.transition(
+                run_id,
+                expected={record.status},
+                status=RunStatus.NEEDS_DECISION,
+                terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
+            )
         except Exception:
             pass
-        raise
+        store.release_lease(run_id, owner=actor)
+        raise RunStoreError(
+            f"Run cleanup completed but cancellation state could not be recorded: {exc}"
+        ) from exc
+
+    store.release_lease(run_id, owner=actor)
+    return result

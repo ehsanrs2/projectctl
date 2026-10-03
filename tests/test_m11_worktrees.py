@@ -1,7 +1,10 @@
 import sqlite3
+
+import pytest
 import subprocess
 from pathlib import Path
 
+from projectctl.core.errors import WorktreeError
 from projectctl.git.worktrees import WorktreeManager, resolve_commit
 from projectctl.storage.sqlite import initialize_project_state_db
 
@@ -69,3 +72,10 @@ def test_worktree_is_outside_repository_and_pinned_to_base(tmp_path: Path):
         ["git", "-C", str(repo), "show-ref", "--verify", "--quiet", "refs/heads/projectctl/run/run-1"],
         check=False,
     ).returncode != 0
+
+
+
+def test_worktree_storage_rejects_projectctl_home_inside_repo(tmp_path: Path):
+    repo = make_repo(tmp_path)
+    with pytest.raises(WorktreeError, match="outside and independent"):
+        WorktreeManager(repo, home=repo / ".projectctl-home")

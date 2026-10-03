@@ -3,12 +3,15 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from projectctl.cli.entry import app
-from projectctl.core.enums import ModelProfile, ReasoningLevel
+from projectctl.core.enums import ModelProfile, ReasoningLevel, RunStatus, RunTerminalReason
+from projectctl.core.errors import RunStoreError
 from projectctl.schemas.execution import ClaimResult, ExecutionPlan
-from projectctl.schemas.run import WorkerDescriptor
+from projectctl.schemas.run import RunManifest, WorkerDescriptor
+from projectctl.storage.runs import RunStore
 
 runner = CliRunner()
 NOW = datetime(2026, 10, 3, 6, 0, tzinfo=timezone.utc)
@@ -130,3 +133,56 @@ def test_prepare_and_abort_use_durable_run_state_and_external_worktree(
     assert json.loads(aborted.output)["status"] == "cancelled"
     assert not worktree.exists()
     assert claimer.released == ["bd-1"]
+
+
+
+def test_abort_marks_recovery_unsafe_when_claim_release_fails(tmp_path: Path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init", "-q")
+    monkeypatch.setenv("PROJECTCTL_HOME", str(tmp_path / "home"))
+    initialized = runner.invoke(app, ["init", str(repo)])
+    assert initialized.exit_code == 0, initialized.output
+
+    worker = WorkerDescriptor(
+        provider="codex",
+        model_profile=ModelProfile.BALANCED,
+        reasoning=ReasoningLevel.MEDIUM,
+    )
+    manifest = RunManifest(
+        run_id="run-fail-release",
+        task_id="bd-1",
+        execution_plan_digest="plan",
+        status=RunStatus.CLAIMED,
+        base_commit="abcdef1",
+        branch_name="projectctl/run/run-fail-release",
+        worktree_id="run-fail-release",
+        worker=worker,
+    )
+    store = RunStore(repo)
+    store.create(
+        manifest,
+        worktree_path=tmp_path / "home" / "worktrees" / "fake" / "run-fail-release",
+        now=NOW,
+    )
+
+    class FailingClaimer:
+        def release(self, task_id: str, *, actor: str):
+            raise RuntimeError("release failed")
+
+    monkeypatch.setattr(
+        "projectctl.application.execution._claimer",
+        lambda root: FailingClaimer(),
+    )
+    monkeypatch.setattr(
+        "projectctl.application.execution.WorktreeManager.remove",
+        lambda self, **kwargs: None,
+    )
+
+    with pytest.raises(RunStoreError, match="claim could not be released"):
+        from projectctl.application.execution import abort_prepared_run
+        abort_prepared_run(repo, "run-fail-release")
+
+    record = store.get("run-fail-release")
+    assert record.status == RunStatus.NEEDS_DECISION
+    assert record.terminal_reason == RunTerminalReason.RECOVERY_UNSAFE
