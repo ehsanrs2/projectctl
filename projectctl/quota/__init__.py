@@ -1,3 +1,8 @@
+from projectctl.quota.checkpointing import (
+    QuotaCheckpointDecision,
+    QuotaCheckpointMonitor,
+    evaluate_checkpoint,
+)
 from projectctl.quota.codex_app_server import CodexAppServerQuotaProvider
 from projectctl.quota.manager import QuotaManager, QuotaState
 from projectctl.quota.manual import ManualQuotaProvider
@@ -11,10 +16,13 @@ from projectctl.quota.resolver import (
 
 __all__ = [
     "CodexAppServerQuotaProvider",
+    "QuotaCheckpointDecision",
+    "QuotaCheckpointMonitor",
     "ManualQuotaProvider",
     "QuotaManager",
     "QuotaState",
     "SUPPORTED_QUOTA_PROVIDERS",
+    "evaluate_checkpoint",
     "get_account_quota_provider",
     "read_current_quota",
     "resolve_quota_provider",
