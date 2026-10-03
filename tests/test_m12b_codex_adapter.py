@@ -17,6 +17,7 @@ from projectctl.core.enums import (
 )
 from projectctl.core.errors import CapabilityMismatchError
 from projectctl.schemas.execution import ExecutionPolicy, WorkerCheckpoint, WorkerRequest
+from projectctl.schemas.quota import QuotaSnapshot, QuotaWindow
 from projectctl.schemas.run import WorkerDescriptor
 from projectctl.workers.codex.adapter import CodexBindings, CodexWorkerAdapter
 
@@ -227,9 +228,18 @@ class FakeCheckpointMonitor:
         self.decision = None
 
     def start(self, callback):
+        quota = QuotaSnapshot(
+            provider="test",
+            account="acct",
+            observed_at=NOW,
+            five_hour=QuotaWindow(),
+            weekly=QuotaWindow(),
+        )
+        from projectctl.core.digest import digest
         self.decision = SimpleNamespace(
             reason=CheckpointReason.QUOTA_BELOW_TASK_REQUIREMENT,
-            snapshot_digest="quota-live",
+            snapshot=quota,
+            snapshot_digest=digest(quota),
             state=SimpleNamespace(mode=QuotaMode.CONSERVATION, stale=False),
         )
         callback(self.decision)
@@ -270,7 +280,24 @@ def test_codex_adapter_resumes_same_thread_after_checkpoint(tmp_path: Path):
         branch_name=req.branch_name,
         context_manifest_digest=req.context_manifest_digest,
         reason=CheckpointReason.QUOTA_CRITICAL,
-        quota_snapshot_digest="quota-old",
+        quota_snapshot=QuotaSnapshot(
+            provider="test",
+            account="acct",
+            observed_at=NOW,
+            five_hour=QuotaWindow(),
+            weekly=QuotaWindow(),
+        ),
+        quota_snapshot_digest=__import__(
+            "projectctl.core.digest", fromlist=["digest"]
+        ).digest(
+            QuotaSnapshot(
+                provider="test",
+                account="acct",
+                observed_at=NOW,
+                five_hour=QuotaWindow(),
+                weekly=QuotaWindow(),
+            )
+        ),
         quota_mode=QuotaMode.CRITICAL,
         quota_stale=False,
         checkpoint_at=NOW,
