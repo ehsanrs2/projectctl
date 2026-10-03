@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from projectctl.core.digest import digest
+from projectctl.workers.capability_digest import effective_capability_digest
 from projectctl.core.enums import (
     ApprovalPolicy,
     ExecutionSandboxMode,
@@ -165,7 +165,7 @@ def negotiate_strategy(
 ) -> WorkerStrategyDecision:
     requested_kind = requested or recommend_strategy(task)
     fallback = fallback or StrategyFallbackPolicy()
-    cap_digest = digest(capabilities)
+    cap_digest = effective_capability_digest(capabilities)
 
     compatible, unsupported = _evaluate(requested_kind, capabilities)
     if compatible:

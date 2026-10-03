@@ -1,11 +1,11 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Model Codex runtime capabilities and execution strategies explicitly before starting the real worker adapter.
+current_goal: Execute bounded Codex workers with deterministic context and live capability revalidation while keeping verification independent.
 active_milestone:
-  id: M1.2a
-  title: Codex Capability & Strategy Layer
+  id: M1.2b
+  title: Context + Codex WorkerAdapter
   aliases:
-    - Worker Capabilities
-    - Codex Strategy
+    - Context Assembler
+    - Codex Worker
 updated_at: null

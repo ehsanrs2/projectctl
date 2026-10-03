@@ -13,7 +13,7 @@ from projectctl.core.enums import (
     RunTerminalReason,
     WorkerResultStatus,
 )
-from projectctl.schemas.execution import ExecutionPlan, ExecutionPolicy, WorkerRequest, WorkerResult
+from projectctl.schemas.execution import ExecutionPlanV1, ExecutionPolicy, WorkerRequestV1, WorkerResult
 from projectctl.schemas.run import (
     ContextManifest,
     ContextManifestV1,
@@ -43,7 +43,7 @@ def test_execution_policy_defaults_fail_closed():
 
 
 def test_execution_plan_captures_all_scheduler_inputs():
-    plan = ExecutionPlan(
+    plan = ExecutionPlanV1(
         plan_id="ep-1",
         project_id="demo",
         task_id="bd-1",
@@ -75,7 +75,7 @@ def test_worker_result_cannot_claim_changed_files_or_test_success():
 
 
 def test_worker_request_is_bound_to_plan_context_and_worktree():
-    request = WorkerRequest(
+    request = WorkerRequestV1(
         run_id="r1",
         task_id="t1",
         base_commit="abcdef1",

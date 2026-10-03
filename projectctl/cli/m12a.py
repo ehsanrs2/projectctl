@@ -10,7 +10,7 @@ from projectctl.core.enums import WorkerStrategyKind
 from projectctl.core.errors import ProjectCtlError
 from projectctl.project.root import find_project_root
 from projectctl.schemas.capabilities import StrategyFallbackPolicy
-from projectctl.workers.codex import CodexCapabilityProbe
+from projectctl.workers.codex import CodexWorkerAdapter
 from projectctl.workers.strategy import negotiate_strategy
 
 EXIT_REPOSITORY = 11
@@ -23,10 +23,11 @@ def _json(value) -> str:
     return json.dumps(value, indent=2, ensure_ascii=False, sort_keys=True)
 
 
-def _probe(provider: str):
+def _probe(provider: str, *, live: bool = False):
     if provider != "codex":
         raise typer.BadParameter(f"Unsupported worker provider: {provider}")
-    return CodexCapabilityProbe().probe()
+    adapter = CodexWorkerAdapter()
+    return adapter.probe() if live else adapter.version_capabilities()
 
 
 def _support_text(support) -> str:
@@ -47,9 +48,14 @@ def register_m12a(app: typer.Typer) -> None:
     @worker_app.command("capabilities")
     def capabilities_command(
         provider: str = typer.Option("codex", "--provider"),
+        live: bool = typer.Option(False, "--live", help="Start the Codex runtime and probe it live."),
         json_output: bool = typer.Option(False, "--json"),
     ) -> None:
-        capabilities = _probe(provider)
+        try:
+            capabilities = _probe(provider, live=live)
+        except ProjectCtlError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(EXIT_CAPABILITY)
         if json_output:
             typer.echo(_json(capabilities))
             return
@@ -104,7 +110,7 @@ def register_m12a(app: typer.Typer) -> None:
             if task is None:
                 typer.echo(f"Unknown task: {task_id}", err=True)
                 raise typer.Exit(EXIT_CAPABILITY)
-            capabilities = _probe(provider)
+            capabilities = _probe(provider, live=False)
             requested_kind = WorkerStrategyKind(requested) if requested else None
             decision = negotiate_strategy(
                 task,
