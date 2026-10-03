@@ -166,6 +166,7 @@ class WorkerCheckpoint(ProjectCtlModel):
     base_commit: str = Field(min_length=7)
     branch_name: str = Field(min_length=1)
     context_manifest_digest: str = Field(min_length=1)
+    worker_request_digest: str = Field(min_length=1)
     reason: CheckpointReason
     quota_snapshot: QuotaSnapshot
     quota_snapshot_digest: str = Field(min_length=1)
