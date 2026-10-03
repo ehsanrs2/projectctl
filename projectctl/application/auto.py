@@ -8,7 +8,11 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
-from projectctl.application.execution import prepare_next_run, start_prepared_run
+from projectctl.application.execution import (
+    prepare_next_run,
+    resume_checkpointed_run,
+    start_prepared_run,
+)
 from projectctl.application.integration import integrate_run
 from projectctl.application.recovery import recover_run
 from projectctl.application.status import collect_status
@@ -92,6 +96,8 @@ def _execution_plan_state_digest(project_root: Path, run_id: str) -> str | None:
 
 
 def _classify_terminal(record, attempts_for_task: int, policy: AutoRunPolicy):
+    if record.status == RunStatus.RUNNING and record.checkpoint_ref:
+        return AutoStopReason.QUOTA_CHECKPOINTED
     if record.status == RunStatus.PASSED:
         return None
     if record.status == RunStatus.BLOCKED_POLICY:
@@ -118,7 +124,10 @@ def _advance_run(project_root: Path, run_id: str):
 
     # Recover crash windows before attempting their next deterministic phase.
     if record.status == RunStatus.RUNNING:
-        recover_run(project_root, run_id)
+        if record.checkpoint_ref:
+            resume_checkpointed_run(project_root, run_id)
+        else:
+            recover_run(project_root, run_id)
         record = store.get(run_id)
     elif record.status == RunStatus.INTEGRATING:
         recover_run(project_root, run_id)
