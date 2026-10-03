@@ -15,7 +15,7 @@ args = sys.argv[1:]
 if args == ["--version"]:
     print("gh version 2.99.0")
     raise SystemExit(0)
-if args[:3] == ["api", "--method", "GET"]:
+if args[:5] == ["api", "--hostname", "github.com", "--method", "GET"]:
     endpoint = args[-1]
     if endpoint == "repos/acme/widget":
         print(json.dumps({"full_name": "acme/widget"}))
