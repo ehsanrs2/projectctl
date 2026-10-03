@@ -42,6 +42,7 @@ from projectctl.schemas.execution import (
     WorkerCheckpoint,
     WorkerResult,
 )
+from projectctl.schemas.quota import QuotaSnapshot, QuotaWindow
 from projectctl.schemas.run import WorkerDescriptor
 from projectctl.schemas.task import NormalizedTask, TaskSource
 from projectctl.storage.runs import RunStore
@@ -143,7 +144,22 @@ class FakeAdapter:
                 branch_name=request.branch_name,
                 context_manifest_digest=request.context_manifest_digest,
                 reason=CheckpointReason.QUOTA_BELOW_TASK_REQUIREMENT,
-                quota_snapshot_digest="quota-live",
+                quota_snapshot=QuotaSnapshot(
+                    provider="test",
+                    account="acct",
+                    observed_at=NOW,
+                    five_hour=QuotaWindow(),
+                    weekly=QuotaWindow(),
+                ),
+                quota_snapshot_digest=digest(
+                    QuotaSnapshot(
+                        provider="test",
+                        account="acct",
+                        observed_at=NOW,
+                        five_hour=QuotaWindow(),
+                        weekly=QuotaWindow(),
+                    )
+                ),
                 quota_mode=QuotaMode.CONSERVATION,
                 quota_stale=False,
                 checkpoint_at=NOW,
