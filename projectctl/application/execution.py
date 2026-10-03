@@ -1015,6 +1015,7 @@ def resume_checkpointed_run(project_root: Path, run_id: str) -> StartedRun:
         request = _load_json_model(run_dir / "worker-request.json", WorkerRequest)
         if (
             digest(context_manifest) != checkpoint.context_manifest_digest
+            or digest(request) != checkpoint.worker_request_digest
             or request.context_manifest_digest != checkpoint.context_manifest_digest
             or request.run_id != run_id
             or request.task_id != record.task_id
