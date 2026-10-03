@@ -4,7 +4,7 @@ from pathlib import Path
 from projectctl.schemas.artifact import ArtifactMetadata
 from projectctl.schemas.auto import AutoRunPolicy, AutoRunReport
 from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDecision
-from projectctl.schemas.config import ProjectConfig
+from projectctl.schemas.config import ProjectConfig, ProjectConfigV1
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
 from projectctl.schemas.execution import (ExecutionPlan, ExecutionPlanV1, WorkerCheckpoint, WorkerCheckpointV1, WorkerRequest, WorkerRequestV1, WorkerResult)
 from projectctl.schemas.integration import IntegrationManifest, RecoveryReport
@@ -25,7 +25,8 @@ from projectctl.schemas.task import TaskSnapshot
 from projectctl.schemas.verification import VerificationCatalog, VerificationManifest, VerificationManifestV1
 
 PUBLIC_SCHEMAS = {
-    "project-config.v1.schema.json": ProjectConfig,
+    "project-config.v1.schema.json": ProjectConfigV1,
+    "project-config.v2.schema.json": ProjectConfig,
     "worker-capabilities.v1.schema.json": WorkerCapabilities,
     "worker-strategy-decision.v1.schema.json": WorkerStrategyDecision,
     "quota-snapshot.v1.schema.json": QuotaSnapshotV1,
