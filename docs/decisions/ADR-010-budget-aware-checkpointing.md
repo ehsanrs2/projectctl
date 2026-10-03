@@ -52,6 +52,7 @@ A successful quota interruption writes WorkerCheckpoint v2 containing:
 - run/task/worktree identity
 - Codex thread and turn identity
 - original context manifest digest
+- complete WorkerRequest digest, including strategy/model/execution policy
 - checkpoint reason
 - complete quota snapshot and its digest
 - quota mode/staleness
@@ -72,7 +73,7 @@ A checkpoint is resumable only if:
 - the durable checkpoint identity matches the run
 - the quota snapshot payload matches its recorded digest
 - the current worktree state matches the checkpoint workspace digest
-- the original context/request digests still match
+- the original context and complete WorkerRequest digests still match
 - the live worker capability/strategy surface is still compatible
 
 External edits to the partial worktree after checkpointing fail closed as
