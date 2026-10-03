@@ -503,6 +503,22 @@ def _worktree_state_digest(worktree: Path) -> str:
     )
 
 
+def _checkpoint_event_matches(
+    store: RunStore,
+    run_id: str,
+    checkpoint_ref: str,
+    checkpoint: WorkerCheckpoint,
+) -> bool:
+    expected = digest(checkpoint)
+    for event in reversed(store.events(run_id)):
+        if event.event_type != "worker.checkpointed":
+            continue
+        if event.payload.get("checkpoint_ref") != checkpoint_ref:
+            continue
+        return event.payload.get("checkpoint_digest") == expected
+    return False
+
+
 def _persist_checkpoint(
     root: Path,
     *,
@@ -957,7 +973,10 @@ def resume_checkpointed_run(project_root: Path, run_id: str) -> StartedRun:
             raise RunStoreError("Checkpoint path escapes the project root.")
         checkpoint = _load_worker_checkpoint(checkpoint_path)
         if (
-            checkpoint.run_id != record.run_id
+            not _checkpoint_event_matches(
+                store, run_id, record.checkpoint_ref, checkpoint
+            )
+            or checkpoint.run_id != record.run_id
             or checkpoint.task_id != record.task_id
             or checkpoint.worktree_id != record.worktree_id
             or checkpoint.base_commit != record.base_commit
