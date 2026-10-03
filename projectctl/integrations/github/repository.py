@@ -17,6 +17,14 @@ _GITHUB_SSH = re.compile(
     r"^ssh://(?:[^@]+@)?github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$",
     re.IGNORECASE,
 )
+_REPOSITORY_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$")
+
+
+def normalize_github_repository(value: str | None) -> str | None:
+    candidate = (value or "").strip()
+    if not candidate or not _REPOSITORY_NAME.fullmatch(candidate):
+        return None
+    return candidate
 
 
 def parse_github_repository(remote_url: str | None) -> str | None:
@@ -29,7 +37,7 @@ def parse_github_repository(remote_url: str | None) -> str | None:
             owner = match.group("owner").strip()
             repo = match.group("repo").strip()
             if owner and repo:
-                return f"{owner}/{repo}"
+                return normalize_github_repository(f"{owner}/{repo}")
     return None
 
 
