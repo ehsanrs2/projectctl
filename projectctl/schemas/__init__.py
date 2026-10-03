@@ -29,7 +29,7 @@ from projectctl.schemas.health import HealthCheckResult, HealthReport
 from projectctl.schemas.integration import IntegrationManifest, RecoveryAction, RecoveryReport
 from projectctl.schemas.onboarding import AdoptionManifest, AdoptionPlan, ProjectInspection
 from projectctl.schemas.project_state import MilestoneState, ProjectState
-from projectctl.schemas.quota import QuotaSnapshot
+from projectctl.schemas.quota import QuotaSnapshot, QuotaSnapshotV1
 from projectctl.schemas.run import (
     ContextManifest,
     ContextManifestV1,
@@ -78,7 +78,7 @@ __all__ = [
     "ProjectInspection",
     "ProjectState",
     "ProjectStatus",
-    "QuotaSnapshot",
+    "QuotaSnapshot",\n    "QuotaSnapshotV1",
     "RecoveryAction",
     "RecoveryReport",
     "RunManifest",
