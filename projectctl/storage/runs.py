@@ -204,8 +204,9 @@ class RunStore:
             if status not in _ACTIVE:
                 completed_at = now
 
-            updated = manifest.model_copy(
-                update={
+            updated_data = manifest.model_dump(mode="python")
+            updated_data.update(
+                {
                     "status": status,
                     "terminal_reason": terminal_reason,
                     "candidate_commit": candidate_commit if candidate_commit is not None else manifest.candidate_commit,
@@ -216,6 +217,7 @@ class RunStore:
                     "checkpoint_ref": checkpoint_ref if checkpoint_ref is not None else manifest.checkpoint_ref,
                 }
             )
+            updated = RunManifest.model_validate(updated_data)
             payload = json.dumps(updated.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
             conn.execute(
                 """

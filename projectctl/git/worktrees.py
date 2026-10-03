@@ -131,10 +131,19 @@ class WorktreeManager:
             message = (result.stderr or result.stdout or "unknown git error").strip()
             raise WorktreeError(f"Could not remove worktree {path}: {message}")
         _git(self.project_root, "worktree", "prune", check=False)
-        # Branch deletion is intentionally separate from integration branches.
+        # Branch deletion is intentionally restricted to ProjectCTL-owned run branches.
         if branch_name.startswith("projectctl/run/"):
-            delete_args = ["branch", "-D" if force else "-d", branch_name]
-            result = _git(self.project_root, *delete_args, check=False)
-            if result.returncode != 0 and force:
-                message = (result.stderr or result.stdout or "unknown git error").strip()
-                raise WorktreeError(f"Could not delete run branch {branch_name}: {message}")
+            exists = _git(
+                self.project_root,
+                "show-ref",
+                "--verify",
+                "--quiet",
+                f"refs/heads/{branch_name}",
+                check=False,
+            ).returncode == 0
+            if exists:
+                delete_args = ["branch", "-D" if force else "-d", branch_name]
+                result = _git(self.project_root, *delete_args, check=False)
+                if result.returncode != 0:
+                    message = (result.stderr or result.stdout or "unknown git error").strip()
+                    raise WorktreeError(f"Could not delete run branch {branch_name}: {message}")

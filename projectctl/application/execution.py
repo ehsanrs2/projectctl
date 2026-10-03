@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import shutil
 import subprocess
 import tempfile
 import uuid
@@ -18,7 +19,6 @@ from projectctl.core.errors import (
     ConfigurationError,
     RunStoreError,
     StaleSnapshotError,
-    TaskStoreError,
     WorktreeError,
 )
 from projectctl.core.time import utc_now
@@ -178,7 +178,6 @@ def prepare_next_run(
         manager = WorktreeManager(root)
         worktree_path = manager.path_for(worktree_id)
         run_dir = root / ".projectctl" / "runs" / run_id
-        _atomic_json(run_dir / "execution-plan.json", plan)
 
         manifest = RunManifest(
             run_id=run_id,
@@ -191,11 +190,17 @@ def prepare_next_run(
             worker=plan.worker,
         )
         store = RunStore(root)
-        store.create(
-            manifest,
-            worktree_path=worktree_path,
-            lease_owner=actor,
-        )
+        try:
+            store.create(
+                manifest,
+                worktree_path=worktree_path,
+                lease_owner=actor,
+            )
+            _atomic_json(run_dir / "execution-plan.json", plan)
+        except Exception:
+            shutil.rmtree(run_dir, ignore_errors=True)
+            raise
+
         store.transition(
             run_id,
             expected={RunStatus.PLANNED},

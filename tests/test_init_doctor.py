@@ -7,7 +7,7 @@ from typer.testing import CliRunner
 
 from projectctl.cli.app import app
 from projectctl.project.loader import load_project_config
-from projectctl.storage.sqlite import APPLICATION_ID, DATABASE_VERSION, inspect_db
+from projectctl.storage.sqlite import (APPLICATION_ID, GLOBAL_STATE_DB_VERSION, PROJECT_STATE_DB_VERSION, TELEMETRY_DB_VERSION, inspect_db)
 
 runner = CliRunner()
 
@@ -34,10 +34,15 @@ def test_init_is_idempotent(tmp_path: Path, monkeypatch):
     assert (repo / "docs/PROJECT.md").exists()
     assert (repo / "docs/PROJECT_STATE.yaml").exists()
 
-    for db in [repo / ".projectctl/state.sqlite", repo / ".projectctl/telemetry.sqlite", home / "state.sqlite"]:
+    expected = {
+        repo / ".projectctl/state.sqlite": PROJECT_STATE_DB_VERSION,
+        repo / ".projectctl/telemetry.sqlite": TELEMETRY_DB_VERSION,
+        home / "state.sqlite": GLOBAL_STATE_DB_VERSION,
+    }
+    for db, expected_version in expected.items():
         app_id, version = inspect_db(db)
         assert app_id == APPLICATION_ID
-        assert version == DATABASE_VERSION
+        assert version == expected_version
 
 
 def test_init_preserves_human_project_file(tmp_path: Path, monkeypatch):
