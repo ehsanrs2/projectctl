@@ -263,6 +263,7 @@ def test_codex_adapter_interrupts_turn_into_worker_checkpoint(tmp_path: Path):
     assert isinstance(result, WorkerCheckpoint)
     assert result.worker_thread_id == "thr-test"
     assert result.worker_turn_id == "turn-test"
+    assert result.worker_request_digest == digest(request())
     assert result.reason == CheckpointReason.QUOTA_BELOW_TASK_REQUIREMENT
     assert CheckpointCodex.last.turn.interrupted is True
 
