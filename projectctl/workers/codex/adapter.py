@@ -258,6 +258,7 @@ class CodexWorkerAdapter:
             branch_name=request.branch_name,
             context_manifest_digest=request.context_manifest_digest,
             reason=decision.reason,
+            quota_snapshot=decision.snapshot,
             quota_snapshot_digest=decision.snapshot_digest,
             quota_mode=decision.state.mode,
             quota_stale=decision.state.stale,
