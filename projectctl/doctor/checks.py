@@ -10,7 +10,7 @@ from projectctl.project.state import PROJECT_STATE_PATH, load_project_state
 from projectctl.project.freshness import generated_freshness
 from projectctl.project.root import git_root
 from projectctl.schemas.health import HealthCheckResult
-from projectctl.storage.sqlite import APPLICATION_ID, DATABASE_VERSION, inspect_db
+from projectctl.storage.sqlite import (APPLICATION_ID, GLOBAL_STATE_DB_VERSION, PROJECT_STATE_DB_VERSION, TELEMETRY_DB_VERSION, inspect_db)
 
 
 def check_repository(root: Path) -> HealthCheckResult:
@@ -87,13 +87,28 @@ def check_required_files(root: Path) -> HealthCheckResult:
 
 def _db_check(root: Path, name: str) -> HealthCheckResult:
     path = root / ".projectctl" / name
+    expected = PROJECT_STATE_DB_VERSION if name == "state.sqlite" else TELEMETRY_DB_VERSION
     try:
         app_id, version = inspect_db(path)
         if app_id != APPLICATION_ID:
             raise DatabaseVersionError(f"Unexpected application_id: {app_id}")
-        if version > DATABASE_VERSION:
-            raise DatabaseVersionError(f"Database version {version} is newer than supported {DATABASE_VERSION}")
-        return HealthCheckResult(check_id=name, status=HealthStatus.PASS, summary=f"{name} is valid (v{version}).")
+        if version > expected:
+            raise DatabaseVersionError(
+                f"Database version {version} is newer than supported {expected}"
+            )
+        if version < expected:
+            remediation = ["Run projectctl migrate."] if name == "state.sqlite" else []
+            return HealthCheckResult(
+                check_id=name,
+                status=HealthStatus.ERROR,
+                summary=f"{name} requires migration: v{version} -> v{expected}.",
+                remediation=remediation,
+            )
+        return HealthCheckResult(
+            check_id=name,
+            status=HealthStatus.PASS,
+            summary=f"{name} is valid (v{version}).",
+        )
     except DatabaseVersionError as exc:
         return HealthCheckResult(check_id=name, status=HealthStatus.ERROR, summary=str(exc))
 

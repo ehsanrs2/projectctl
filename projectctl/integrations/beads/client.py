@@ -126,6 +126,28 @@ class BeadsClient:
     def close_issue(self, issue_id: str, reason: str) -> None:
         self._run(["close", issue_id, "--reason", reason], expect_json=False)
 
+    def claim_issue(self, issue_id: str) -> dict[str, Any]:
+        payload = self._run(["update", issue_id, "--claim", "--json"])
+        issues = self.issue_list(payload)
+        if issues:
+            return issues[0]
+        return self.show(issue_id)
+
+    def assign_issue(self, issue_id: str, assignee: str) -> None:
+        self._run(["assign", issue_id, assignee], expect_json=False)
+
+    def update_status(self, issue_id: str, status: str) -> dict[str, Any]:
+        payload = self._run(["update", issue_id, "--status", status, "--json"])
+        issues = self.issue_list(payload)
+        if issues:
+            return issues[0]
+        return self.show(issue_id)
+
+    def release_issue(self, issue_id: str) -> None:
+        # Beads documents release as clearing the assignee and then reopening.
+        self.assign_issue(issue_id, "")
+        self.update_status(issue_id, "open")
+
     def list_dependencies(self, issue_id: str) -> list[dict[str, Any]]:
         payload = self._run(["dep", "list", issue_id, "--json"])
         if payload is None:
