@@ -42,7 +42,8 @@ if cmd == "create":
     state["issues"][issue_id] = {
         "id": issue_id, "title": title, "description": arg("--description", ""),
         "status": "open", "priority": int(arg("--priority", 2)), "issue_type": arg("--type", "task"),
-        "created_at": "2026-09-30T10:00:00Z", "updated_at": "2026-09-30T10:00:00Z", "labels": []
+        "created_at": "2026-09-30T10:00:00Z", "updated_at": "2026-09-30T10:00:00Z",
+        "labels": [x for x in (arg("-l", "") or "").split(",") if x]
     }
     save(); print(json.dumps(state["issues"][issue_id])); raise SystemExit(0)
 if cmd == "list":

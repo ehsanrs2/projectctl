@@ -7,8 +7,8 @@ from projectctl.integrations.beads.task_store import BeadsTaskStore
 class FakeClient:
     def list_all(self):
         return [
-            {"id": "bd-a", "title": "A", "status": "open", "priority": 1, "issue_type": "task", "created_at": "2026-09-30T08:00:00Z"},
-            {"id": "bd-b", "title": "B", "status": "open", "priority": 2, "issue_type": "bug", "created_at": "2026-09-30T08:01:00Z"},
+            {"id": "bd-a", "title": "A", "status": "open", "priority": 1, "issue_type": "task", "created_at": "2026-09-30T08:00:00Z", "labels": ["milestone:M0.5"]},
+            {"id": "bd-b", "title": "B", "status": "open", "priority": 2, "issue_type": "bug", "created_at": "2026-09-30T08:01:00Z", "labels": ["milestone:M0.4", "milestone:M0.5"]},
         ]
 
     def list_ready(self):
@@ -30,9 +30,12 @@ def test_beads_task_store_normalizes_ready_blocked_and_priority(tmp_path: Path):
     assert tasks["bd-a"].status == TaskStatus.READY
     assert tasks["bd-a"].type == TaskType.TASK
     assert tasks["bd-a"].priority == 8
+    assert tasks["bd-a"].milestone == "M0.5"
     assert tasks["bd-b"].status == TaskStatus.BLOCKED
     assert tasks["bd-b"].type == TaskType.BUG
     assert tasks["bd-b"].dependencies == ["bd-a"]
+    assert tasks["bd-b"].milestone is None
+    assert any("Multiple explicit milestone labels" in note for note in tasks["bd-b"].normalization_notes)
     assert tasks["bd-a"].blocks == ["bd-b"]
 
 

@@ -3,8 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from projectctl.core.enums import QuotaMode, ResourceClass, RiskLevel
+from projectctl.scheduler.milestone import milestone_relevance
 from projectctl.scheduler.resource import effective_resource_class
 from projectctl.schemas.config import SchedulerConfig
+from projectctl.schemas.project_state import ProjectState
 from projectctl.schemas.scheduler import ScoreBreakdown
 from projectctl.schemas.task import NormalizedTask
 
@@ -72,13 +74,19 @@ def _quota_penalty(resource: ResourceClass, mode: QuotaMode) -> float:
     return [1.0, 3.0, 7.0, 9.0, 10.0][rank]
 
 
-def score_task(task: NormalizedTask, *, config: SchedulerConfig, quota_mode: QuotaMode, now: datetime) -> ScoreBreakdown:
+def score_task(
+    task: NormalizedTask,
+    *,
+    config: SchedulerConfig,
+    quota_mode: QuotaMode,
+    now: datetime,
+    project_state: ProjectState | None = None,
+) -> ScoreBreakdown:
     w = config.weights
     resource = effective_resource_class(task)
     raw = {
         "priority": float(task.priority) * w.priority,
-        # Active milestone is not structured in M0.4 yet; do not invent relevance.
-        "milestone_relevance": 0.0 * w.milestone_relevance,
+        "milestone_relevance": milestone_relevance(task, project_state) * w.milestone_relevance,
         "unblock_value": min(10.0, float(len(task.blocks) * 2)) * w.unblock_value,
         "information_gain": float(task.information_gain) * w.information_gain,
         "urgency": _urgency(task, now) * w.urgency,

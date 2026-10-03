@@ -2,6 +2,7 @@
 
 Project intent lives in `docs/` and `specs/`.
 
+`docs/PROJECT_STATE.yaml` is the human-managed structured source for the current goal and active milestone.
 Beads is the canonical task tracker when `task_store.provider: beads`.
 Generated files under `docs/generated/` must not be edited manually.
 ProjectCTL owns `.projectctl/` operational state and scheduling metadata.

@@ -32,6 +32,7 @@ def test_init_is_idempotent(tmp_path: Path, monkeypatch):
     cfg = load_project_config(repo)
     assert cfg.project.id == "demo"
     assert (repo / "docs/PROJECT.md").exists()
+    assert (repo / "docs/PROJECT_STATE.yaml").exists()
 
     for db in [repo / ".projectctl/state.sqlite", repo / ".projectctl/telemetry.sqlite", home / "state.sqlite"]:
         app_id, version = inspect_db(db)

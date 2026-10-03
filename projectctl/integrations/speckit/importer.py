@@ -7,6 +7,7 @@ from projectctl.core.enums import ImportAction
 from projectctl.core.errors import DigestMismatchError, TaskImportConflict, TaskStoreError
 from projectctl.core.paths import resolve_inside_repo
 from projectctl.core.time import utc_now
+from projectctl.project.state import load_project_state, semantic_project_state_digest
 from projectctl.integrations.beads.client import BeadsClient
 from projectctl.integrations.speckit.tasks_parser import ParsedSpecKitTasks, SpecKitTask, SpecKitTasksParser
 from projectctl.schemas.importing import ImportItem, ImportPlan, ImportResult
@@ -81,6 +82,9 @@ class SpecKitBeadsImporter:
 
     def preview(self, source: str) -> ImportPlan:
         parsed, rel, source_digest = self._parse(source)
+        project_state = load_project_state(self.project_root, allow_missing=True)
+        context_digest = semantic_project_state_digest(project_state)
+        milestone = project_state.active_milestone.id if project_state.active_milestone else None
         items: list[ImportItem] = []
         for task in parsed.tasks:
             task_digest = _task_digest(task)
@@ -104,7 +108,14 @@ class SpecKitBeadsImporter:
                 target_id = binding.external_task_id
                 reason = "Source task changed since its last import; update reconciliation is not enabled in M0.3."
             items.append(ImportItem(source_id=task.source_id, target_id=target_id, action=action, reason=reason))
-        return ImportPlan(source_type=_SOURCE_TYPE, source_path=rel, source_digest=source_digest, items=items)
+        return ImportPlan(
+            source_type=_SOURCE_TYPE,
+            source_path=rel,
+            source_digest=source_digest,
+            context_digest=context_digest,
+            milestone=milestone,
+            items=items,
+        )
 
     def apply(self, plan: ImportPlan) -> ImportResult:
         if plan.source_type != _SOURCE_TYPE:
@@ -112,6 +123,12 @@ class SpecKitBeadsImporter:
         parsed, rel, current_digest = self._parse(plan.source_path)
         if rel != plan.source_path or current_digest != plan.source_digest:
             raise DigestMismatchError("Spec Kit tasks source changed after import preview; run preview again.")
+        current_state = load_project_state(self.project_root, allow_missing=True)
+        current_context_digest = semantic_project_state_digest(current_state)
+        if plan.context_digest is not None and current_context_digest != plan.context_digest:
+            raise DigestMismatchError(
+                "Project state changed after import preview; run preview again before assigning milestone metadata."
+            )
         conflicts = [item for item in plan.items if item.action == ImportAction.CONFLICT]
         if conflicts:
             ids = ", ".join(item.source_id for item in conflicts)
@@ -143,11 +160,13 @@ class SpecKitBeadsImporter:
                     # Crash-safe resume: another partial apply may already have created it.
                     target_id = binding.external_task_id
                 else:
+                    labels = [f"milestone:{plan.milestone}"] if plan.milestone else []
                     target_id = self.client.create_issue(
                         title=task.title,
                         description=_description(rel, task),
                         issue_type="task",
                         priority=2,
+                        labels=labels,
                     )
                     upsert_binding(
                         self.project_root,
@@ -185,6 +204,8 @@ class SpecKitBeadsImporter:
             source_type=_SOURCE_TYPE,
             source_path=rel,
             source_digest=plan.source_digest,
+            context_digest=plan.context_digest,
+            milestone=plan.milestone,
             applied_at=utc_now(),
             items=result_items,
         )

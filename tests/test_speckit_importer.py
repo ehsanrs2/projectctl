@@ -7,6 +7,8 @@ from projectctl.core.enums import ImportAction
 from projectctl.core.errors import TaskImportConflict
 from projectctl.integrations.speckit.importer import SpecKitBeadsImporter
 from projectctl.project.bootstrap import initialize_project
+from projectctl.project.state import update_project_state
+from projectctl.core.errors import DigestMismatchError
 
 
 class FakeBeadsClient:
@@ -16,10 +18,10 @@ class FakeBeadsClient:
         self.dependencies = set()
         self.closed = set()
 
-    def create_issue(self, *, title, description, issue_type="task", priority=2):
+    def create_issue(self, *, title, description, issue_type="task", priority=2, labels=None):
         self.counter += 1
         issue_id = f"bd-{self.counter}"
-        self.issues[issue_id] = {"title": title, "description": description, "issue_type": issue_type, "priority": priority}
+        self.issues[issue_id] = {"title": title, "description": description, "issue_type": issue_type, "priority": priority, "labels": list(labels or [])}
         return issue_id
 
     def close_issue(self, issue_id, reason):
@@ -116,3 +118,31 @@ def test_checked_source_task_is_closed_on_first_import(tmp_path: Path, monkeypat
     importer = SpecKitBeadsImporter(repo, client=client)
     result = importer.apply(importer.preview(str(source)))
     assert result.items[0].target_id in client.closed
+
+
+
+def test_importer_assigns_active_milestone_label_to_new_beads_tasks(tmp_path: Path, monkeypatch):
+    repo = make_repo(tmp_path, monkeypatch)
+    update_project_state(repo, milestone_id="M0.5", milestone_title="Project State")
+    source = write_tasks(repo)
+    client = FakeBeadsClient()
+    importer = SpecKitBeadsImporter(repo, client=client)
+
+    plan = importer.preview(str(source))
+    assert plan.milestone == "M0.5"
+    importer.apply(plan)
+    assert all("milestone:M0.5" in issue["labels"] for issue in client.issues.values())
+
+
+def test_import_plan_is_invalidated_when_project_state_changes(tmp_path: Path, monkeypatch):
+    repo = make_repo(tmp_path, monkeypatch)
+    update_project_state(repo, milestone_id="M0.5")
+    source = write_tasks(repo)
+    client = FakeBeadsClient()
+    importer = SpecKitBeadsImporter(repo, client=client)
+
+    plan = importer.preview(str(source))
+    update_project_state(repo, milestone_id="M0.6")
+    with pytest.raises(DigestMismatchError, match="Project state changed"):
+        importer.apply(plan)
+    assert client.issues == {}

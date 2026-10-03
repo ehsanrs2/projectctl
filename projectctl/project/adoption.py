@@ -18,6 +18,7 @@ from projectctl.core.paths import resolve_inside_repo
 from projectctl.core.time import utc_now
 from projectctl.project.bootstrap import _global_init, _slug, projectctl_home
 from projectctl.project.inspection import inspect_repository
+from projectctl.project.state import PROJECT_STATE_PATH, initial_project_state, write_project_state
 from projectctl.schemas.config import (
     KnowledgeConfig,
     KnowledgeRoleBinding,
@@ -100,6 +101,12 @@ def plan_adoption(inspection: ProjectInspection, *, task_store_provider: str | N
         ".projectctl/telemetry.sqlite",
         ".projectctl/adoption.yaml",
     ]
+    state_path = resolve_inside_repo(root, PROJECT_STATE_PATH, must_exist=False)
+    if state_path.exists():
+        preserve_set.add(PROJECT_STATE_PATH)
+    else:
+        create.append(PROJECT_STATE_PATH)
+
     for rel in ["docs/generated", "evidence"]:
         path = resolve_inside_repo(root, rel, must_exist=False)
         if path.exists():
@@ -178,6 +185,7 @@ def apply_adoption(plan: AdoptionPlan, *, allow_dirty: bool = False) -> Adoption
             raise RepositoryContractError(f"Staging path already exists and will not be overwritten: {staging_parent}")
         staging_parent.mkdir()
         created_dirs: list[Path] = []
+        created_files: list[Path] = []
         committed_ctl = False
 
         try:
@@ -228,6 +236,12 @@ def apply_adoption(plan: AdoptionPlan, *, allow_dirty: bool = False) -> Adoption
                 ".projectctl/telemetry.sqlite", ".projectctl/adoption.yaml",
             ])
 
+            state_path = resolve_inside_repo(root, PROJECT_STATE_PATH, must_exist=False)
+            if not state_path.exists():
+                write_project_state(root, initial_project_state(config.project.id))
+                created_files.append(state_path)
+                result.created.append(PROJECT_STATE_PATH)
+
             for rel in ["docs/generated", "evidence"]:
                 path = resolve_inside_repo(root, rel, must_exist=False)
                 if not path.exists():
@@ -242,6 +256,11 @@ def apply_adoption(plan: AdoptionPlan, *, allow_dirty: bool = False) -> Adoption
         except Exception:
             if committed_ctl and (root / ".projectctl").exists():
                 shutil.rmtree(root / ".projectctl", ignore_errors=True)
+            for path in reversed(created_files):
+                try:
+                    path.unlink()
+                except FileNotFoundError:
+                    pass
             for path in reversed(created_dirs):
                 _remove_created_dir(path, stop_at=root)
             raise

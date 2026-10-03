@@ -15,6 +15,8 @@ class ImportPlan(ProjectCtlModel):
     source_type: str
     source_path: str
     source_digest: str
+    context_digest: str | None = None
+    milestone: str | None = None
     items: list[ImportItem] = Field(default_factory=list)
 
 
@@ -22,5 +24,7 @@ class ImportResult(ProjectCtlModel):
     source_type: str
     source_path: str
     source_digest: str
+    context_digest: str | None = None
+    milestone: str | None = None
     applied_at: AwareDatetime
     items: list[ImportItem] = Field(default_factory=list)
