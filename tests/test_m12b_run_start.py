@@ -13,8 +13,11 @@ from projectctl.core.digest import digest
 from projectctl.core.enums import (
     ApprovalPolicy,
     CapabilityState,
+    CheckpointReason,
     ExecutionSandboxMode,
     ModelProfile,
+    QuotaMode,
+    ResourceClass,
     ReasoningLevel,
     RunStatus,
     RunTerminalReason,
@@ -33,7 +36,12 @@ from projectctl.schemas.capabilities import (
     WorkerRuntimeDescriptor,
     WorkerStrategyDecision,
 )
-from projectctl.schemas.execution import ClaimResult, ExecutionPlan, WorkerResult
+from projectctl.schemas.execution import (
+    ClaimResult,
+    ExecutionPlan,
+    WorkerCheckpoint,
+    WorkerResult,
+)
 from projectctl.schemas.run import WorkerDescriptor
 from projectctl.schemas.task import NormalizedTask, TaskSource
 from projectctl.storage.runs import RunStore
@@ -111,9 +119,10 @@ class FakeTaskStore:
 
 
 class FakeAdapter:
-    def __init__(self, caps, *, commit=False):
+    def __init__(self, caps, *, commit=False, checkpoint=False):
         self.caps = caps
         self.commit = commit
+        self.checkpoint = checkpoint
 
     def probe(self):
         return self.caps
@@ -123,6 +132,22 @@ class FakeAdapter:
         if self.commit:
             git(workspace, "add", "worker_output.py")
             git(workspace, "commit", "-q", "-m", "worker must not commit")
+        if self.checkpoint:
+            return WorkerCheckpoint(
+                run_id=request.run_id,
+                task_id=request.task_id,
+                worker_thread_id="thr-test",
+                worker_turn_id="turn-test",
+                worktree_id=request.worktree_id,
+                base_commit=request.base_commit,
+                branch_name=request.branch_name,
+                context_manifest_digest=request.context_manifest_digest,
+                reason=CheckpointReason.QUOTA_BELOW_TASK_REQUIREMENT,
+                quota_snapshot_digest="quota-live",
+                quota_mode=QuotaMode.CONSERVATION,
+                quota_stale=False,
+                checkpoint_at=NOW,
+            )
         return WorkerResult(
             run_id=request.run_id,
             task_id=request.task_id,
@@ -154,6 +179,7 @@ def setup_prepared(tmp_path: Path, monkeypatch):
         source=TaskSource(provider="test", external_id="bd-1"),
         type=TaskType.FEATURE,
         status=TaskStatus.RUNNING,
+        resource_class=ResourceClass.SMALL,
     )
     caps = supported_capabilities()
     strategy = WorkerStrategyDecision(
@@ -277,3 +303,31 @@ def test_live_capability_drift_requires_decision(tmp_path: Path, monkeypatch):
     record = RunStore(repo).get(prepared.record.run_id)
     assert record.status == RunStatus.NEEDS_DECISION
     assert record.terminal_reason == RunTerminalReason.CAPABILITY_CHANGED
+
+
+def test_worker_quota_checkpoint_is_durable_and_keeps_run_resumable(tmp_path: Path, monkeypatch):
+    repo, prepared, task, caps = setup_prepared(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "projectctl.application.execution._adapter_for_provider",
+        lambda provider: FakeAdapter(caps, checkpoint=True),
+    )
+
+    started = start_prepared_run(repo, prepared.record.run_id)
+
+    assert started.result is None
+    assert started.checkpoint is not None
+    assert started.record.status == RunStatus.RUNNING
+    assert started.record.worker_thread_id == "thr-test"
+    assert started.record.checkpoint_ref is not None
+    checkpoint_path = repo / started.record.checkpoint_ref
+    assert checkpoint_path.exists()
+    persisted = WorkerCheckpoint.model_validate_json(checkpoint_path.read_text())
+    assert persisted.worker_thread_id == "thr-test"
+    assert persisted.worker_turn_id == "turn-test"
+    assert persisted.reason == CheckpointReason.QUOTA_BELOW_TASK_REQUIREMENT
+
+    worktree = Path(started.record.worktree_path)
+    assert (worktree / "worker_output.py").exists()
+    assert git(worktree, "rev-parse", "HEAD") == prepared.plan.base_commit
+    events = RunStore(repo).events(prepared.record.run_id)
+    assert any(event.event_type == "worker.checkpointed" for event in events)
