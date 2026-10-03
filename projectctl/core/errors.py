@@ -34,6 +34,10 @@ class TaskImportConflict(ProjectCtlError):
     pass
 
 
+class ClaimConflictError(TaskStoreError):
+    pass
+
+
 class DigestMismatchError(ProjectCtlError):
     pass
 
@@ -55,6 +59,26 @@ class DatabaseVersionError(ProjectCtlError):
 
 
 class ProjectLockError(ProjectCtlError):
+    pass
+
+
+class PolicyViolationError(ProjectCtlError):
+    pass
+
+
+class WorkerError(ProjectCtlError):
+    pass
+
+
+class VerificationError(ProjectCtlError):
+    pass
+
+
+class IntegrationError(ProjectCtlError):
+    pass
+
+
+class RecoveryError(ProjectCtlError):
     pass
 
 

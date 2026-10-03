@@ -231,3 +231,32 @@ milestone:M0.5
 ```
 
 ProjectCTL does not infer milestone membership from issue titles, phases, epics, or unrelated labels. If multiple conflicting `milestone:` labels are present, milestone scoring is disabled for that task and a normalization note is recorded. New Spec Kit tasks imported while an active milestone is set receive the corresponding Beads label. The import plan also records a project-state digest, so a milestone change between preview and apply invalidates the plan.
+
+
+## M1.0 — Execution Contracts
+
+M1.0 freezes the execution boundary before autonomous task execution is enabled.
+
+New versioned contracts include:
+
+- `ExecutionPlan v1`
+- `WorkerRequest v1`
+- `WorkerResult v1`
+- `WorkerCheckpoint v1`
+- `RunManifest v2`
+- `ContextManifest v2`
+- `VerificationManifest v1`
+- `EvidenceManifest v1`
+
+Legacy `RunManifest v1` and `ContextManifest v1` remain readable for audit compatibility.
+
+The default execution policy is intentionally restrictive:
+
+```text
+sandbox: workspace_write
+network: disabled
+approval: deny_all
+worker commit/merge/rebase/push: forbidden
+```
+
+M1.0 still performs no Codex execution, task claim, integration, or task completion. Those capabilities are implemented incrementally in M1.1–M1.4.
