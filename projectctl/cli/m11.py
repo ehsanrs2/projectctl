@@ -7,6 +7,8 @@ import typer
 
 from projectctl.application.execution import abort_prepared_run, prepare_next_run, start_prepared_run
 from projectctl.application.verification import verify_run
+from projectctl.application.integration import integrate_run
+from projectctl.application.recovery import recover_run
 from projectctl.core.enums import WorkerStrategyKind
 from projectctl.core.errors import ProjectCtlError
 from projectctl.project.root import find_project_root
@@ -189,6 +191,61 @@ def register_m11(app: typer.Typer) -> None:
 
         if not verified.verification.overall_pass:
             raise typer.Exit(EXIT_VERIFICATION)
+
+    @run_app.command("integrate")
+    def integrate_command(
+        run_id: str,
+        project: Path = typer.Option(
+            Path("."), "--project", exists=True, file_okay=False, resolve_path=True
+        ),
+        json_output: bool = typer.Option(False, "--json"),
+    ) -> None:
+        try:
+            root = find_project_root(project)
+            integrated = integrate_run(root, run_id)
+        except ProjectCtlError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(EXIT_RUN)
+
+        payload = {
+            "run": integrated.record.model_dump(mode="json"),
+            "integration": integrated.manifest.model_dump(mode="json"),
+        }
+        if json_output:
+            typer.echo(_json(payload))
+        else:
+            typer.echo(f"Integrated run {integrated.record.run_id}.")
+            typer.echo(f"Status: {integrated.record.status.value}")
+            typer.echo(f"Candidate: {integrated.record.candidate_commit}")
+            typer.echo(
+                "Worktree cleanup: "
+                + ("complete" if integrated.manifest.worktree_cleaned else "pending")
+            )
+
+    @run_app.command("recover")
+    def recover_command(
+        run_id: str,
+        project: Path = typer.Option(
+            Path("."), "--project", exists=True, file_okay=False, resolve_path=True
+        ),
+        json_output: bool = typer.Option(False, "--json"),
+    ) -> None:
+        try:
+            root = find_project_root(project)
+            action = recover_run(root, run_id)
+        except ProjectCtlError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(EXIT_RUN)
+
+        if json_output:
+            typer.echo(_json(action))
+        else:
+            typer.echo(f"Recovery: {action.action}")
+            typer.echo(
+                f"Status: {action.previous_status} -> {action.resolved_status}"
+            )
+            for detail in action.details:
+                typer.echo(f"  {detail}")
 
     @run_app.command("show")
     def show_command(

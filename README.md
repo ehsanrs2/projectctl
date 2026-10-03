@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M1.3 — Verification + Evidence**, adding independent policy/test verification and ProjectCTL-owned candidate commits.
+This repository currently implements **M1.4 — Integration + Recovery**, completing the M1 execution loop with fail-closed fast-forward integration and deterministic crash recovery.
 
 ## Implemented
 
@@ -436,3 +436,52 @@ Only after all required checks pass does ProjectCTL stage the worker changes and
 Passing implementation runs move to `READY_TO_INTEGRATE`. Review-mode runs must leave the worktree unchanged and can finish as `PASSED` with the base commit recorded as their candidate reference.
 
 Failed and policy-blocked runs also receive `EvidenceManifest v2`, with `candidate_commit: null`, so rejection is auditable as well as acceptance.
+
+
+## M1.4 — Integration + Recovery
+
+M1.4 integrates only previously verified candidate commits and reconciles crash windows without re-running untrusted work implicitly.
+
+```bash
+# Integrate a verified run into its recorded target branch.
+projectctl run integrate RUN_ID --project /path/to/repo
+
+# Reconcile a stale/crashed run from durable state.
+projectctl run recover RUN_ID --project /path/to/repo
+```
+
+Integration is intentionally **fast-forward-only**. The primary worktree must be clean and have the recorded integration target checked out. If the target has advanced beyond the execution base, ProjectCTL does not rebase or merge the verified candidate: the run moves to `NEEDS_DECISION / STALE_BASE`, because rebasing would create code that the existing EvidenceManifest did not verify.
+
+Before integration, ProjectCTL revalidates the evidence chain:
+
+- WorkerResult digest
+- VerificationManifest digest
+- verification-profile digest
+- candidate single-parent relationship
+- actual candidate diff digest
+- clean verified worktree
+- candidate HEAD identity
+
+The integration order is crash-recoverable:
+
+```text
+READY_TO_INTEGRATE
+        ↓
+INTEGRATING
+        ↓
+git merge --ff-only candidate
+        ↓
+close canonical task with evidence reference
+        ↓
+PASSED
+        ↓
+remove ProjectCTL run worktree/branch
+```
+
+No push is performed by M1.4.
+
+If a crash happens after the Git fast-forward but before task closure or run finalization, `projectctl run recover` observes that the target already equals the verified candidate, completes the canonical task idempotently, records/finalizes integration, and cleans up the run worktree.
+
+Recovery also reconciles a durable implemented WorkerResult left in `RUNNING` to `VERIFYING`, and a passing EvidenceManifest left in `VERIFYING` to `READY_TO_INTEGRATE`. A crashed worker without a durable trustworthy result is not automatically resumed; it moves to `NEEDS_DECISION / RECOVERY_UNSAFE`.
+
+A live, unexpired lease is never stolen by recovery.

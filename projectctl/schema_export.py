@@ -6,6 +6,7 @@ from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDe
 from projectctl.schemas.config import ProjectConfig
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
 from projectctl.schemas.execution import (ExecutionPlan, ExecutionPlanV1, WorkerCheckpoint, WorkerRequest, WorkerRequestV1, WorkerResult)
+from projectctl.schemas.integration import IntegrationManifest, RecoveryReport
 from projectctl.schemas.onboarding import AdoptionManifest, AdoptionPlan, ProjectInspection
 from projectctl.schemas.project_state import ProjectState
 from projectctl.schemas.quota import QuotaSnapshot
@@ -41,6 +42,8 @@ PUBLIC_SCHEMAS = {
     "evidence-manifest.v1.schema.json": EvidenceManifestV1,
     "evidence-manifest.v2.schema.json": EvidenceManifest,
     "artifact-metadata.v1.schema.json": ArtifactMetadata,
+    "integration-manifest.v1.schema.json": IntegrationManifest,
+    "recovery-report.v1.schema.json": RecoveryReport,
     "project-inspection.v1.schema.json": ProjectInspection,
     "adoption-plan.v1.schema.json": AdoptionPlan,
     "adoption-manifest.v1.schema.json": AdoptionManifest,
