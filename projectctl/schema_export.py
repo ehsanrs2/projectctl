@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from projectctl.schemas.artifact import ArtifactMetadata
+from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDecision
 from projectctl.schemas.config import ProjectConfig
 from projectctl.schemas.evidence import EvidenceManifest
 from projectctl.schemas.execution import ExecutionPlan, WorkerCheckpoint, WorkerRequest, WorkerResult
@@ -16,6 +17,8 @@ from projectctl.schemas.verification import VerificationManifest
 
 PUBLIC_SCHEMAS = {
     "project-config.v1.schema.json": ProjectConfig,
+    "worker-capabilities.v1.schema.json": WorkerCapabilities,
+    "worker-strategy-decision.v1.schema.json": WorkerStrategyDecision,
     "quota-snapshot.v1.schema.json": QuotaSnapshot,
     "task-snapshot.v1.schema.json": TaskSnapshot,
     "scheduler-decision.v1.schema.json": SchedulerDecisionV1,

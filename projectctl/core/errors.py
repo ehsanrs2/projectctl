@@ -66,6 +66,14 @@ class PolicyViolationError(ProjectCtlError):
     pass
 
 
+class CapabilityError(ProjectCtlError):
+    pass
+
+
+class CapabilityMismatchError(CapabilityError):
+    pass
+
+
 class WorkerError(ProjectCtlError):
     pass
 

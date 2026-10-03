@@ -1,4 +1,14 @@
 from projectctl.schemas.artifact import ArtifactMetadata
+from projectctl.schemas.capabilities import (
+    CapabilitySupport,
+    GoalBudgetPolicy,
+    PermissionCapabilities,
+    StrategyFallbackPolicy,
+    WorkerCapabilities,
+    WorkerPhasePolicy,
+    WorkerRuntimeDescriptor,
+    WorkerStrategyDecision,
+)
 from projectctl.schemas.config import ProjectConfig
 from projectctl.schemas.evidence import EvidenceManifest
 from projectctl.schemas.execution import (
@@ -34,6 +44,7 @@ __all__ = [
     "AdoptionManifest",
     "AdoptionPlan",
     "ArtifactMetadata",
+    "CapabilitySupport",
     "ClaimResult",
     "ContextManifest",
     "ContextManifestV1",
@@ -41,10 +52,12 @@ __all__ = [
     "EvidenceReference",
     "ExecutionPlan",
     "ExecutionPolicy",
+    "GoalBudgetPolicy",
     "HealthCheckResult",
     "HealthReport",
     "MilestoneState",
     "NormalizedTask",
+    "PermissionCapabilities",
     "PermissionRequest",
     "ProjectConfig",
     "ProjectInspection",
@@ -56,11 +69,16 @@ __all__ = [
     "SchedulerDecision",
     "SchedulerDecisionV1",
     "TaskCounts",
+    "StrategyFallbackPolicy",
     "TaskSnapshot",
     "VerificationCommand",
     "VerificationManifest",
     "VerificationProfile",
+    "WorkerCapabilities",
     "WorkerCheckpoint",
+    "WorkerPhasePolicy",
+    "WorkerRuntimeDescriptor",
+    "WorkerStrategyDecision",
     "WorkerRequest",
     "WorkerResult",
 ]

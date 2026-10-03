@@ -1,11 +1,11 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Add durable task claims, run leases, explicit DB migration, and isolated Git worktrees without starting a worker.
+current_goal: Model Codex runtime capabilities and execution strategies explicitly before starting the real worker adapter.
 active_milestone:
-  id: M1.1
-  title: Claim + Run Store + Isolated Worktrees
+  id: M1.2a
+  title: Codex Capability & Strategy Layer
   aliases:
-    - Run Store
-    - Worktree Isolation
+    - Worker Capabilities
+    - Codex Strategy
 updated_at: null

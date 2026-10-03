@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M0.5 — Project State & Milestone Awareness**, building on the deterministic resource scheduler.
+This repository currently implements **M1.2a — Codex Capability & Strategy Layer**, building on durable run preparation and isolated worktrees.
 
 ## Implemented
 
@@ -290,3 +290,39 @@ Project state SQLite is now schema v2. Upgrades are never performed implicitly o
 Each run branch is named `projectctl/run/<run-id>` and its worktree lives outside the repository under `$PROJECTCTL_HOME/worktrees/<project-instance-id>/<run-id>/`.
 
 M1.1 still starts no Codex worker. A successfully prepared run ends in `claimed`, ready for M1.2.
+
+
+## M1.2a — Codex Capability & Strategy Layer
+
+M1.2a makes worker capabilities explicit before the Codex execution adapter is enabled.
+
+```bash
+# Inspect the installed/provider capability surface without starting a worker.
+projectctl worker capabilities --provider codex
+projectctl worker capabilities --provider codex --json
+
+# Explain the strategy requested for a task and whether the current
+# runtime + adapter surface can actually execute it.
+projectctl worker strategy TASK_ID --project /path/to/repo
+```
+
+Capability snapshots distinguish **runtime support** from **ProjectCTL adapter support**. A Codex feature is usable only when both are supported. Provider features are therefore never silently treated as ProjectCTL features.
+
+Strategies are selected by the ExecutionPlanner layer, not the Scheduler:
+
+- `direct`: Default mode + workspace-write
+- `plan_then_execute`: Plan mode in read-only, then Default mode in workspace-write
+- `goal`: persistent Goal execution with an explicit turn/time/stop budget
+- `review`: Default mode constrained to read-only
+
+Planning is always bound to a read-only sandbox. Plan mode itself is not treated as a security boundary.
+
+Strategy fallback is fail-closed. Goal → Plan or Plan → Direct fallback happens only when an explicit fallback policy allows it.
+
+The Codex optional dependency is pinned for reproducibility:
+
+```bash
+pip install -e ".[codex]"
+```
+
+M1.2a performs only capability discovery and strategy negotiation. It still does not start a Codex worker. M1.2b will add ContextAssembler, live capability probing, and the actual Codex WorkerAdapter.
