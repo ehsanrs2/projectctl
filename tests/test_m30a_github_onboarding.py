@@ -170,3 +170,51 @@ def test_doctor_reports_github_reader_as_read_only_warning(tmp_path: Path, monke
     task_store = next(item for item in payload["checks"] if item["check_id"] == "task_store")
     assert task_store["status"] == "warn"
     assert "read-only" in task_store["summary"]
+
+
+def test_scheduler_can_select_normalized_github_issue(tmp_path: Path, monkeypatch):
+    repo = make_repo(tmp_path)
+    monkeypatch.setenv("PROJECTCTL_HOME", str(tmp_path / "home"))
+    assert runner.invoke(
+        app,
+        [
+            "init",
+            str(repo),
+            "--non-interactive",
+            "--yes",
+            "--task-store",
+            "github",
+            "--json",
+        ],
+    ).exit_code == 0
+
+    bin_dir = fake_gh(tmp_path)
+    monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ.get("PATH", ""))
+
+    provider = runner.invoke(
+        app,
+        ["quota", "provider", "--project", str(repo), "--set", "manual"],
+    )
+    assert provider.exit_code == 0, provider.output
+    quota = runner.invoke(
+        app,
+        [
+            "quota",
+            "set",
+            "--project",
+            str(repo),
+            "--five-hour",
+            "90%",
+            "--weekly",
+            "90%",
+        ],
+    )
+    assert quota.exit_code == 0, quota.output
+
+    decision = runner.invoke(
+        app,
+        ["next", "--project", str(repo), "--json"],
+    )
+    assert decision.exit_code == 0, decision.output
+    payload = json.loads(decision.output)
+    assert payload["selected_task_id"] == "gh-11"
