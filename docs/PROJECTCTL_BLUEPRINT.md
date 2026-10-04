@@ -531,7 +531,9 @@ Implemented:
 - durable publication evidence/recovery
 - additive non-destructive GitHub completion/decision markers
 - publication-bound task completion
+- publication proof independently revalidated by the GitHub completion adapter
 - claim release only after remote delivery/task completion
+- post-completion claim cleanup cannot rewrite canonical task semantics
 - GitHub full execution gate enabled under the direct-publication policy
 
 ---
