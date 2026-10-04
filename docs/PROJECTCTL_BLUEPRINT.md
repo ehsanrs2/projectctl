@@ -105,7 +105,7 @@ Exactly one authority should exist for each mutable concern.
 | Active goal / active milestone | `docs/PROJECT_STATE.yaml` | Structured, human-managed |
 | Requirements / feature specification | Bound project specification sources | Spec Kit when configured; otherwise project bindings |
 | Architecture decisions | `docs/decisions/ADR-*.md` | Newer accepted ADR wins on conflict |
-| Task execution state / dependencies | Configured task authority | Beads and GitHub adapters implemented; exactly one provider per project |
+| Task execution state / dependencies | Configured task authority | Beads/GitHub execution adapters and Linear read adapter implemented; exactly one provider per project |
 | Source code and integration history | Git | Git state is never inferred from worker narration |
 | Verification policy | `projectctl.verification.yaml` | Human-managed |
 | Verification result / evidence | ProjectCTL run artifacts and Evidence manifests | Worker result alone is not evidence |
