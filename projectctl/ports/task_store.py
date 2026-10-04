@@ -1,7 +1,7 @@
 from typing import Protocol
 
 from projectctl.schemas.execution import ClaimResult, EvidenceReference
-from projectctl.schemas.task import NormalizedTask
+from projectctl.schemas.task import NormalizedTask, TaskSnapshot
 
 
 class TaskStoreReader(Protocol):
@@ -9,6 +9,7 @@ class TaskStoreReader(Protocol):
     def list_all(self) -> list[NormalizedTask]: ...
     def list_ready(self) -> list[NormalizedTask]: ...
     def list_blocked(self) -> list[NormalizedTask]: ...
+    def snapshot(self, *, tasks: list[NormalizedTask] | None = None) -> TaskSnapshot: ...
 
 
 class TaskClaimer(Protocol):
