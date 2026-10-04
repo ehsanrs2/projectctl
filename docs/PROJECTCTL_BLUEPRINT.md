@@ -105,7 +105,7 @@ Exactly one authority should exist for each mutable concern.
 | Active goal / active milestone | `docs/PROJECT_STATE.yaml` | Structured, human-managed |
 | Requirements / feature specification | Bound project specification sources | Spec Kit when configured; otherwise project bindings |
 | Architecture decisions | `docs/decisions/ADR-*.md` | Newer accepted ADR wins on conflict |
-| Task execution state / dependencies | Configured task authority | Beads today; GitHub read path implemented; exactly one provider per project |
+| Task execution state / dependencies | Configured task authority | Beads and GitHub adapters implemented; exactly one provider per project |
 | Source code and integration history | Git | Git state is never inferred from worker narration |
 | Verification policy | `projectctl.verification.yaml` | Human-managed |
 | Verification result / evidence | ProjectCTL run artifacts and Evidence manifests | Worker result alone is not evidence |
@@ -124,7 +124,8 @@ one is explicitly declared authoritative and the other is made derived, imported
 read-only.
 
 This is why Spec Kit → Beads import is one-way, generated dashboards are non-authoritative, and
-GitHub execution mutation is not enabled merely because GitHub supports editing issues.
+GitHub mutations are enabled only where ProjectCTL has explicit ownership, publication, and
+non-destructive lifecycle semantics.
 
 ---
 
@@ -245,7 +246,7 @@ flowchart TD
 
     Verify --> Evidence[Evidence + Candidate Commit]
     Evidence --> Integrate[Fast-forward Local Integration]
-    Integrate --> Publish[Remote Publication - not implemented yet]
+    Integrate --> Publish[Remote Publication when required]
     Publish --> Complete[Canonical Task Completion]
 
     RunDB[(Project Run Store)] --- Claim
@@ -258,9 +259,9 @@ flowchart TD
     Telemetry -. observes .-> Worker
 ```
 
-The `Publish` stage is shown explicitly even though it is not implemented. This prevents a
-critical semantic mistake: for a remote task authority such as GitHub, **local Git integration is
-not the same thing as team-visible delivery**.
+The `Publish` stage is explicit because for a remote task authority such as GitHub,
+**local Git integration is not the same thing as team-visible delivery**. M3.0c implements this
+stage for GitHub with exact-base publication and durable remote observation.
 
 ---
 
@@ -352,17 +353,19 @@ Current local integration:
 - serialized shared-target mutation
 - no worker Git mutation
 
-Not yet implemented:
+Current remote-delivery behavior:
 
-- remote push/publication contract
-- remote branch/PR publication
-- remote integration observation
-- team-visible completion gate
+- task-authority delivery policy distinguishes local-only from publication-required delivery
+- GitHub publication is exact-base and fast-forward-only to the configured target on `origin`
+- PublicationRequest/PublicationManifest form a durable evidence chain
+- remote target observation gates canonical completion
+- GitHub completion is additive via `projectctl:completed`, preserving native human close reasons
+- exact GitHub task claim is held through publication/completion and released afterward
+- repositories whose rules reject direct target publication fail closed; M3.0c does not bypass
+  rulesets or silently switch to pull-request delivery
 
-For local-only task authorities, local integration may be enough.
-
-For remote task authorities, completion semantics must explicitly state whether publication is
-required. GitHub completion must not close an issue merely because a local-only commit exists.
+For local-only task authorities such as Beads, local integration is sufficient under the current
+delivery policy.
 
 ### 6.8 Runtime/recovery layer
 
@@ -389,7 +392,7 @@ system and must not be described as one.
 
 ## 7. Runtime lifecycle today
 
-The implemented lifecycle through M2.2 is:
+The implemented lifecycle through M3.0c is:
 
 ```text
 fresh state
@@ -398,7 +401,7 @@ scheduler decision
   ↓
 ExecutionPlan
   ↓
-claim
+durable task claim
   ↓
 isolated worktree
   ↓
@@ -418,14 +421,28 @@ Codex turn
          ↓
  ff-only local integration
          ↓
- canonical task completion
+ publication required?
+   ├─ no  → canonical task completion
+   └─ yes → durable PublicationRequest
+               ↓
+            exact-base remote publication
+               ↓
+            remote candidate observation
+               ↓
+            durable PublicationManifest
+               ↓
+            canonical task completion
+               ↓
+            exact claim release
          ↓
  PASSED
 ```
 
-For Beads, the full local lifecycle is implemented.
+Beads uses the local-only delivery path.
 
-For GitHub Issues, M3.0a currently stops before claim.
+GitHub uses the distributed claim protocol from M3.0b2 and the publication-gated delivery path from
+M3.0c. GitHub is execution-capable under this direct-publication policy, but repositories whose
+rules require a pull request or reject direct target publication remain fail-closed.
 
 ---
 
@@ -495,6 +512,28 @@ Implemented:
 - CLI capability inspection
 - architecture guard preventing direct task-provider imports in application services
 
+### M3.0b2 — distributed GitHub claim ownership
+
+Implemented:
+
+- exact remote-ref claim/release CAS
+- unique marker commit ownership
+- durable TaskClaimRequest/TaskClaim evidence
+- claim validation before worker start/resume
+- partial-prepare crash recovery
+
+### M3.0c — publication-gated GitHub delivery
+
+Implemented:
+
+- provider-neutral delivery policy and publisher port
+- exact-base remote publication
+- durable publication evidence/recovery
+- additive non-destructive GitHub completion/decision markers
+- publication-bound task completion
+- claim release only after remote delivery/task completion
+- GitHub full execution gate enabled under the direct-publication policy
+
 ---
 
 ## 9. Architecture review findings — 2026-10-04
@@ -524,22 +563,20 @@ M3.0b2 implements claim ownership with a reserved remote Git branch and exact Gi
 `--force-with-lease` semantics. Each claim points to a unique marker commit, making release
 ownership-verifiable and ABA-safe. The claim request/result are also bound to durable run events.
 
-This resolves claim/release ownership only. GitHub block/completion and publication remain
-deliberately unsupported.
+This resolved claim/release ownership only at M3.0b2. M3.0c subsequently adds
+publication-gated block/completion semantics.
 
-### Finding C — local integration is insufficient for remote completion
+### Finding C — local integration was insufficient for remote completion (resolved in M3.0c)
 
-M1.4 explicitly performs no push.
+M1.4 local fast-forward integration alone was not team-visible delivery.
 
-Therefore this ordering is unsafe for a GitHub task authority:
+**Resolution:** M3.0c introduces a versioned TaskDeliveryPolicy plus durable
+PublicationRequest/PublicationManifest artifacts. GitHub completion is allowed only after the exact
+verified candidate is observed on the configured remote target.
 
-```text
-local ff integration → close GitHub issue
-```
-
-because the issue can become closed while the verified code exists only on one workstation.
-
-GitHub verified completion must be gated on an explicit remote-publication contract.
+ProjectCTL also avoids blind native Issue-state PATCHes. It records additive
+`projectctl:completed` / `projectctl:needs-decision` markers so concurrent human close reasons
+remain authoritative.
 
 ### Finding D — GitHub dependencies are currently absent
 
@@ -610,7 +647,7 @@ Deliverables:
 
 ### M3.0b2 — GitHub Remote Claim Protocol
 
-**Current milestone / implemented by this change.**
+**Completed.**
 
 Goal: establish concurrency-safe GitHub claim ownership without enabling remote completion.
 
@@ -636,18 +673,28 @@ No GitHub Issue completion occurs in this milestone.
 
 ### M3.0c — Remote Publication & GitHub Completion
 
-**Next milestone.**
+**Current milestone / implemented by this change.**
 
-Goal: define what “delivered” means for a remote/team task authority.
+Goal: make remote/team completion depend on provable remote-visible delivery without overwriting
+concurrent human workflow intent.
 
-Must decide and implement:
+Implemented:
 
-- publication target and remote
-- push/remote update policy
-- stale-remote handling
-- branch protection/ruleset behavior
-- evidence binding to the published commit
-- task completion only after required publication is observed
+- `TaskDeliveryPolicy v1`
+- `PublicationRequest v1` and `PublicationManifest v1`
+- exact-base remote CAS publication with remote observation
+- stale/diverged remote target fail-closed behavior
+- publication artifacts anchored in run events
+- `IntegrationManifest v2` with publication evidence
+- publication-aware INTEGRATING crash recovery
+- GitHub additive `projectctl:completed` marker
+- GitHub additive `projectctl:needs-decision` marker
+- native GitHub close reasons remain authoritative
+- exact GitHub claim held through publication/completion, then released
+- full GitHub task-authority execution capability under direct-publication policy
+
+Direct PR creation/merge is not implemented; repositories that require PR-only delivery remain
+policy-blocked rather than bypassed.
 
 ### M3.1 — GitHub Team Semantics
 
