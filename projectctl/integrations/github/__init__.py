@@ -1,3 +1,4 @@
+from projectctl.integrations.github.cache import GitHubCacheFreshness, GitHubCacheLookup, GitHubDerivedCache, cache_request_fingerprint, github_cache_request
 from projectctl.integrations.github.claim import GitHubTaskClaimer
 from projectctl.integrations.github.client import GitHubIssuesClient
 from projectctl.integrations.github.completion import GitHubTaskCompletionWriter
