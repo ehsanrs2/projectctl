@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Define a disposable, integrity-checked GitHub derived-cache and freshness contract before using conditional requests or cache-backed task snapshots.
+current_goal: Perform authenticated conditional GitHub GET revalidation with stored validators while preserving provider-error fail-closed semantics and keeping multi-page snapshot caching out of scope.
 active_milestone:
-  id: M3.1c1
-  title: GitHub Derived Cache & Freshness Contract
+  id: M3.1c2
+  title: Conditional GitHub Reads
   aliases:
-    - GitHub Derived Cache
-    - Freshness Contract
-    - Conditional Request Foundation
+    - ETag Revalidation
+    - Conditional GET
+    - Validator-Aware GitHub Reads
 updated_at: null
