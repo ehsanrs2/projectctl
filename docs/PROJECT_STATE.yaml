@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Eliminate public JSON Schema source drift by making the deterministic exporter the sole implementation authority, keeping derived schema copies out of Git, and enforcing the policy in CI.
+current_goal: Add Linear as the first additional task authority through the provider-neutral boundary, supporting authenticated read-only team snapshots while withholding execution eligibility until dependency and write-ownership semantics are proven.
 active_milestone:
-  id: M3.1d
-  title: Schema Export Authority & Drift Policy
+  id: M3.2a
+  title: Linear Read Authority
   aliases:
-    - Public Schema Source Policy
-    - Generated Schema Drift Guard
-    - Schema Export Authority
+    - Linear GraphQL Read Adapter
+    - Linear Task Snapshots
+    - Read-only Linear Authority
 updated_at: null
