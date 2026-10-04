@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Use page-aware, integrity-checked GitHub cache entries during ordinary task snapshot construction under an explicit freshness policy while forcing remote validation at execution safety boundaries.
+current_goal: Eliminate public JSON Schema source drift by making the deterministic exporter the sole implementation authority, keeping derived schema copies out of Git, and enforcing the policy in CI.
 active_milestone:
-  id: M3.1c3
-  title: Cache-backed Snapshot Assembly & Scale
+  id: M3.1d
+  title: Schema Export Authority & Drift Policy
   aliases:
-    - Page-aware GitHub Cache
-    - Snapshot Freshness Policy
-    - GitHub Sync Scale
+    - Public Schema Source Policy
+    - Generated Schema Drift Guard
+    - Schema Export Authority
 updated_at: null
