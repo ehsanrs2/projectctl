@@ -694,7 +694,7 @@ No GitHub Issue completion occurs in this milestone.
 
 ### M3.0c — Remote Publication & GitHub Completion
 
-**Current milestone / implemented by this change.**
+**Completed.**
 
 Goal: make remote/team completion depend on provable remote-visible delivery without overwriting
 concurrent human workflow intent.
