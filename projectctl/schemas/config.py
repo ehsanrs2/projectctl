@@ -19,9 +19,23 @@ class TaskStoreConfigV1(ProjectCtlModel):
     provider: str = "beads"
 
 
+class TaskStoreConfigV2(ProjectCtlModel):
+    provider: str = "beads"
+    repository: str | None = None
+
+
 class TaskStoreConfig(ProjectCtlModel):
     provider: str = "beads"
     repository: str | None = None
+    cache_max_age_seconds: int = Field(
+        default=30,
+        ge=0,
+        le=3600,
+        description=(
+            "Maximum age for reusable derived task-provider GET cache entries. "
+            "Zero disables local fresh hits and forces remote revalidation."
+        ),
+    )
 
 
 class ProjectPaths(ProjectCtlModel):
@@ -148,9 +162,22 @@ class ProjectConfigV1(ProjectCtlModel):
     model_profiles: dict[ModelProfile, ModelProfileConfig] = Field(default_factory=default_model_profiles)
 
 
-class ProjectConfig(ProjectCtlModel):
+class ProjectConfigV2(ProjectCtlModel):
     schema_kind: Literal["projectctl.project_config"] = "projectctl.project_config"
     schema_version: Literal[2] = 2
+    project: ProjectIdentity
+    task_store: TaskStoreConfigV2 = Field(default_factory=TaskStoreConfigV2)
+    paths: ProjectPaths = Field(default_factory=ProjectPaths)
+    knowledge: KnowledgeConfig = Field(default_factory=KnowledgeConfig)
+    scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
+    quota: QuotaPolicy = Field(default_factory=QuotaPolicy)
+    features: FeatureFlags = Field(default_factory=FeatureFlags)
+    model_profiles: dict[ModelProfile, ModelProfileConfig] = Field(default_factory=default_model_profiles)
+
+
+class ProjectConfig(ProjectCtlModel):
+    schema_kind: Literal["projectctl.project_config"] = "projectctl.project_config"
+    schema_version: Literal[3] = 3
     project: ProjectIdentity
     task_store: TaskStoreConfig = Field(default_factory=TaskStoreConfig)
     paths: ProjectPaths = Field(default_factory=ProjectPaths)

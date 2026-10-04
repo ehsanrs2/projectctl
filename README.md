@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M3.1c2 — Conditional GitHub Reads**, using the M3.1c1 derived-cache validators for authenticated remote revalidation without treating cached data as an outage fallback.
+This repository currently implements **M3.1c3 — Cache-backed Snapshot Assembly & Scale**, using page-aware GitHub representations and an explicit bounded freshness policy to reduce repeated task-snapshot API fan-out while preserving forced remote validation at execution preflight.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -1120,7 +1120,49 @@ cache-backed snapshot assembly and page-aware fan-out reduction belong to M3.1c3
 
 See ADR-018 and `docs/PROJECTCTL_BLUEPRINT.md`.
 
+### M3.1c3 — Cache-backed Snapshot Assembly & Scale
+
+M3.1c3 activates bounded local reuse of remotely validated GitHub representations.
+
+Project config is additively versioned to **ProjectConfig v3**. GitHub task-store reads now use:
+
+```yaml
+task_store:
+  provider: github
+  repository: owner/repository
+  cache_max_age_seconds: 30
+```
+
+A value of `0` disables local fresh hits and forces conditional remote revalidation.
+
+Paginated Issue and relation collections are no longer cached as one `--paginate --slurp`
+aggregate. They are read as concrete pages:
+
+```text
+...?per_page=100
+...?per_page=100&page=2
+...
+```
+
+Each page therefore has its own request fingerprint, payload, validator and freshness proof.
+
+Within the configured freshness window, a valid page can be reused without another HTTP call and
+records a `fresh_hit` telemetry outcome. Once stale, M3.1c2 conditional revalidation resumes:
+ETag/Last-Modified -> 304 revalidation or 200 replacement. Provider errors after remote validation
+is attempted remain errors; stale cache is never used as an outage fallback.
+
+Task mutations invalidate the repository's derived GitHub cache before the post-mutation read, so
+completion/decision labels cannot remain hidden behind a fresh cached Issue/list page.
+
+Execution safety is stricter than ordinary status/scheduling reads. Preflight before claim and
+again after claim uses a provider-neutral `max_age=0` override, forcing remote validation so a
+new dependency or lifecycle change cannot be masked by the normal bounded freshness window.
+
+Scale tests verify that repeated snapshots reuse Issue and per-Issue relationship pages rather than
+repeating the original REST fan-out.
+
+See ADR-019 and `docs/PROJECTCTL_BLUEPRINT.md`.
+
 Next:
 
-- **M3.1c3** — Cache-backed snapshot assembly, page-aware freshness policy, telemetry/scale
-  validation and GitHub API fan-out reduction
+- **M3.2** — Additional task authorities on the shared Task Authority abstraction

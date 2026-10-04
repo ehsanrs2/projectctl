@@ -253,7 +253,15 @@ def _validate_plan_inputs(project_root: Path, plan: ExecutionPlan) -> RunTermina
     if resolve_commit(project_root, plan.integration_target_ref) != plan.base_commit:
         return RunTerminalReason.STALE_BASE
 
-    tasks = capture_task_snapshot(project_root, state="all")
+    # Execution preflight is an authority boundary. Scheduling/status may use
+    # the configured bounded cache freshness window, but preflight must force
+    # remote validation so a just-added dependency or lifecycle change cannot
+    # hide behind a local fresh hit.
+    tasks = capture_task_snapshot(
+        project_root,
+        state="all",
+        read_cache_max_age_seconds=0,
+    )
     if semantic_task_snapshot_digest(tasks) != plan.task_snapshot_digest:
         return RunTerminalReason.CONTEXT_INVALID
 

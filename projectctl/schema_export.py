@@ -4,10 +4,9 @@ from pathlib import Path
 from projectctl.schemas.artifact import ArtifactMetadata
 from projectctl.schemas.auto import AutoRunPolicy, AutoRunReport
 from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDecision
-from projectctl.schemas.config import ProjectConfig, ProjectConfigV1
+from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2
 from projectctl.schemas.delivery import PublicationManifest, PublicationRequest, TaskDeliveryPolicy
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
-from projectctl.schemas.github_cache import GitHubCacheEntry, GitHubCacheRequest
 from projectctl.schemas.github_cache import GitHubCacheEntry, GitHubCacheRequest
 from projectctl.schemas.execution import (ExecutionPlan, ExecutionPlanV1, WorkerCheckpoint, WorkerCheckpointV1, WorkerRequest, WorkerRequestV1, WorkerResult)
 from projectctl.schemas.integration import IntegrationManifest, IntegrationManifestV1, RecoveryReport
@@ -31,7 +30,8 @@ from projectctl.schemas.verification import VerificationCatalog, VerificationMan
 
 PUBLIC_SCHEMAS = {
     "project-config.v1.schema.json": ProjectConfigV1,
-    "project-config.v2.schema.json": ProjectConfig,
+    "project-config.v2.schema.json": ProjectConfigV2,
+    "project-config.v3.schema.json": ProjectConfig,
     "worker-capabilities.v1.schema.json": WorkerCapabilities,
     "worker-strategy-decision.v1.schema.json": WorkerStrategyDecision,
     "quota-snapshot.v1.schema.json": QuotaSnapshotV1,
@@ -65,8 +65,6 @@ PUBLIC_SCHEMAS = {
     "verification-manifest.v2.schema.json": VerificationManifest,
     "evidence-manifest.v1.schema.json": EvidenceManifestV1,
     "evidence-manifest.v2.schema.json": EvidenceManifest,
-    "github-cache-request.v1.schema.json": GitHubCacheRequest,
-    "github-cache-entry.v1.schema.json": GitHubCacheEntry,
     "github-cache-request.v1.schema.json": GitHubCacheRequest,
     "github-cache-entry.v1.schema.json": GitHubCacheEntry,
     "artifact-metadata.v1.schema.json": ArtifactMetadata,

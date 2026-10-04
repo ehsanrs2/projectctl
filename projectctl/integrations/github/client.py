@@ -37,10 +37,10 @@ class GitHubIssuesClient:
     ProjectCTL does not persist GitHub credentials. Authentication, host policy,
     and token storage remain owned by GitHub CLI.
 
-    M3.1c2 conditionally revalidates single-response GET representations. It
-    deliberately does not attach one validator to a multi-page
-    `--paginate --slurp` aggregate because an HTTP validator belongs to one
-    concrete response representation/page.
+    M3.1c3 keeps every cached validator bound to one concrete HTTP response
+    representation. Paginated collections are fetched page-by-page, and a
+    caller-supplied freshness window controls when a validated page may be
+    reused without another immediate remote request.
     """
 
     def __init__(
@@ -51,6 +51,7 @@ class GitHubIssuesClient:
         executable: str | None = None,
         timeout_seconds: int = 30,
         cache: GitHubDerivedCache | None = None,
+        cache_max_age_seconds: float = 0.0,
     ):
         self.project_root = project_root.resolve()
         self.executable = executable or shutil.which("gh")
@@ -66,6 +67,9 @@ class GitHubIssuesClient:
                 "Set task_store.repository or configure a github.com origin remote."
             )
         self.timeout_seconds = timeout_seconds
+        if cache_max_age_seconds < 0:
+            raise ValueError("cache_max_age_seconds must be non-negative.")
+        self.cache_max_age_seconds = cache_max_age_seconds
 
         if cache is None:
             # Delayed import avoids a module cycle: cache.py imports the stable
@@ -240,13 +244,34 @@ class GitHubIssuesClient:
         )
 
     def _conditional_get(self, endpoint: str) -> Any:
-        from projectctl.integrations.github.cache import github_cache_request
+        from projectctl.integrations.github.cache import (
+            GitHubCacheFreshness,
+            github_cache_request,
+        )
 
         request = github_cache_request(
             repository=self.repository,
             endpoint=endpoint,
         )
-        existing = self.cache.load(request)
+        lookup = self.cache.lookup(
+            request,
+            max_age_seconds=self.cache_max_age_seconds,
+            now=utc_now(),
+        )
+        if (
+            self.cache_max_age_seconds > 0
+            and lookup is not None
+            and lookup.freshness == GitHubCacheFreshness.FRESH
+        ):
+            self._record_cache_read(
+                request=request,
+                outcome="fresh_hit",
+                status_code=None,
+                conditional_header=None,
+            )
+            return lookup.entry.payload
+
+        existing = lookup.entry if lookup is not None else None
         etag = existing.etag if existing is not None else None
         last_modified = existing.last_modified if existing is not None else None
         conditional_header = (
@@ -386,20 +411,44 @@ class GitHubIssuesClient:
             raise TaskStoreError("GitHub repository endpoint returned an invalid payload.")
         return payload
 
+    @staticmethod
+    def _page_endpoint(endpoint: str, page: int) -> str:
+        if page <= 1:
+            return endpoint
+        separator = "&" if "?" in endpoint else "?"
+        return f"{endpoint}{separator}page={page}"
+
+    def _list_pages(
+        self,
+        endpoint: str,
+        *,
+        page_size: int = 100,
+    ) -> list[dict[str, Any]]:
+        if page_size <= 0:
+            raise ValueError("page_size must be positive.")
+
+        values: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            page_endpoint = self._page_endpoint(endpoint, page)
+            payload = self._conditional_get(page_endpoint)
+            if not isinstance(payload, list):
+                raise TaskStoreError(
+                    f"GitHub paginated endpoint returned a non-list page: {page_endpoint}"
+                )
+            page_values = self.issue_list(payload)
+            values.extend(page_values)
+            if len(page_values) < page_size:
+                return values
+            page += 1
+
     def list_all(self) -> list[dict[str, Any]]:
-        # M3.1c2 intentionally leaves multi-page aggregate reads unconditional.
-        # One validator must not be treated as proof for an entire
-        # --paginate/--slurp aggregate. M3.1c3 owns page-aware snapshot reuse.
-        payload = self._run(
-            self._get_args(
-                f"repos/{self.repository}/issues?state=all&per_page=100",
-                paginate=True,
-                slurp=True,
-            )
+        payload = self._list_pages(
+            f"repos/{self.repository}/issues?state=all&per_page=100"
         )
         return [
             issue
-            for issue in self.issue_list(payload)
+            for issue in payload
             if "pull_request" not in issue
         ]
 
@@ -420,14 +469,9 @@ class GitHubIssuesClient:
         suffix: str,
     ) -> list[dict[str, Any]]:
         number = self._issue_number(issue_number)
-        payload = self._run(
-            self._get_args(
-                f"repos/{self.repository}/issues/{number}/{suffix}?per_page=100",
-                paginate=True,
-                slurp=True,
-            )
+        return self._list_pages(
+            f"repos/{self.repository}/issues/{number}/{suffix}?per_page=100"
         )
-        return self.issue_list(payload)
 
     def list_blocked_by(self, issue_number: str | int) -> list[dict[str, Any]]:
         return self._list_issue_relation(
@@ -515,4 +559,10 @@ class GitHubIssuesClient:
         )
         if not isinstance(payload, list):
             raise TaskStoreError("GitHub add-label response has an invalid shape.")
+
+        # A successful task mutation invalidates every derived representation
+        # for this repository. The Issue may appear in a cached list page and
+        # its lifecycle label may affect scheduler semantics; exact-page
+        # invalidation is therefore insufficient without an issue->page index.
+        self.cache.invalidate_repository(self.repository)
         return self.show(number)
