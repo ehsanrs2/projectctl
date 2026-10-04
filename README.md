@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M3.0c — Remote Publication & GitHub Completion**, making GitHub completion depend on durable proof that the exact verified candidate is visible on the configured remote target.
+This repository currently implements **M3.1a — GitHub Dependencies & Sub-issues**, making the scheduler consume GitHub's structured blocked-by relationships while keeping sub-issue hierarchy separate from execution dependencies.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -924,3 +924,55 @@ or required pull requests remain fail-closed. M3.0c does not bypass those polici
 create/merge PRs automatically.
 
 See ADR-014 and `docs/PROJECTCTL_BLUEPRINT.md`.
+
+
+## M3.1a — GitHub Dependencies & Sub-issues
+
+M3.1a makes GitHub's structured team relationships visible to the deterministic scheduler.
+
+ProjectCTL reads GitHub's native Issue dependency API:
+
+```text
+Issue A --blocked by--> Issue B
+```
+
+and normalizes it as:
+
+```text
+A.dependencies = [B]
+B.blocks = [A]
+```
+
+An unresolved native dependency makes the dependent Issue ineligible. Once a local dependency is
+DONE, the existing generic scheduler can admit the task without any GitHub-specific scheduling
+code.
+
+Open cross-repository dependencies are represented by stable external identities such as:
+
+```text
+github:owner/repository#42
+```
+
+Because those tasks are not present in the local authority snapshot, they fail closed as unresolved
+dependencies. Closed/completed external dependencies are treated as satisfied.
+
+GitHub sub-issues are represented separately:
+
+```text
+hierarchy.parent
+hierarchy.sub_issues
+```
+
+A sub-issue relationship does **not** become a dependency implicitly. Teams that need blocking
+semantics must use GitHub's native dependency relationship explicitly.
+
+Dependency cycles, hierarchy cycles, conflicting parents, malformed relations, and same-repository
+dependency nodes missing from the current snapshot fail closed to `needs_decision`.
+
+M3.1a also introduces **TaskSnapshot v2** with `TaskHierarchy`; TaskSnapshot v1 remains exported
+for audit compatibility.
+
+Relationship endpoint failures are never interpreted as an empty relationship set.
+
+The correctness-first implementation performs additional GitHub API reads while constructing a
+snapshot. Efficient incremental synchronization is intentionally deferred to M3.1c.
