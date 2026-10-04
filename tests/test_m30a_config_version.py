@@ -4,10 +4,10 @@ import yaml
 
 from projectctl.project.loader import load_project_config
 from projectctl.schema_export import PUBLIC_SCHEMAS
-from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2
+from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3
 
 
-def test_project_config_v1_is_loaded_as_v3_without_rewrite(tmp_path: Path):
+def test_project_config_v1_is_loaded_as_v4_without_rewrite(tmp_path: Path):
     ctl = tmp_path / ".projectctl"
     ctl.mkdir()
     path = ctl / "config.yaml"
@@ -26,19 +26,22 @@ def test_project_config_v1_is_loaded_as_v3_without_rewrite(tmp_path: Path):
 
     config = load_project_config(tmp_path)
 
-    assert config.schema_version == 3
+    assert config.schema_version == 4
     assert config.task_store.provider == "beads"
     assert config.task_store.repository is None
+    assert config.task_store.team is None
     assert config.task_store.cache_max_age_seconds == 30
     persisted = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert persisted["schema_version"] == 1
     assert "repository" not in persisted["task_store"]
 
 
-def test_project_config_v1_v2_and_v3_are_public():
+def test_project_config_v1_through_v4_are_public():
     assert PUBLIC_SCHEMAS["project-config.v1.schema.json"] is ProjectConfigV1
     assert PUBLIC_SCHEMAS["project-config.v2.schema.json"] is ProjectConfigV2
-    assert PUBLIC_SCHEMAS["project-config.v3.schema.json"] is ProjectConfig
+    assert PUBLIC_SCHEMAS["project-config.v3.schema.json"] is ProjectConfigV3
+    assert PUBLIC_SCHEMAS["project-config.v4.schema.json"] is ProjectConfig
     assert ProjectConfigV1.model_fields["schema_version"].default == 1
     assert ProjectConfigV2.model_fields["schema_version"].default == 2
-    assert ProjectConfig.model_fields["schema_version"].default == 3
+    assert ProjectConfigV3.model_fields["schema_version"].default == 3
+    assert ProjectConfig.model_fields["schema_version"].default == 4
