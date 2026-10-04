@@ -23,6 +23,7 @@ from projectctl.schemas.scheduler import SchedulerDecision, SchedulerDecisionV1
 from projectctl.schemas.status import ProjectStatus
 from projectctl.schemas.task import TaskSnapshot
 from projectctl.schemas.task_authority import TaskAuthorityCapabilities
+from projectctl.schemas.task_claim import TaskClaim, TaskClaimRequest
 from projectctl.schemas.verification import VerificationCatalog, VerificationManifest, VerificationManifestV1
 
 PUBLIC_SCHEMAS = {
@@ -34,6 +35,8 @@ PUBLIC_SCHEMAS = {
     "quota-snapshot.v2.schema.json": QuotaSnapshot,
     "task-snapshot.v1.schema.json": TaskSnapshot,
     "task-authority-capabilities.v1.schema.json": TaskAuthorityCapabilities,
+    "task-claim-request.v1.schema.json": TaskClaimRequest,
+    "task-claim.v1.schema.json": TaskClaim,
     "scheduler-decision.v1.schema.json": SchedulerDecisionV1,
     "scheduler-decision.v2.schema.json": SchedulerDecision,
     "project-state.v1.schema.json": ProjectState,
