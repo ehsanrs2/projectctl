@@ -1,8 +1,12 @@
+from datetime import datetime, timezone
 from pathlib import Path
 
-from projectctl.core.enums import TaskStatus
+from projectctl.core.enums import ConfidenceLevel, QuotaSource, TaskStatus
 from projectctl.integrations.github.task_store import GitHubIssuesTaskStore
 from projectctl.schema_export import PUBLIC_SCHEMAS
+from projectctl.scheduler.service import SchedulerService
+from projectctl.schemas.config import ProjectConfig, ProjectIdentity
+from projectctl.schemas.quota import QuotaSnapshot, QuotaWindow
 from projectctl.schemas.task import TaskSnapshot, TaskSnapshotV1
 
 
@@ -199,3 +203,67 @@ def test_task_snapshot_contract_is_additively_versioned():
     assert PUBLIC_SCHEMAS["task-snapshot.v2.schema.json"] is TaskSnapshot
     assert TaskSnapshotV1.model_fields["schema_version"].default == 1
     assert TaskSnapshot.model_fields["schema_version"].default == 2
+
+
+def scheduler_decision(store: GitHubIssuesTaskStore):
+    now = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+    quota = QuotaSnapshot(
+        provider="test",
+        account="acct",
+        observed_at=now,
+        five_hour=QuotaWindow(
+            remaining_ratio=.90,
+            source=QuotaSource.MANUAL,
+            confidence=ConfidenceLevel.MEDIUM,
+        ),
+        weekly=QuotaWindow(
+            remaining_ratio=.90,
+            source=QuotaSource.MANUAL,
+            confidence=ConfidenceLevel.MEDIUM,
+        ),
+    )
+    return SchedulerService().decide(
+        config=ProjectConfig(project=ProjectIdentity(id="demo")),
+        tasks=store.snapshot(),
+        quota=quota,
+        now=now,
+    )
+
+
+def test_scheduler_consumes_native_github_dependencies(tmp_path: Path):
+    blocked = GitHubIssuesTaskStore(
+        tmp_path,
+        client=RelationClient(
+            [issue(1), issue(2), issue(3)],
+            blocked_by={2: [issue(1)]},
+        ),
+    )
+    assert scheduler_decision(blocked).selected_task_id == "gh-1"
+
+    resolved = GitHubIssuesTaskStore(
+        tmp_path,
+        client=RelationClient(
+            [
+                issue(1, state="closed", state_reason="completed"),
+                issue(2),
+                issue(3),
+            ],
+            blocked_by={
+                2: [issue(1, state="closed", state_reason="completed")]
+            },
+        ),
+    )
+    assert scheduler_decision(resolved).selected_task_id == "gh-2"
+
+
+def test_scheduler_never_treats_sub_issue_hierarchy_as_dependency(tmp_path: Path):
+    store = GitHubIssuesTaskStore(
+        tmp_path,
+        client=RelationClient(
+            [issue(10), issue(11)],
+            sub_issues={10: [issue(11)]},
+        ),
+    )
+    decision = scheduler_decision(store)
+    assert decision.selected_task_id in {"gh-10", "gh-11"}
+    assert all(candidate.eligibility.eligible for candidate in decision.candidates)
