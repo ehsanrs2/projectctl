@@ -42,8 +42,8 @@ def test_static_capabilities_do_not_require_provider_runtime(tmp_path: Path):
 
     assert capabilities.provider == "github"
     assert capabilities.read == CapabilityState.SUPPORTED
-    assert capabilities.claim == CapabilityState.UNSUPPORTED
-    assert capabilities.release == CapabilityState.UNSUPPORTED
+    assert capabilities.claim == CapabilityState.SUPPORTED
+    assert capabilities.release == CapabilityState.SUPPORTED
     assert capabilities.block_for_decision == CapabilityState.UNSUPPORTED
     assert capabilities.complete == CapabilityState.UNSUPPORTED
 
@@ -78,7 +78,9 @@ def test_task_authority_cli_is_machine_readable_without_provider_probe(tmp_path:
     payload = json.loads(result.output)
     assert payload["schema_kind"] == "projectctl.task_authority_capabilities"
     assert payload["provider"] == "github"
-    assert payload["claim"] == "unsupported"
+    assert payload["claim"] == "supported"
+    assert payload["release"] == "supported"
+    assert payload["complete"] == "unsupported"
 
 
 def test_task_authority_capability_schema_is_public():
