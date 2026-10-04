@@ -456,6 +456,57 @@ def _mark_start_failure(
     )
 
 
+def _validate_durable_task_claim(
+    project_root: Path,
+    *,
+    store: RunStore,
+    run_id: str,
+    expected_status: RunStatus,
+) -> None:
+    durable = load_durable_claim(
+        project_root,
+        store=store,
+        run_id=run_id,
+        allow_legacy_missing=True,
+    )
+    if durable is None:
+        # Compatibility for runs prepared before TaskClaim v1 existed.
+        return
+    _, claim = durable
+    claimer = _claimer(project_root)
+    if claimer.validate(claim):
+        store.append_event(
+            run_id,
+            "task.claim.validated",
+            {
+                "claim_digest": digest(claim),
+                "ownership_ref": claim.ownership_ref,
+                "ownership_sha": claim.ownership_sha,
+            },
+        )
+        return
+
+    _mark_start_failure(
+        store,
+        run_id,
+        expected=expected_status,
+        status=RunStatus.FAILED,
+        reason=RunTerminalReason.CLAIM_LOST,
+    )
+    store.append_event(
+        run_id,
+        "task.claim.lost",
+        {
+            "claim_digest": digest(claim),
+            "ownership_ref": claim.ownership_ref,
+            "ownership_sha": claim.ownership_sha,
+        },
+    )
+    raise ClaimConflictError(
+        f"Task claim ownership was lost before run {run_id} could continue."
+    )
+
+
 def _quota_monitor(project_root: Path, task) -> QuotaCheckpointMonitor:
     config = load_project_config(project_root)
     return QuotaCheckpointMonitor(
@@ -825,6 +876,13 @@ def start_prepared_run(project_root: Path, run_id: str) -> StartedRun:
             )
             raise RunStoreError("Stored worker strategy resolution differs from ExecutionPlan.")
 
+        _validate_durable_task_claim(
+            root,
+            store=store,
+            run_id=run_id,
+            expected_status=RunStatus.CLAIMED,
+        )
+
         manager = WorktreeManager(root)
         expected_worktree = manager.path_for(record.worktree_id)
         actual_worktree = Path(record.worktree_path).resolve()
@@ -1003,6 +1061,12 @@ def resume_checkpointed_run(project_root: Path, run_id: str) -> StartedRun:
             )
 
         plan = _load_json_model(run_dir / "execution-plan.json", ExecutionPlan)
+        _validate_durable_task_claim(
+            root,
+            store=store,
+            run_id=run_id,
+            expected_status=RunStatus.RUNNING,
+        )
         if digest(plan) != record.execution_plan_digest:
             _mark_start_failure(
                 store,
