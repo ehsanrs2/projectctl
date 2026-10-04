@@ -243,7 +243,7 @@ def test_recovery_finishes_crash_after_fast_forward(tmp_path: Path, monkeypatch)
     repo, worktree, base, candidate, target, run_id = setup_ready_run(tmp_path, monkeypatch)
     writer = FakeCompletionWriter()
     monkeypatch.setattr(
-        "projectctl.application.recovery._completion_writer",
+        "projectctl.application.integration._completion_writer",
         lambda root: writer,
     )
     store = RunStore(repo)
@@ -256,7 +256,7 @@ def test_recovery_finishes_crash_after_fast_forward(tmp_path: Path, monkeypatch)
 
     action = recover_run(repo, run_id)
 
-    assert action.action == "finalized_integration"
+    assert action.action == "finalized_delivery"
     assert RunStore(repo).get(run_id).status == RunStatus.PASSED
     assert writer.completed
     assert not worktree.exists()
