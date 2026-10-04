@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Establish concurrency-safe GitHub task claim/release ownership while keeping remote completion fail-closed until publication semantics exist.
+current_goal: Make GitHub task completion depend on durable remote publication evidence without overwriting concurrent human workflow intent.
 active_milestone:
-  id: M3.0b2
-  title: GitHub Remote Claim Protocol
+  id: M3.0c
+  title: Remote Publication & GitHub Completion
   aliases:
-    - GitHub Remote Claim
-    - Remote Ref Lease
-    - Claim Ownership
+    - Remote Publication
+    - Publication-gated Completion
+    - GitHub Delivery
 updated_at: null

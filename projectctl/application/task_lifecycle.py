@@ -8,7 +8,10 @@ from projectctl.application.claims import (
 )
 from projectctl.core.digest import digest
 from projectctl.core.enums import RunStatus, RunTerminalReason
-from projectctl.integrations.task_authority import resolve_task_authority
+from projectctl.integrations.task_authority import (
+    resolve_task_authority,
+    task_delivery_policy,
+)
 from projectctl.storage.runs import RunStore
 
 
@@ -110,6 +113,14 @@ def reconcile_terminal_task(
                 record.task_id,
                 reason=reason,
             )
+            policy = task_delivery_policy(project_root)
+            if policy.release_claim_after_decision_block:
+                release_task_for_retry(
+                    project_root,
+                    store=store,
+                    run_id=run_id,
+                    actor=actor,
+                )
             action = "blocked"
         else:
             return record

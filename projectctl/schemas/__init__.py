@@ -11,6 +11,11 @@ from projectctl.schemas.capabilities import (
     WorkerStrategyDecision,
 )
 from projectctl.schemas.config import ProjectConfig, ProjectConfigV1
+from projectctl.schemas.delivery import (
+    PublicationManifest,
+    PublicationRequest,
+    TaskDeliveryPolicy,
+)
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
 from projectctl.schemas.execution import (
     ClaimResult,
@@ -27,7 +32,12 @@ from projectctl.schemas.execution import (
     WorkerOutputPayload,
 )
 from projectctl.schemas.health import HealthCheckResult, HealthReport
-from projectctl.schemas.integration import IntegrationManifest, RecoveryAction, RecoveryReport
+from projectctl.schemas.integration import (
+    IntegrationManifest,
+    IntegrationManifestV1,
+    RecoveryAction,
+    RecoveryReport,
+)
 from projectctl.schemas.onboarding import (
     AdoptionManifest,
     AdoptionManifestV1,
@@ -82,6 +92,7 @@ __all__ = [
     "HealthCheckResult",
     "HealthReport",
     "IntegrationManifest",
+    "IntegrationManifestV1",
     "MilestoneState",
     "NormalizedTask",
     "PermissionCapabilities",
@@ -100,7 +111,10 @@ __all__ = [
     "RunManifestV1",
     "SchedulerDecision",
     "SchedulerDecisionV1",
+    "PublicationManifest",
+    "PublicationRequest",
     "TaskAuthorityCapabilities",
+    "TaskDeliveryPolicy",
     "TaskClaim",
     "TaskClaimRequest",
     "TaskCounts",

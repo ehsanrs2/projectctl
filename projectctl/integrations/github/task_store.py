@@ -35,6 +35,7 @@ _LIFECYCLE = {
     "projectctl:running": TaskStatus.RUNNING,
     "projectctl:blocked": TaskStatus.BLOCKED,
     "projectctl:needs-decision": TaskStatus.NEEDS_DECISION,
+    "projectctl:completed": TaskStatus.DONE,
 }
 
 

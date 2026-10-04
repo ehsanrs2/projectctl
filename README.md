@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M3.0b2 — GitHub Remote Claim Protocol**, adding concurrency-safe remote GitHub task claim/release ownership while keeping publication and task completion fail-closed.
+This repository currently implements **M3.0c — Remote Publication & GitHub Completion**, making GitHub completion depend on durable proof that the exact verified candidate is visible on the configured remote target.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -142,7 +142,7 @@ Exactly one execution-state authority should be configured per project.
 
 Beads is currently a full execution-capable task authority.
 
-GitHub Issues is a real read/scheduling authority, but remote lifecycle mutation remains fail-closed until the later M3 claim/publication milestones are implemented.
+GitHub Issues now implements the current full task lifecycle under ProjectCTL's direct-publication policy: read, claim/release, decision blocking, publication-gated completion, and recovery. Repositories that require PR-only delivery remain fail-closed until an explicit PR publication mode is implemented.
 
 Inspect the configured adapter capability surface with:
 
@@ -865,3 +865,62 @@ Repository rules or insufficient Git write permission may intentionally reject c
 deletion; ProjectCTL does not bypass those policies.
 
 See ADR-013 and `docs/PROJECTCTL_BLUEPRINT.md` for the full protocol and scope boundary.
+
+
+## M3.0c — Remote Publication & GitHub Completion
+
+M3.0c makes team-visible delivery a first-class requirement for remote task authorities.
+
+For GitHub, the delivery sequence is:
+
+```text
+verified candidate
+    ↓
+local fast-forward integration
+    ↓
+durable PublicationRequest
+    ↓
+exact-base remote publication
+    ↓
+remote candidate observation
+    ↓
+durable PublicationManifest
+    ↓
+additive projectctl:completed marker
+    ↓
+exact claim release
+    ↓
+PASSED
+```
+
+Publication uses the exact verified base as the lease expectation:
+
+```text
+git push --force-with-lease=<target-ref>:<base-commit> \
+  origin <candidate-commit>:<target-ref>
+```
+
+ProjectCTL never treats a successful local integration as sufficient proof of remote delivery.
+
+GitHub completion is additive rather than a blind native Issue close. ProjectCTL uses:
+
+```text
+projectctl:completed
+projectctl:needs-decision
+```
+
+and preserves native GitHub close reasons as higher-authority human/external workflow state.
+
+The GitHub completion adapter independently validates the referenced `PublicationManifest`,
+its digest, `published=true`, and exact remote candidate identity before it can add
+`projectctl:completed`.
+
+After completion, claim cleanup cannot rewrite the task back to needs-decision. An exact-claim
+ownership conflict is recorded as a control-plane cleanup anomaly while the already proven
+delivery/task completion remains authoritative.
+
+Repositories that reject direct target-branch publication because of branch protection, rulesets,
+or required pull requests remain fail-closed. M3.0c does not bypass those policies and does not
+create/merge PRs automatically.
+
+See ADR-014 and `docs/PROJECTCTL_BLUEPRINT.md`.

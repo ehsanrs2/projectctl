@@ -5,9 +5,10 @@ from projectctl.schemas.artifact import ArtifactMetadata
 from projectctl.schemas.auto import AutoRunPolicy, AutoRunReport
 from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDecision
 from projectctl.schemas.config import ProjectConfig, ProjectConfigV1
+from projectctl.schemas.delivery import PublicationManifest, PublicationRequest, TaskDeliveryPolicy
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
 from projectctl.schemas.execution import (ExecutionPlan, ExecutionPlanV1, WorkerCheckpoint, WorkerCheckpointV1, WorkerRequest, WorkerRequestV1, WorkerResult)
-from projectctl.schemas.integration import IntegrationManifest, RecoveryReport
+from projectctl.schemas.integration import IntegrationManifest, IntegrationManifestV1, RecoveryReport
 from projectctl.schemas.onboarding import (
     AdoptionManifest,
     AdoptionManifestV1,
@@ -35,6 +36,9 @@ PUBLIC_SCHEMAS = {
     "quota-snapshot.v2.schema.json": QuotaSnapshot,
     "task-snapshot.v1.schema.json": TaskSnapshot,
     "task-authority-capabilities.v1.schema.json": TaskAuthorityCapabilities,
+    "task-delivery-policy.v1.schema.json": TaskDeliveryPolicy,
+    "publication-request.v1.schema.json": PublicationRequest,
+    "publication-manifest.v1.schema.json": PublicationManifest,
     "task-claim-request.v1.schema.json": TaskClaimRequest,
     "task-claim.v1.schema.json": TaskClaim,
     "scheduler-decision.v1.schema.json": SchedulerDecisionV1,
@@ -60,7 +64,8 @@ PUBLIC_SCHEMAS = {
     "artifact-metadata.v1.schema.json": ArtifactMetadata,
     "auto-run-policy.v1.schema.json": AutoRunPolicy,
     "auto-run-report.v1.schema.json": AutoRunReport,
-    "integration-manifest.v1.schema.json": IntegrationManifest,
+    "integration-manifest.v1.schema.json": IntegrationManifestV1,
+    "integration-manifest.v2.schema.json": IntegrationManifest,
     "recovery-report.v1.schema.json": RecoveryReport,
     "project-inspection.v1.schema.json": ProjectInspectionV1,
     "project-inspection.v2.schema.json": ProjectInspection,

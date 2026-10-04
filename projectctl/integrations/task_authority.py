@@ -10,23 +10,29 @@ from projectctl.integrations.beads.client import BeadsClient
 from projectctl.integrations.beads.completion import BeadsTaskCompletionWriter
 from projectctl.integrations.beads.task_store import BeadsTaskStore
 from projectctl.integrations.github.claim import GitHubTaskClaimer
+from projectctl.git.publication import GitRemotePublisher
 from projectctl.integrations.github.client import GitHubIssuesClient
+from projectctl.integrations.github.completion import GitHubTaskCompletionWriter
 from projectctl.integrations.github.task_store import GitHubIssuesTaskStore
+from projectctl.ports.publication import TaskPublisher
 from projectctl.ports.task_store import (
     TaskClaimer,
     TaskCompletionWriter,
     TaskStoreReader,
 )
 from projectctl.project.loader import load_project_config
+from projectctl.schemas.delivery import TaskDeliveryPolicy
 from projectctl.schemas.task_authority import TaskAuthorityCapabilities
 
 
 @dataclass(frozen=True)
 class TaskAuthority:
     capabilities: TaskAuthorityCapabilities
+    delivery_policy: TaskDeliveryPolicy
     reader: TaskStoreReader
     claimer: TaskClaimer | None = None
     completion_writer: TaskCompletionWriter | None = None
+    publisher: TaskPublisher | None = None
 
     @property
     def provider(self) -> str:
@@ -55,6 +61,17 @@ class TaskAuthority:
                 "block/complete lifecycle writes."
             )
         return self.completion_writer
+
+    def require_publisher(self) -> TaskPublisher:
+        if not self.delivery_policy.publication_required:
+            raise ConfigurationError(
+                f"Task authority {self.provider!r} does not require remote publication."
+            )
+        if self.publisher is None:
+            raise ConfigurationError(
+                f"Task authority {self.provider!r} requires publication but has no publisher."
+            )
+        return self.publisher
 
     def require_execution_ready(self) -> None:
         required = {
@@ -96,17 +113,43 @@ def task_authority_capabilities_for_provider(
             read=CapabilityState.SUPPORTED,
             claim=CapabilityState.SUPPORTED,
             release=CapabilityState.SUPPORTED,
-            block_for_decision=CapabilityState.UNSUPPORTED,
-            complete=CapabilityState.UNSUPPORTED,
+            block_for_decision=CapabilityState.SUPPORTED,
+            complete=CapabilityState.SUPPORTED,
             notes=[
-                "M3.0b2 provides a CAS-style remote Git ref claim/release protocol.",
-                "GitHub execution remains fail-closed until decision blocking and "
-                "publication-aware completion are implemented.",
+                "M3.0c adds additive GitHub decision/completion labels.",
+                "Completion is gated on verified remote publication.",
             ],
         )
     raise ConfigurationError(
         f"Task authority provider {provider!r} is not implemented."
     )
+
+
+def task_delivery_policy_for_provider(provider: str) -> TaskDeliveryPolicy:
+    if provider == "beads":
+        return TaskDeliveryPolicy(
+            provider="beads",
+            publication_required=False,
+            remote_name=None,
+            release_claim_after_completion=False,
+            release_claim_after_decision_block=False,
+        )
+    if provider == "github":
+        return TaskDeliveryPolicy(
+            provider="github",
+            publication_required=True,
+            remote_name="origin",
+            release_claim_after_completion=True,
+            release_claim_after_decision_block=True,
+        )
+    raise ConfigurationError(
+        f"Task authority provider {provider!r} is not implemented."
+    )
+
+
+def task_delivery_policy(project_root: Path) -> TaskDeliveryPolicy:
+    provider = load_project_config(project_root.resolve()).task_store.provider
+    return task_delivery_policy_for_provider(provider)
 
 
 def task_authority_capabilities(project_root: Path) -> TaskAuthorityCapabilities:
@@ -139,11 +182,13 @@ def resolve_task_authority(project_root: Path) -> TaskAuthority:
     config = load_project_config(root)
     provider = config.task_store.provider
     capabilities = task_authority_capabilities_for_provider(provider)
+    delivery_policy = task_delivery_policy_for_provider(provider)
 
     if provider == "beads":
         client = BeadsClient(root)
         return TaskAuthority(
             capabilities=capabilities,
+            delivery_policy=delivery_policy,
             reader=BeadsTaskStore(root, client=client),
             claimer=BeadsTaskClaimer(root, client=client),
             completion_writer=BeadsTaskCompletionWriter(root, client=client),
@@ -161,6 +206,7 @@ def resolve_task_authority(project_root: Path) -> TaskAuthority:
             )
         return TaskAuthority(
             capabilities=capabilities,
+            delivery_policy=delivery_policy,
             reader=GitHubIssuesTaskStore(
                 root,
                 repository=repository,
@@ -169,6 +215,16 @@ def resolve_task_authority(project_root: Path) -> TaskAuthority:
             claimer=GitHubTaskClaimer(
                 root,
                 repository=repository,
+            ),
+            completion_writer=GitHubTaskCompletionWriter(
+                root,
+                repository=repository,
+                client=client,
+            ),
+            publisher=GitRemotePublisher(
+                root,
+                repository=repository,
+                remote_name=delivery_policy.remote_name or "origin",
             ),
         )
 

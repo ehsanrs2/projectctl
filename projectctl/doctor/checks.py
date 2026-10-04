@@ -186,14 +186,15 @@ def check_task_store(root: Path) -> HealthCheckResult:
             check_id="task_store",
             status=HealthStatus.WARN,
             summary=(
-                f"GitHub Issues and claim transport are readable for {full_name}; "
-                "remote completion is still disabled."
+                f"GitHub task authority is readable and adapter-complete for {full_name}; "
+                "remote write policy is verified only during real claim/publication."
             ),
             details=[
                 "Scheduling/status reads are enabled.",
-                "M3.0b2 claim/release uses an exact remote Git ref lease.",
-                "Write permission and repository rules are proven only by an actual claim attempt.",
-                "GitHub-backed execution remains disabled until block/complete publication semantics exist.",
+                "Claim/release uses an exact remote Git ref lease.",
+                "M3.0c gates completion on exact-base remote publication.",
+                "Completion/needs-decision mutations are additive ProjectCTL labels and do not overwrite native issue close reasons.",
+                "Git write permission and repository rules are proven only by actual claim/publication attempts.",
             ],
         )
 

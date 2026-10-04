@@ -17,9 +17,8 @@ from projectctl.application.execution import (
     _worktree_state_digest,
 )
 from projectctl.application.integration import (
-    _atomic_json,
     _cleanup_verified_worktree,
-    _completion_writer,
+    _finalize_delivery,
     _load_json_model,
 )
 from projectctl.application.task_lifecycle import reconcile_terminal_task
@@ -574,46 +573,24 @@ def recover_run(project_root: Path, run_id: str) -> RecoveryAction:
                 )
 
             if target == record.candidate_commit:
-                evidence_ref = EvidenceReference(
-                    path=f".projectctl/runs/{run_id}/evidence-manifest.json",
-                    digest=digest(evidence),
+                integrated = _finalize_delivery(
+                    root,
+                    store=store,
+                    record=record,
+                    plan=plan,
+                    evidence=evidence,
+                    target_before=plan.base_commit,
+                    actor=actor,
                 )
-                _completion_writer(root).complete(record.task_id, evidence=evidence_ref)
-                manifest_path = run_dir / "integration-manifest.json"
-                if manifest_path.exists():
-                    manifest = _load_json_model(manifest_path, IntegrationManifest)
-                else:
-                    manifest = IntegrationManifest(
-                        run_id=run_id,
-                        task_id=record.task_id,
-                        target_ref=plan.integration_target_ref,
-                        base_commit=plan.base_commit,
-                        candidate_commit=record.candidate_commit,
-                        target_before=plan.base_commit,
-                        target_after=record.candidate_commit,
-                        evidence_manifest=evidence_ref.path,
-                        evidence_digest=evidence_ref.digest,
-                        task_completed=True,
-                        worktree_cleaned=False,
-                        integrated_at=utc_now(),
-                    )
-                    _atomic_json(manifest_path, manifest)
-                final = store.transition(
-                    run_id,
-                    expected={RunStatus.INTEGRATING},
-                    status=RunStatus.PASSED,
-                    candidate_commit=record.candidate_commit,
+                details.append(
+                    "Integrated Git state reconciled; publication/task completion "
+                    "requirements and cleanup were finalized."
                 )
-                cleaned = _cleanup_verified_worktree(root, record=final, store=store)
-                if cleaned and not manifest.worktree_cleaned:
-                    manifest = manifest.model_copy(update={"worktree_cleaned": True})
-                    _atomic_json(manifest_path, manifest)
-                details.append("Integrated Git state reconciled; task completion and cleanup finalized.")
                 return RecoveryAction(
                     run_id=run_id,
                     previous_status=previous.value,
-                    resolved_status=RunStatus.PASSED.value,
-                    action="finalized_integration",
+                    resolved_status=integrated.record.status.value,
+                    action="finalized_delivery",
                     details=details,
                 )
 

@@ -7,7 +7,6 @@ from typer.testing import CliRunner
 
 from projectctl.cli.app import app
 from projectctl.core.enums import CapabilityState
-from projectctl.core.errors import ConfigurationError
 from projectctl.integrations.task_authority import (
     require_task_authority_execution_ready,
     task_authority_capabilities,
@@ -44,11 +43,11 @@ def test_static_capabilities_do_not_require_provider_runtime(tmp_path: Path):
     assert capabilities.read == CapabilityState.SUPPORTED
     assert capabilities.claim == CapabilityState.SUPPORTED
     assert capabilities.release == CapabilityState.SUPPORTED
-    assert capabilities.block_for_decision == CapabilityState.UNSUPPORTED
-    assert capabilities.complete == CapabilityState.UNSUPPORTED
+    assert capabilities.block_for_decision == CapabilityState.SUPPORTED
+    assert capabilities.complete == CapabilityState.SUPPORTED
 
 
-def test_beads_is_execution_ready_and_github_is_not(tmp_path: Path):
+def test_beads_and_github_are_execution_ready_after_m30c(tmp_path: Path):
     beads = task_authority_capabilities_for_provider("beads")
     assert all(
         getattr(beads, field) == CapabilityState.SUPPORTED
@@ -62,8 +61,7 @@ def test_beads_is_execution_ready_and_github_is_not(tmp_path: Path):
     )
 
     write_config(tmp_path, "github", "acme/widget")
-    with pytest.raises(ConfigurationError, match="not execution-ready"):
-        require_task_authority_execution_ready(tmp_path)
+    require_task_authority_execution_ready(tmp_path)
 
 
 def test_task_authority_cli_is_machine_readable_without_provider_probe(tmp_path: Path):
@@ -80,7 +78,7 @@ def test_task_authority_cli_is_machine_readable_without_provider_probe(tmp_path:
     assert payload["provider"] == "github"
     assert payload["claim"] == "supported"
     assert payload["release"] == "supported"
-    assert payload["complete"] == "unsupported"
+    assert payload["complete"] == "supported"
 
 
 def test_task_authority_capability_schema_is_public():

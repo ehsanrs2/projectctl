@@ -1,16 +1,14 @@
 import subprocess
 from pathlib import Path
 
-import pytest
 import yaml
 
-from projectctl.application.execution import prepare_next_run
-from projectctl.core.errors import ConfigurationError
+from projectctl.integrations.task_authority import require_task_authority_execution_ready
 from projectctl.project.bootstrap import initialize_project
 from projectctl.project.loader import load_project_config
 
 
-def test_github_reader_cannot_prepare_execution_run(tmp_path: Path, monkeypatch):
+def test_github_execution_gate_is_open_after_publication_lifecycle_support(tmp_path: Path, monkeypatch):
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
@@ -24,8 +22,10 @@ def test_github_reader_cannot_prepare_execution_run(tmp_path: Path, monkeypatch)
     raw["task_store"] = {"provider": "github", "repository": "acme/widget"}
     config_path.write_text(yaml.safe_dump(raw, sort_keys=False))
 
-    with pytest.raises(ConfigurationError, match="not execution-ready"):
-        prepare_next_run(repo)
+    require_task_authority_execution_ready(repo)
 
+    # Static adapter readiness must not require invoking GitHub CLI or creating
+    # run state. Runtime/provider health is checked separately by doctor and
+    # during the actual claim/publication operations.
     runs_dir = repo / ".projectctl" / "runs"
     assert list(runs_dir.iterdir()) == []
