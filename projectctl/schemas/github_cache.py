@@ -51,6 +51,27 @@ class GitHubCacheRequest(ProjectCtlModel):
         return self
 
 
+def github_cache_integrity_digest(
+    *,
+    request_fingerprint: str,
+    payload_digest: str,
+    observed_at: AwareDatetime,
+    validated_at: AwareDatetime,
+    etag: str | None,
+    last_modified: str | None,
+) -> str:
+    return digest(
+        {
+            "request_fingerprint": request_fingerprint,
+            "payload_digest": payload_digest,
+            "observed_at": observed_at.isoformat(),
+            "validated_at": validated_at.isoformat(),
+            "etag": etag,
+            "last_modified": last_modified,
+        }
+    )
+
+
 class GitHubCacheEntry(ProjectCtlModel):
     schema_kind: Literal["projectctl.github_cache_entry"] = (
         "projectctl.github_cache_entry"
@@ -61,6 +82,7 @@ class GitHubCacheEntry(ProjectCtlModel):
     request_fingerprint: str
     payload: dict[str, Any] | list[Any]
     payload_digest: str
+    integrity_digest: str
     observed_at: AwareDatetime
     validated_at: AwareDatetime
     etag: str | None = None
@@ -81,4 +103,14 @@ class GitHubCacheEntry(ProjectCtlModel):
             raise ValueError("GitHub cache payload digest does not match payload.")
         if self.validated_at < self.observed_at:
             raise ValueError("GitHub cache validated_at cannot precede observed_at.")
+        expected_integrity = github_cache_integrity_digest(
+            request_fingerprint=self.request_fingerprint,
+            payload_digest=self.payload_digest,
+            observed_at=self.observed_at,
+            validated_at=self.validated_at,
+            etag=self.etag,
+            last_modified=self.last_modified,
+        )
+        if self.integrity_digest != expected_integrity:
+            raise ValueError("GitHub cache integrity digest does not match provenance.")
         return self
