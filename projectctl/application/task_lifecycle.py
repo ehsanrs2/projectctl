@@ -2,16 +2,30 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from projectctl.application.claims import (
+    load_durable_claim,
+    record_claim_release,
+)
 from projectctl.core.enums import RunStatus, RunTerminalReason
 from projectctl.integrations.task_authority import resolve_task_authority
 from projectctl.storage.runs import RunStore
 
 
-def release_task_for_retry(project_root: Path, task_id: str, *, actor: str) -> None:
-    resolve_task_authority(project_root).require_claimer().release(
-        task_id,
-        actor=actor,
+def release_task_for_retry(
+    project_root: Path,
+    *,
+    store: RunStore,
+    run_id: str,
+    actor: str,
+) -> None:
+    del actor
+    _, claim = load_durable_claim(
+        project_root,
+        store=store,
+        run_id=run_id,
     )
+    resolve_task_authority(project_root).require_claimer().release(claim)
+    record_claim_release(store, claim)
 
 
 def block_task_for_decision(project_root: Path, task_id: str, *, reason: str) -> None:
@@ -46,7 +60,8 @@ def reconcile_terminal_task(
         }:
             release_task_for_retry(
                 project_root,
-                record.task_id,
+                store=store,
+                run_id=run_id,
                 actor=actor,
             )
             action = "released"
