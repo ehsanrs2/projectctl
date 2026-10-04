@@ -11,6 +11,7 @@ from typing import Any
 
 from projectctl.core.digest import digest
 from projectctl.core.errors import TaskStoreError, UnsafePathError
+from projectctl.integrations.github.client import GITHUB_ACCEPT, GITHUB_API_VERSION
 from projectctl.schemas.github_cache import GitHubCacheEntry, GitHubCacheRequest
 
 
@@ -24,6 +25,23 @@ class GitHubCacheLookup:
     entry: GitHubCacheEntry
     freshness: GitHubCacheFreshness
     age_seconds: float
+
+
+def github_cache_request(
+    *,
+    repository: str,
+    endpoint: str,
+    paginated: bool = False,
+    slurp: bool = False,
+) -> GitHubCacheRequest:
+    return GitHubCacheRequest(
+        repository=repository,
+        endpoint=endpoint,
+        api_version=GITHUB_API_VERSION,
+        accept=GITHUB_ACCEPT,
+        paginated=paginated,
+        slurp=slurp,
+    )
 
 
 def cache_request_fingerprint(request: GitHubCacheRequest) -> str:
