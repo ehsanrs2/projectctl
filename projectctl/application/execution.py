@@ -401,6 +401,33 @@ def prepare_next_run(
                 claim.reason or f"Task {plan.task_id} could not be claimed."
             )
 
+        # Close the distributed race between the pre-claim snapshot check and
+        # provider ownership acquisition. Human/task/quota/Git inputs may have
+        # changed while the remote claim was being acquired.
+        stale_after_claim = _validate_plan_inputs(root, plan)
+        if stale_after_claim is not None:
+            release_ok = True
+            try:
+                claimer.release(claim)
+                record_claim_release(store, claim)
+            except Exception:
+                release_ok = False
+            store.transition(
+                run_id,
+                expected={RunStatus.PREPARING},
+                status=RunStatus.FAILED if release_ok else RunStatus.NEEDS_DECISION,
+                terminal_reason=(
+                    stale_after_claim
+                    if release_ok
+                    else RunTerminalReason.RECOVERY_UNSAFE
+                ),
+            )
+            store.release_lease(run_id, owner=actor)
+            raise StaleSnapshotError(
+                "Execution inputs changed after task claim acquisition: "
+                f"{stale_after_claim.value}"
+            )
+
         try:
             # Keep PREPARING until both remote ownership and the isolated
             # workspace exist. A crash can then be reconciled deterministically.
