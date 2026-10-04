@@ -177,8 +177,8 @@ class LinearIssuesClient:
         return team
 
     def list_all(self, *, page_size: int = 50) -> list[dict[str, Any]]:
-        if page_size <= 0 or page_size > 250:
-            raise ValueError("Linear page_size must be between 1 and 250.")
+        if page_size <= 0:
+            raise ValueError("Linear page_size must be positive.")
 
         after: str | None = None
         issues: list[dict[str, Any]] = []
