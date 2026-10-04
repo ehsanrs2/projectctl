@@ -11,6 +11,11 @@ from projectctl.schemas.capabilities import (
     WorkerStrategyDecision,
 )
 from projectctl.schemas.config import ProjectConfig, ProjectConfigV1
+from projectctl.schemas.delivery import (
+    PublicationManifest,
+    PublicationRequest,
+    TaskDeliveryPolicy,
+)
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
 from projectctl.schemas.execution import (
     ClaimResult,
@@ -100,7 +105,10 @@ __all__ = [
     "RunManifestV1",
     "SchedulerDecision",
     "SchedulerDecisionV1",
+    "PublicationManifest",
+    "PublicationRequest",
     "TaskAuthorityCapabilities",
+    "TaskDeliveryPolicy",
     "TaskClaim",
     "TaskClaimRequest",
     "TaskCounts",
