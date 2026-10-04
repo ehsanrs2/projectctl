@@ -484,6 +484,17 @@ Implemented:
 - explicit execution fail-closed boundary
 - additive config/onboarding schema versioning
 
+### M3.0b1 — provider-neutral task authority boundary
+
+Implemented by the current change:
+
+- TaskAuthorityCapabilities v1
+- one Task Authority resolver
+- provider-neutral application task reads/claims/lifecycle completion access
+- static adapter capability inspection
+- CLI capability inspection
+- architecture guard preventing direct task-provider imports in application services
+
 ---
 
 ## 9. Architecture review findings — 2026-10-04
@@ -581,7 +592,7 @@ architecture sequence.
 
 ### M3.0b1 — Task Authority Capability & Resolver Layer
 
-**Next milestone.**
+**Current milestone / implemented by this change.**
 
 Goal: remove provider-specific task lifecycle logic from the application layer before adding more
 remote writes.
@@ -597,6 +608,8 @@ Deliverables:
 - no GitHub remote mutation yet
 
 ### M3.0b2 — GitHub Remote Claim Protocol
+
+**Next milestone after M3.0b1.**
 
 Goal: establish a concurrency-safe ownership primitive before creating a GitHub-backed run.
 
