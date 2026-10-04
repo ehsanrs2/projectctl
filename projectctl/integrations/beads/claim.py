@@ -43,7 +43,7 @@ class BeadsTaskClaimer:
                 )
             raise exc
 
-        assignee = str(raw.get("assignee") or actor)
+        assignee = str(raw.get("assignee") or request.actor)
         return TaskClaim(
             provider="beads",
             task_id=task_id,
