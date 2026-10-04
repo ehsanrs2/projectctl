@@ -15,6 +15,7 @@ from projectctl.core.errors import (
 )
 from projectctl.doctor.service import run_doctor
 from projectctl.integrations.speckit import SpecKitBeadsImporter
+from projectctl.integrations.task_authority import task_authority_capabilities
 from projectctl.project.adoption import apply_adoption
 from projectctl.project.bootstrap import initialize_project
 from projectctl.project.loader import load_project_config
@@ -354,6 +355,46 @@ def doctor_command(
 
     if not report.healthy:
         raise typer.Exit(EXIT_REPOSITORY)
+
+
+@app.command("task-authority")
+def task_authority_command(
+    project: Path = typer.Option(
+        Path("."),
+        "--project",
+        exists=True,
+        file_okay=False,
+        resolve_path=True,
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit TaskAuthorityCapabilities JSON.",
+    ),
+) -> None:
+    try:
+        root = _project_root(project)
+        capabilities = task_authority_capabilities(root)
+    except ProjectCtlError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(EXIT_TASK_STORE)
+
+    if json_output:
+        typer.echo(_json(capabilities))
+        return
+
+    typer.echo(f"Task authority: {capabilities.provider}")
+    typer.echo("=" * 56)
+    for name in [
+        "read",
+        "claim",
+        "release",
+        "block_for_decision",
+        "complete",
+    ]:
+        typer.echo(f"{name:20} {getattr(capabilities, name).value}")
+    for note in capabilities.notes:
+        typer.echo(f"note: {note}")
 
 
 @app.command("tasks")
