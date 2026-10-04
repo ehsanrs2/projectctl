@@ -121,3 +121,35 @@ def test_milestone_due_date_is_semantic(tmp_path: Path):
     ).snapshot()
     assert a.source_revision != b.source_revision
     assert semantic_task_snapshot_digest(a) != semantic_task_snapshot_digest(b)
+
+
+def test_milestone_conflict_disables_scheduling_milestone_and_due_date(tmp_path: Path):
+    task = GitHubIssuesTaskStore(
+        tmp_path,
+        client=Client(
+            raw_issue(
+                milestone=native_milestone(),
+                labels=["milestone:Other"],
+            )
+        ),
+    ).list_all()[0]
+    assert task.status == TaskStatus.NEEDS_DECISION
+    assert task.milestone is None
+    assert task.due_at is None
+    assert task.team.milestone is not None
+    assert task.team.milestone.title == "M3.1"
+
+
+def test_malformed_assignee_metadata_is_observational_only(tmp_path: Path):
+    task = GitHubIssuesTaskStore(
+        tmp_path,
+        client=Client(
+            raw_issue(
+                assignees=[{"login": "alice"}, {}, 42],
+            )
+        ),
+    ).list_all()[0]
+    assert task.status == TaskStatus.READY
+    assert task.human_decision_required is False
+    assert task.team.assignees == ["alice"]
+    assert any("assignee metadata" in note for note in task.normalization_notes)
