@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M3.1b — GitHub Team Metadata**, exposing stable GitHub assignee, native issue-type, and milestone metadata while keeping ownership and custom-field scheduling semantics explicit.
+This repository currently implements **M3.1c1 — GitHub Derived Cache & Freshness Contract**, defining a disposable, integrity-checked local cache foundation before conditional GitHub reads are enabled.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -1031,3 +1031,69 @@ scheduling semantics yet. A field named Priority, Risk, DRI, or Due Date does no
 have ProjectCTL meaning. Those integrations require explicit binding/conflict policy.
 
 See ADR-016 and `docs/PROJECTCTL_BLUEPRINT.md`.
+
+
+## M3.1c1 — GitHub Derived Cache & Freshness Contract
+
+M3.1c1 defines the cache contract before ProjectCTL starts using cached GitHub responses.
+
+Derived entries live under:
+
+```text
+.projectctl/cache/github/v1/<owner>/<repository>/<request-fingerprint>.json
+```
+
+GitHub remains authoritative. Removing the cache may make the next refresh slower but must not
+change task semantics.
+
+Each cache request binds the exact REST representation:
+
+- repository and endpoint
+- GET method / github.com host
+- GitHub API version
+- Accept media type
+- pagination and slurp behavior
+
+GitHub GET requests are now explicitly pinned to:
+
+```text
+Accept: application/vnd.github+json
+X-GitHub-Api-Version: 2026-03-10
+```
+
+Each `GitHubCacheEntry v1` records payload/provenance including:
+
+```text
+request_fingerprint
+payload_digest
+integrity_digest
+observed_at
+validated_at
+etag
+last_modified
+```
+
+`observed_at` means the payload itself was fetched. `validated_at` means GitHub most recently
+confirmed that representation as current. This distinction is required so a later HTTP 304 can
+advance freshness without pretending the payload was downloaded again.
+
+Freshness is explicit:
+
+```text
+now - validated_at <= caller max age  -> fresh
+otherwise                             -> stale
+```
+
+File modification time is not freshness authority. Future timestamps, digest mismatches, request
+identity mismatches, cache-path escapes, and symlink entries fail closed.
+
+M3.1c1 deliberately **does not yet serve task snapshots from cache** and does not send
+`If-None-Match` / `If-Modified-Since`. Therefore this milestone establishes correctness and
+provenance but does not claim an API-call reduction yet.
+
+See ADR-017 and `docs/PROJECTCTL_BLUEPRINT.md`.
+
+Next:
+
+- **M3.1c2** — Conditional GitHub Reads / ETag revalidation
+- **M3.1c3** — Cache-backed snapshot assembly, freshness policy, telemetry and scale tests
