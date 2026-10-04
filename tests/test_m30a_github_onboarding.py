@@ -187,7 +187,7 @@ def test_doctor_reports_github_claim_transport_without_claiming(tmp_path: Path, 
     assert task_store["status"] == "warn"
     assert "adapter-complete" in task_store["summary"]
     assert any("publication" in detail for detail in task_store["details"])
-    assert "remote completion is still disabled" in task_store["summary"]
+    assert "remote write policy is verified only during real claim/publication" in task_store["summary"]
 
 
 def test_scheduler_can_select_normalized_github_issue(tmp_path: Path, monkeypatch):
