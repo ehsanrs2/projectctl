@@ -7,7 +7,7 @@ from projectctl.schema_export import PUBLIC_SCHEMAS
 from projectctl.scheduler.service import SchedulerService
 from projectctl.schemas.config import ProjectConfig, ProjectIdentity
 from projectctl.schemas.quota import QuotaSnapshot, QuotaWindow
-from projectctl.schemas.task import TaskSnapshot, TaskSnapshotV1
+from projectctl.schemas.task import TaskSnapshot, TaskSnapshotV1, TaskSnapshotV2
 
 
 def issue(number: int, *, state: str = "open", state_reason=None, repo="acme/widget"):
@@ -200,9 +200,11 @@ def test_missing_same_repo_dependency_fails_closed(tmp_path: Path):
 
 def test_task_snapshot_contract_is_additively_versioned():
     assert PUBLIC_SCHEMAS["task-snapshot.v1.schema.json"] is TaskSnapshotV1
-    assert PUBLIC_SCHEMAS["task-snapshot.v2.schema.json"] is TaskSnapshot
+    assert PUBLIC_SCHEMAS["task-snapshot.v2.schema.json"] is TaskSnapshotV2
+    assert PUBLIC_SCHEMAS["task-snapshot.v3.schema.json"] is TaskSnapshot
     assert TaskSnapshotV1.model_fields["schema_version"].default == 1
-    assert TaskSnapshot.model_fields["schema_version"].default == 2
+    assert TaskSnapshotV2.model_fields["schema_version"].default == 2
+    assert TaskSnapshot.model_fields["schema_version"].default == 3
 
 
 def scheduler_decision(store: GitHubIssuesTaskStore):
