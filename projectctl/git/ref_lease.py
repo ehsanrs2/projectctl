@@ -173,8 +173,17 @@ class RemoteRefLease:
             f":{ref}",
             check=False,
         )
+
+        # A successful push is the authoritative CAS result. Another runner may
+        # legitimately reacquire the now-free ref before our follow-up
+        # observation; that must not turn a successful release into a false
+        # ownership conflict.
+        if result.returncode == 0:
+            return
+
         current = self.observe(ref)
         if current is None:
+            # Idempotent release: the ref is already gone.
             return
         if current != ownership_sha:
             raise ClaimConflictError(
