@@ -8,6 +8,7 @@ import yaml
 from projectctl.application.claims import persist_claim, persist_claim_request
 from projectctl.application.integration import integrate_run
 from projectctl.core.digest import digest
+from projectctl.core.errors import ClaimConflictError
 from projectctl.core.enums import (
     ModelProfile,
     ReasoningLevel,
@@ -49,13 +50,16 @@ def git(repo: Path, *args: str) -> str:
 
 
 class FakeClaimer:
-    def __init__(self):
+    def __init__(self, *, release_conflict=False):
         self.released = []
+        self.release_conflict = release_conflict
 
     def validate(self, claim):
         return True
 
     def release(self, claim):
+        if self.release_conflict:
+            raise ClaimConflictError("claim replaced after completion")
         self.released.append(claim.task_id)
 
 
@@ -340,3 +344,45 @@ def test_github_delivery_completes_only_after_publication_and_releases_claim(
     assert result.manifest.claim_released is True
     assert result.manifest.task_completed is True
     assert git(repo, "rev-parse", result.manifest.target_ref) == candidate
+
+
+def test_post_completion_claim_conflict_does_not_rewrite_task_semantics(
+    tmp_path: Path, monkeypatch
+):
+    repo, run_id, candidate = setup_ready_run(tmp_path, monkeypatch)
+    claimer = FakeClaimer(release_conflict=True)
+    publisher = FakePublisher()
+    writer = FakeWriter(publisher)
+    authority = FakeAuthority(claimer, publisher)
+
+    monkeypatch.setattr(
+        "projectctl.application.integration.resolve_task_authority",
+        lambda root: authority,
+    )
+    monkeypatch.setattr(
+        "projectctl.application.integration.task_delivery_policy",
+        lambda root: authority.delivery_policy,
+    )
+    monkeypatch.setattr(
+        "projectctl.application.integration._completion_writer",
+        lambda root: writer,
+    )
+
+    result = integrate_run(repo, run_id)
+
+    assert result.record.status == RunStatus.PASSED
+    assert writer.completed
+    assert result.manifest.task_completed is True
+    assert result.manifest.claim_released is False
+    assert git(repo, "rev-parse", result.manifest.target_ref) == candidate
+
+    events = RunStore(repo).events(run_id)
+    assert any(
+        event.event_type == "task.claim.ownership_lost_after_completion"
+        for event in events
+    )
+    assert not any(
+        event.event_type == "task.reconciled"
+        and event.payload.get("action") == "blocked"
+        for event in events
+    )
