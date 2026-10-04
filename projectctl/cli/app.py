@@ -88,14 +88,21 @@ def _prompt_task_store(inspection) -> str:
     typer.echo("-" * 56)
     if "github" in inspection.detected_task_systems:
         typer.echo("  [1] Use existing GitHub Issues task system")
-        typer.echo("  [2] Introduce local Beads")
-        typer.echo("  [3] Configure later")
+        typer.echo("  [2] Use Linear (read-only in M3.2a)")
+        typer.echo("  [3] Introduce local Beads")
+        typer.echo("  [4] Configure later")
         choice = typer.prompt("Choose", default="1")
-        return {"1": "github", "2": "beads", "3": "unresolved"}.get(choice, "github")
+        return {
+            "1": "github",
+            "2": "linear",
+            "3": "beads",
+            "4": "unresolved",
+        }.get(choice, "github")
     typer.echo("  [1] Use local Beads")
-    typer.echo("  [2] Configure later")
+    typer.echo("  [2] Use Linear (read-only in M3.2a)")
+    typer.echo("  [3] Configure later")
     choice = typer.prompt("Choose", default="1")
-    return {"1": "beads", "2": "unresolved"}.get(choice, "beads")
+    return {"1": "beads", "2": "linear", "3": "unresolved"}.get(choice, "beads")
 
 
 def _validate_task_store_choice(value: str | None) -> str | None:
@@ -108,6 +115,13 @@ def _validate_task_store_choice(value: str | None) -> str | None:
         )
     return value
 
+
+
+
+def _prompt_task_store_team(provider: str | None, current: str | None) -> str | None:
+    if provider != "linear" or current is not None:
+        return current
+    return typer.prompt("Linear team UUID").strip()
 
 def _interaction_payload(status: str, *, inspection=None, plan=None, reason: str | None = None) -> dict:
     payload = {"status": status}
@@ -210,6 +224,11 @@ def init_command(
             selected_store = inspection.detected_task_systems[0]
         if selected_store is None and interactive:
             selected_store = _prompt_task_store(inspection)
+        if interactive:
+            task_store_team = _prompt_task_store_team(
+                selected_store,
+                task_store_team,
+            )
 
         plan = build_adoption_plan(
             path,
@@ -288,6 +307,11 @@ def adopt_command(
             selected_store = inspection.detected_task_systems[0]
         if selected_store is None and interactive and not dry_run:
             selected_store = _prompt_task_store(inspection)
+        if interactive and not dry_run:
+            task_store_team = _prompt_task_store_team(
+                selected_store,
+                task_store_team,
+            )
         plan = build_adoption_plan(
             path,
             task_store_provider=selected_store,
@@ -307,6 +331,10 @@ def adopt_command(
                 typer.echo(_json(_interaction_payload("interaction_required", inspection=inspection, plan=plan, reason="unresolved decisions")))
                 raise typer.Exit(EXIT_INTERACTION_REQUIRED)
             selected_store = _prompt_task_store(inspection)
+            task_store_team = _prompt_task_store_team(
+                selected_store,
+                task_store_team,
+            )
             plan = build_adoption_plan(
                 path,
                 task_store_provider=selected_store,
