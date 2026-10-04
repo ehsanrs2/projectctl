@@ -204,3 +204,23 @@ def test_cache_parent_symlink_escape_is_rejected(tmp_path: Path):
 def test_cache_contracts_are_public():
     assert PUBLIC_SCHEMAS["github-cache-request.v1.schema.json"] is GitHubCacheRequest
     assert PUBLIC_SCHEMAS["github-cache-entry.v1.schema.json"] is GitHubCacheEntry
+
+
+def test_tampered_validation_time_fails_integrity_check(tmp_path: Path):
+    cache = GitHubDerivedCache(tmp_path)
+    req = request()
+    cache.store(
+        req,
+        [{"number": 1}],
+        observed_at=NOW,
+        validated_at=NOW,
+        etag='"v1"',
+    )
+
+    path = cache.entry_path(req)
+    raw = json.loads(path.read_text())
+    raw["validated_at"] = (NOW + timedelta(days=30)).isoformat()
+    path.write_text(json.dumps(raw))
+
+    with pytest.raises(TaskStoreError, match="integrity digest"):
+        cache.load(req)
