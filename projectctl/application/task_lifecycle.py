@@ -44,6 +44,17 @@ def release_task_for_retry(
             {"claim_digest": digest(claim)},
         )
         return
+    if not claimer.validate(claim):
+        store.append_event(
+            run_id,
+            "task.claim.ownership_lost",
+            {
+                "claim_digest": digest(claim),
+                "ownership_ref": claim.ownership_ref,
+                "ownership_sha": claim.ownership_sha,
+            },
+        )
+        return
     claimer.release(claim)
     record_claim_release(store, claim)
 
