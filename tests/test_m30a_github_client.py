@@ -33,24 +33,20 @@ if args[:5] == ["api", "--hostname", "github.com", "--method", "GET"]:
         included({"full_name": "acme/widget"}, etag='"repo-v1"')
         raise SystemExit(0)
     if endpoint == "repos/acme/widget/issues/7/dependencies/blocked_by?per_page=100":
-        print(json.dumps([[{"number": 6, "state": "open", "repository_url": "https://api.github.com/repos/acme/widget"}]]))
+        included([{"number": 6, "state": "open", "repository_url": "https://api.github.com/repos/acme/widget"}], etag='"blocked-v1"')
         raise SystemExit(0)
     if endpoint == "repos/acme/widget/issues/7/sub_issues?per_page=100":
-        print(json.dumps([[{"number": 9, "state": "open", "repository_url": "https://api.github.com/repos/acme/widget"}]]))
+        included([{"number": 9, "state": "open", "repository_url": "https://api.github.com/repos/acme/widget"}], etag='"sub-v1"')
         raise SystemExit(0)
     if endpoint == "repos/acme/widget/issues/7":
         included({"number": 7, "title": "Issue", "state": "open", "labels": []}, etag='"issue-7-v1"')
         raise SystemExit(0)
     if endpoint.startswith("repos/acme/widget/issues?"):
-        print(json.dumps([
-            [
-                {"number": 7, "title": "Issue", "state": "open", "labels": []},
-                {"number": 8, "title": "PR", "state": "open", "labels": [], "pull_request": {}}
-            ],
-            [
-                {"number": 9, "title": "Second page", "state": "closed", "labels": []}
-            ]
-        ]))
+        included([
+            {"number": 7, "title": "Issue", "state": "open", "labels": []},
+            {"number": 8, "title": "PR", "state": "open", "labels": [], "pull_request": {}},
+            {"number": 9, "title": "Second item", "state": "closed", "labels": []}
+        ], etag='"issues-v1"')
         raise SystemExit(0)
 print("unsupported: " + " ".join(args), file=sys.stderr)
 raise SystemExit(2)
