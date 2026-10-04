@@ -65,7 +65,9 @@ class CountingClient(GitHubIssuesClient):
         )
 
     def _execute(self, args, *, input_text=None):
-        endpoint = args[-1]
+        endpoint = next(
+            arg for arg in args if isinstance(arg, str) and arg.startswith("repos/")
+        )
         method = args[args.index("--method") + 1] if "--method" in args else "GET"
 
         if method == "POST" and endpoint.endswith("/labels"):
@@ -217,9 +219,9 @@ def test_successful_issue_mutation_invalidates_repository_cache(tmp_path: Path):
     updated = client.add_issue_labels(1, ["projectctl:completed"])
 
     assert {"name": "projectctl:completed"} in updated["labels"]
-    assert len(client.remote_calls) == calls_before + 2
-    # One remote GET is the pre-mutation show; after repository invalidation,
-    # the final show must also hit GitHub instead of reusing stale issue data.
+    assert len(client.remote_calls) == calls_before + 1
+    # The pre-mutation show may use the fresh cache, but after repository
+    # invalidation the final show must hit GitHub instead of reusing stale data.
     assert client.mutations == [
         ("repos/acme/widget/issues/1/labels", ["projectctl:completed"])
     ]
