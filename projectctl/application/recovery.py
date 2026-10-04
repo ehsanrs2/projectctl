@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from projectctl.application.claims import (
+    claim_ref,
+    load_durable_claim,
+    load_durable_claim_request,
+    persist_claim,
+)
 from projectctl.application.execution import (
     _actor,
     _checkpoint_event_matches,
@@ -20,7 +27,8 @@ from projectctl.core.digest import digest
 from projectctl.core.enums import RunStatus, RunTerminalReason, WorkerResultStatus
 from projectctl.core.errors import RecoveryError, RunLeaseError
 from projectctl.core.time import utc_now
-from projectctl.git import WorktreeManager, resolve_commit
+from projectctl.git import WorktreeManager, current_branch, resolve_commit
+from projectctl.integrations.task_authority import resolve_task_authority
 from projectctl.schemas.evidence import EvidenceManifest
 from projectctl.schemas.execution import (
     EvidenceReference,
@@ -43,6 +51,213 @@ def _active_lease(record) -> bool:
     )
 
 
+def _prepare_worktree_is_safe(
+    root: Path,
+    *,
+    record,
+    plan: ExecutionPlan,
+) -> bool:
+    manager = WorktreeManager(root)
+    expected = manager.path_for(record.worktree_id)
+    actual = Path(record.worktree_path).resolve()
+    if actual != expected or not actual.exists():
+        return False
+    try:
+        if current_branch(actual) != record.branch_name:
+            return False
+        if resolve_commit(actual, "HEAD") != plan.base_commit:
+            return False
+    except Exception:
+        return False
+    status = subprocess.run(
+        ["git", "-C", str(actual), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return status.returncode == 0 and not status.stdout.strip()
+
+
+def _recover_preparing(
+    root: Path,
+    *,
+    store: RunStore,
+    record,
+    previous: RunStatus,
+    actor: str,
+    run_dir: Path,
+) -> RecoveryAction:
+    details: list[str] = []
+    request = load_durable_claim_request(
+        root,
+        store=store,
+        run_id=record.run_id,
+        allow_missing=True,
+    )
+    if request is None:
+        details.append(
+            "No durable TaskClaimRequest exists; ownership cannot be reconstructed "
+            "without guessing whether this is a legacy partial prepare."
+        )
+        return RecoveryAction(
+            run_id=record.run_id,
+            previous_status=previous.value,
+            resolved_status=record.status.value,
+            action="prepare_recovery_required",
+            details=details,
+        )
+
+    plan = _load_json_model(run_dir / "execution-plan.json", ExecutionPlan)
+    if (
+        request.task_id != record.task_id
+        or request.base_commit != record.base_commit
+        or request.base_commit != plan.base_commit
+        or request.integration_target_ref != plan.integration_target_ref
+    ):
+        final = store.transition(
+            record.run_id,
+            expected={RunStatus.PREPARING},
+            status=RunStatus.NEEDS_DECISION,
+            terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
+        )
+        details.append("Task claim request does not match durable run/execution plan identity.")
+        return RecoveryAction(
+            run_id=record.run_id,
+            previous_status=previous.value,
+            resolved_status=final.status.value,
+            action="escalated_prepare_recovery",
+            details=details,
+        )
+
+    claim_path = root / claim_ref(record.run_id)
+    if claim_path.exists():
+        durable = load_durable_claim(
+            root,
+            store=store,
+            run_id=record.run_id,
+            require_acquired=False,
+        )
+        assert durable is not None
+        _, claim = durable
+    else:
+        claimer = resolve_task_authority(root).require_claimer()
+        claim = claimer.reconcile(request)
+        if claim is None:
+            final = store.transition(
+                record.run_id,
+                expected={RunStatus.PREPARING},
+                status=RunStatus.NEEDS_DECISION,
+                terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
+            )
+            details.append(
+                "Configured task authority cannot prove ownership from the durable claim request."
+            )
+            return RecoveryAction(
+                run_id=record.run_id,
+                previous_status=previous.value,
+                resolved_status=final.status.value,
+                action="escalated_prepare_recovery",
+                details=details,
+            )
+        persist_claim(
+            root,
+            store=store,
+            request=request,
+            claim=claim,
+        )
+        details.append("Missing TaskClaim result was reconstructed by non-mutating provider observation.")
+
+    if not claim.acquired:
+        final = store.transition(
+            record.run_id,
+            expected={RunStatus.PREPARING},
+            status=RunStatus.FAILED,
+            terminal_reason=RunTerminalReason.CLAIM_LOST,
+        )
+        details.append(claim.reason or "Durable claim request does not own the remote task claim.")
+        return RecoveryAction(
+            run_id=record.run_id,
+            previous_status=previous.value,
+            resolved_status=final.status.value,
+            action="prepare_claim_lost",
+            details=details,
+        )
+
+    claimer = resolve_task_authority(root).require_claimer()
+    if not claimer.validate(claim):
+        final = store.transition(
+            record.run_id,
+            expected={RunStatus.PREPARING},
+            status=RunStatus.FAILED,
+            terminal_reason=RunTerminalReason.CLAIM_LOST,
+        )
+        details.append("Durable claim exists but current provider ownership no longer matches.")
+        return RecoveryAction(
+            run_id=record.run_id,
+            previous_status=previous.value,
+            resolved_status=final.status.value,
+            action="prepare_claim_lost",
+            details=details,
+        )
+
+    manager = WorktreeManager(root)
+    expected = manager.path_for(record.worktree_id)
+    if expected.exists():
+        if not _prepare_worktree_is_safe(root, record=record, plan=plan):
+            final = store.transition(
+                record.run_id,
+                expected={RunStatus.PREPARING},
+                status=RunStatus.NEEDS_DECISION,
+                terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
+            )
+            details.append("Existing partial prepare worktree cannot be proven clean/base-aligned.")
+            return RecoveryAction(
+                run_id=record.run_id,
+                previous_status=previous.value,
+                resolved_status=final.status.value,
+                action="escalated_prepare_recovery",
+                details=details,
+            )
+        details.append("Existing isolated worktree is clean and base-aligned.")
+    else:
+        try:
+            manager.create(
+                worktree_id=record.worktree_id,
+                branch_name=record.branch_name,
+                base_commit=plan.base_commit,
+            )
+        except Exception as exc:
+            final = store.transition(
+                record.run_id,
+                expected={RunStatus.PREPARING},
+                status=RunStatus.NEEDS_DECISION,
+                terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
+            )
+            details.append(f"Claim is owned but worktree reconstruction is unsafe: {exc}")
+            return RecoveryAction(
+                run_id=record.run_id,
+                previous_status=previous.value,
+                resolved_status=final.status.value,
+                action="escalated_prepare_recovery",
+                details=details,
+            )
+        details.append("Missing isolated worktree was reconstructed from the exact execution base.")
+
+    final = store.transition(
+        record.run_id,
+        expected={RunStatus.PREPARING},
+        status=RunStatus.CLAIMED,
+    )
+    details.append("Durable claim and isolated worktree reconciled to CLAIMED.")
+    return RecoveryAction(
+        run_id=record.run_id,
+        previous_status=previous.value,
+        resolved_status=final.status.value,
+        action="reconciled_prepare",
+        details=details,
+    )
+
+
 def recover_run(project_root: Path, run_id: str) -> RecoveryAction:
     root = project_root.resolve()
     store = RunStore(root)
@@ -60,6 +275,93 @@ def recover_run(project_root: Path, run_id: str) -> RecoveryAction:
     details: list[str] = []
 
     try:
+        if record.status == RunStatus.PREPARING:
+            return _recover_preparing(
+                root,
+                store=store,
+                record=record,
+                previous=previous,
+                actor=actor,
+                run_dir=run_dir,
+            )
+
+        if record.status == RunStatus.CLAIMED:
+            plan = _load_json_model(run_dir / "execution-plan.json", ExecutionPlan)
+            durable = load_durable_claim(
+                root,
+                store=store,
+                run_id=run_id,
+                allow_legacy_missing=True,
+            )
+            if durable is not None:
+                _, claim = durable
+                claimer = resolve_task_authority(root).require_claimer()
+                if not claimer.validate(claim):
+                    final = store.transition(
+                        run_id,
+                        expected={RunStatus.CLAIMED},
+                        status=RunStatus.FAILED,
+                        terminal_reason=RunTerminalReason.CLAIM_LOST,
+                    )
+                    details.append("Durable task claim ownership was lost before worker start.")
+                    return RecoveryAction(
+                        run_id=run_id,
+                        previous_status=previous.value,
+                        resolved_status=final.status.value,
+                        action="claimed_ownership_lost",
+                        details=details,
+                    )
+
+                expected = WorktreeManager(root).path_for(record.worktree_id)
+                if not expected.exists():
+                    try:
+                        WorktreeManager(root).create(
+                            worktree_id=record.worktree_id,
+                            branch_name=record.branch_name,
+                            base_commit=plan.base_commit,
+                        )
+                    except Exception as exc:
+                        final = store.transition(
+                            run_id,
+                            expected={RunStatus.CLAIMED},
+                            status=RunStatus.NEEDS_DECISION,
+                            terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
+                        )
+                        details.append(f"Owned claim has no safe worktree and reconstruction failed: {exc}")
+                        return RecoveryAction(
+                            run_id=run_id,
+                            previous_status=previous.value,
+                            resolved_status=final.status.value,
+                            action="escalated_claimed_recovery",
+                            details=details,
+                        )
+                    details.append("Missing claimed worktree was reconstructed from the exact base.")
+
+                if not _prepare_worktree_is_safe(root, record=record, plan=plan):
+                    final = store.transition(
+                        run_id,
+                        expected={RunStatus.CLAIMED},
+                        status=RunStatus.NEEDS_DECISION,
+                        terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
+                    )
+                    details.append("Claimed worktree is not clean/base-aligned.")
+                    return RecoveryAction(
+                        run_id=run_id,
+                        previous_status=previous.value,
+                        resolved_status=final.status.value,
+                        action="escalated_claimed_recovery",
+                        details=details,
+                    )
+
+            details.append("CLAIMED run ownership/worktree state is ready for worker start.")
+            return RecoveryAction(
+                run_id=run_id,
+                previous_status=previous.value,
+                resolved_status=record.status.value,
+                action="claimed_ready",
+                details=details,
+            )
+
         if record.status == RunStatus.RUNNING:
             if record.checkpoint_ref:
                 checkpoint_path = (root / record.checkpoint_ref).resolve()
@@ -357,8 +659,6 @@ def recover_run(project_root: Path, run_id: str) -> RecoveryAction:
 
         if record.status in {
             RunStatus.PLANNED,
-            RunStatus.PREPARING,
-            RunStatus.CLAIMED,
             RunStatus.READY_TO_INTEGRATE,
         }:
             details.append("Run is in a deterministic retryable state; expired lease was reclaimed.")
