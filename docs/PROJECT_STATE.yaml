@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Make GitHub task completion depend on durable remote publication evidence without overwriting concurrent human workflow intent.
+current_goal: Normalize GitHub's structured dependency and sub-issue relationships so autonomous scheduling respects real team work ordering without inferring links from prose.
 active_milestone:
-  id: M3.0c
-  title: Remote Publication & GitHub Completion
+  id: M3.1a
+  title: GitHub Dependencies & Sub-issues
   aliases:
-    - Remote Publication
-    - Publication-gated Completion
-    - GitHub Delivery
+    - GitHub Dependencies
+    - Blocked-by Semantics
+    - Sub-issue Hierarchy
 updated_at: null
