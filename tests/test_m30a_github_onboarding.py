@@ -185,7 +185,8 @@ def test_doctor_reports_github_claim_transport_without_claiming(tmp_path: Path, 
     payload = json.loads(report.output)
     task_store = next(item for item in payload["checks"] if item["check_id"] == "task_store")
     assert task_store["status"] == "warn"
-    assert "claim transport" in task_store["summary"]
+    assert "adapter-complete" in task_store["summary"]
+    assert any("publication" in detail for detail in task_store["details"])
     assert "remote completion is still disabled" in task_store["summary"]
 
 
