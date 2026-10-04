@@ -369,13 +369,26 @@ def prepare_next_run(
             store=store,
             request=claim_request,
         )
-        claim = claimer.claim(claim_request)
-        persist_claim(
-            root,
-            store=store,
-            request=claim_request,
-            claim=claim,
-        )
+        try:
+            claim = claimer.claim(claim_request)
+            persist_claim(
+                root,
+                store=store,
+                request=claim_request,
+                claim=claim,
+            )
+        except Exception as exc:
+            # The durable request is sufficient for providers that can reconcile
+            # exact ownership after a crash/transport failure. Do not guess that
+            # no remote mutation happened and do not discard the request.
+            store.append_event(
+                run_id,
+                "task.claim.unresolved",
+                {"error_type": type(exc).__name__, "error": str(exc)},
+            )
+            store.release_lease(run_id, owner=actor)
+            raise
+
         if not claim.acquired:
             store.transition(
                 run_id,
@@ -388,13 +401,9 @@ def prepare_next_run(
                 claim.reason or f"Task {plan.task_id} could not be claimed."
             )
 
-        store.transition(
-            run_id,
-            expected={RunStatus.PREPARING},
-            status=RunStatus.CLAIMED,
-        )
-
         try:
+            # Keep PREPARING until both remote ownership and the isolated
+            # workspace exist. A crash can then be reconciled deterministically.
             worktree = manager.create(
                 worktree_id=worktree_id,
                 branch_name=branch_name,
@@ -415,13 +424,18 @@ def prepare_next_run(
             status = RunStatus.FAILED if release_ok else RunStatus.NEEDS_DECISION
             store.transition(
                 run_id,
-                expected={RunStatus.CLAIMED},
+                expected={RunStatus.PREPARING},
                 status=status,
                 terminal_reason=reason,
             )
             store.release_lease(run_id, owner=actor)
             raise WorktreeError(f"Could not prepare isolated worktree: {exc}") from exc
 
+        store.transition(
+            run_id,
+            expected={RunStatus.PREPARING},
+            status=RunStatus.CLAIMED,
+        )
         record = store.release_lease(run_id, owner=actor)
         return PreparedRun(plan=plan, record=record, worktree=worktree)
 
