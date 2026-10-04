@@ -76,6 +76,10 @@ After the push attempt, ProjectCTL observes the exact remote ref:
 
 ProjectCTL never infers ownership from push stderr text alone.
 
+After acquisition succeeds, ProjectCTL revalidates the full execution-plan inputs once more before
+creating the isolated worktree. If project state, task snapshot, quota eligibility, or Git base
+changed during the distributed claim window, ProjectCTL releases its exact claim and stops stale.
+
 ### Exact release
 
 A durable claim is released with:
@@ -84,13 +88,16 @@ A durable claim is released with:
 git push --force-with-lease=<claim-ref>:<ownership-sha> origin :<claim-ref>
 ```
 
-Then ProjectCTL observes the remote ref:
+The exact expected-SHA lease is the server-side release authority.
 
-- missing → released, including idempotent retry
-- still equal to ownership SHA → release failed, provider/infrastructure error
-- changed to a different SHA → ownership changed; fail with claim conflict and refuse deletion
+- successful push → this claim was released, even if another runner immediately reacquires the
+  now-free ref before a diagnostic observation
+- failed push + missing ref → idempotent success
+- failed push + same ownership SHA → provider/infrastructure failure
+- failed push + different SHA → ownership changed; fail with claim conflict and refuse deletion
 
-A stale runner therefore cannot delete a later claim.
+A stale runner therefore cannot delete a later claim, and a legitimate immediate reacquisition
+does not turn a successful prior release into a false conflict.
 
 ### Durable claim evidence
 
