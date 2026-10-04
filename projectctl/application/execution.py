@@ -12,6 +12,12 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from projectctl.application.claims import (
+    load_durable_claim,
+    persist_claim,
+    persist_claim_request,
+    record_claim_release,
+)
 from projectctl.application.scheduling import collect_scheduling_bundle
 from projectctl.application.tasks import capture_task_snapshot, task_store_for_project
 from projectctl.application.task_lifecycle import reconcile_terminal_task
@@ -59,6 +65,7 @@ from projectctl.schemas.execution import (
     parse_worker_checkpoint,
 )
 from projectctl.schemas.run import ContextManifest, RunManifest, WorkerDescriptor
+from projectctl.schemas.task_claim import TaskClaimRequest
 from projectctl.schemas.run_store import RunRecord
 from projectctl.storage.runs import RunStore
 from projectctl.runtime import LeaseHeartbeat
@@ -348,8 +355,28 @@ def prepare_next_run(
             )
 
         claimer = _claimer(root)
-        claim = claimer.claim(plan.task_id, actor=actor)
-        if not claim.claimed:
+        claim_request = TaskClaimRequest(
+            task_id=plan.task_id,
+            run_id=run_id,
+            actor=actor,
+            base_commit=plan.base_commit,
+            integration_target_ref=plan.integration_target_ref,
+            claim_token=uuid.uuid4().hex,
+            requested_at=utc_now(),
+        )
+        persist_claim_request(
+            root,
+            store=store,
+            request=claim_request,
+        )
+        claim = claimer.claim(claim_request)
+        persist_claim(
+            root,
+            store=store,
+            request=claim_request,
+            claim=claim,
+        )
+        if not claim.acquired:
             store.transition(
                 run_id,
                 expected={RunStatus.PREPARING},
@@ -376,7 +403,8 @@ def prepare_next_run(
         except Exception as exc:
             release_ok = True
             try:
-                claimer.release(plan.task_id, actor=actor)
+                claimer.release(claim)
+                record_claim_release(store, claim)
             except Exception:
                 release_ok = False
             reason = (
@@ -1183,7 +1211,13 @@ def abort_prepared_run(project_root: Path, run_id: str) -> RunRecord:
 
     if record.status in {RunStatus.CLAIMED, RunStatus.RUNNING}:
         try:
-            claimer.release(record.task_id, actor=actor)
+            _, claim = load_durable_claim(
+                root,
+                store=store,
+                run_id=run_id,
+            )
+            claimer.release(claim)
+            record_claim_release(store, claim)
         except Exception as exc:
             store.transition(
                 run_id,
