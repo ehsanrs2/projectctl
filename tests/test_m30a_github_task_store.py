@@ -47,6 +47,12 @@ class FakeClient:
             },
         ]
 
+    def list_blocked_by(self, issue_number):
+        return []
+
+    def list_sub_issues(self, issue_number):
+        return []
+
     def show(self, issue_number):
         number = int(str(issue_number).replace("gh-", "").replace("#", ""))
         return next(item for item in self.list_all() if item["number"] == number)
