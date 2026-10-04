@@ -12,6 +12,7 @@ from projectctl.integrations.task_authority import (
     require_task_authority_execution_ready,
     task_authority_capabilities,
     task_authority_capabilities_for_provider,
+    resolve_task_authority,
 )
 from projectctl.project.ownership import DEFAULT_OWNERSHIP
 from projectctl.schema_export import PUBLIC_SCHEMAS
@@ -90,6 +91,35 @@ def test_linear_is_readable_but_deliberately_not_execution_ready(tmp_path: Path)
 
     with pytest.raises(ConfigurationError, match="Unsupported lifecycle operations"):
         require_task_authority_execution_ready(tmp_path)
+
+
+
+def test_linear_resolves_through_provider_neutral_authority(tmp_path: Path, monkeypatch):
+    team = "9cfb482a-81e3-4154-b5b9-2c805e70a02d"
+    write_config(tmp_path, "linear", team=team)
+
+    class FakeLinearClient:
+        def __init__(self, _root, *, team_id):
+            self.team_id = team_id
+
+        def list_all(self):
+            return []
+
+        def version(self):
+            return "linear-test"
+
+    monkeypatch.setattr(
+        "projectctl.integrations.task_authority.LinearIssuesClient",
+        FakeLinearClient,
+    )
+
+    authority = resolve_task_authority(tmp_path)
+
+    assert authority.provider == "linear"
+    assert authority.reader.snapshot().provider == "linear"
+    assert authority.claimer is None
+    assert authority.completion_writer is None
+    assert authority.publisher is None
 
 def test_task_authority_cli_is_machine_readable_without_provider_probe(tmp_path: Path):
     write_config(tmp_path, "github", "acme/widget")
