@@ -18,13 +18,24 @@ def release_task_for_retry(
     run_id: str,
     actor: str,
 ) -> None:
-    del actor
-    _, claim = load_durable_claim(
+    claimer = resolve_task_authority(project_root).require_claimer()
+    durable = load_durable_claim(
         project_root,
         store=store,
         run_id=run_id,
+        allow_legacy_missing=True,
     )
-    resolve_task_authority(project_root).require_claimer().release(claim)
+    if durable is None:
+        record = store.get(run_id)
+        claimer.release_legacy(record.task_id, actor=actor)
+        store.append_event(
+            run_id,
+            "task.claim.released_legacy",
+            {"task_id": record.task_id},
+        )
+        return
+    _, claim = durable
+    claimer.release(claim)
     record_claim_release(store, claim)
 
 
