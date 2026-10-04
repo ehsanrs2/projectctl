@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M3.0b1 — Task Authority Capability & Resolver Layer**, making task lifecycle access provider-neutral before any remote GitHub execution mutation is enabled.
+This repository currently implements **M3.0b2 — GitHub Remote Claim Protocol**, adding concurrency-safe remote GitHub task claim/release ownership while keeping publication and task completion fail-closed.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -760,7 +760,7 @@ Current adapter support:
 | Provider | Read | Claim | Release | Block | Complete | Execution-ready |
 | --- | --- | --- | --- | --- | --- | --- |
 | Beads | supported | supported | supported | supported | supported | yes |
-| GitHub | supported | unsupported | unsupported | unsupported | unsupported | no |
+| GitHub | supported | supported | supported | unsupported | unsupported | no |
 
 Capability inspection does not require the provider runtime to be installed or authenticated. Runtime health remains a separate concern.
 
@@ -770,8 +770,10 @@ An architecture test prevents `projectctl/application/*.py` from importing Beads
 
 The architecture review found two distinct missing contracts:
 
-1. ordinary GitHub issue/label/assignee mutations do not provide ProjectCTL a documented atomic claim primitive;
+1. claim ownership requires a remote CAS primitive rather than issue labels/assignees;
 2. M1.4 integrates locally but does not push, so a GitHub issue must not be closed before required remote publication is observed.
+
+M3.0b2 resolves the first item with an exact remote Git-ref lease. The second remains the M3.0c boundary.
 
 Therefore the sequence is deliberately:
 
@@ -784,3 +786,77 @@ M3.0c remote publication + GitHub completion
 ```
 
 See ADR-012 and `docs/PROJECTCTL_BLUEPRINT.md` for the full rationale.
+
+
+## M3.0b2 — GitHub Remote Claim Protocol
+
+M3.0b2 adds concurrency-safe claim and release semantics for GitHub task authority without
+pretending that remote completion is solved.
+
+For issue `gh-42`, ProjectCTL reserves:
+
+```text
+refs/heads/projectctl/claims/issue-42
+```
+
+The ref points to a unique marker commit bound to one `TaskClaimRequest v1`. It contains no
+source changes and has the execution base as its parent.
+
+Acquisition uses an absent-only Git lease:
+
+```text
+git push --force-with-lease=<claim-ref>: origin <marker-sha>:<claim-ref>
+```
+
+Release uses the exact observed ownership SHA:
+
+```text
+git push --force-with-lease=<claim-ref>:<ownership-sha> origin :<claim-ref>
+```
+
+This means a delayed/stale runner cannot delete a claim that another runner acquired later.
+
+Before claiming, ProjectCTL also requires:
+
+- `origin` to represent the configured GitHub repository
+- the remote integration-target branch to exist
+- that remote target to equal the exact execution base
+
+Every new run writes `task-claim-request.json` and `task-claim.json`; their digests are anchored
+in the append-only run event stream. Abort/retry release therefore uses exact durable ownership
+evidence rather than only a task id.
+
+Pre-M3.0b2 Beads runs remain releasable when both new claim artifacts are absent. GitHub never
+allows that legacy fallback.
+
+### GitHub remains non-executable
+
+After M3.0b2 the GitHub adapter reports:
+
+```text
+read                 supported
+claim                supported
+release              supported
+block_for_decision   unsupported
+complete             unsupported
+```
+
+The current lifecycle requires all of those operations, so `run prepare` remains fail-closed for
+GitHub projects. M3.0c must define remote publication and completion before this gate can open.
+
+### CI note for the reserved claim namespace
+
+The claim is currently a remote branch under `projectctl/claims/**`. Repositories with broad
+push-triggered GitHub Actions may wish to ignore that prefix:
+
+```yaml
+on:
+  push:
+    branches-ignore:
+      - "projectctl/claims/**"
+```
+
+Repository rules or insufficient Git write permission may intentionally reject claim creation or
+deletion; ProjectCTL does not bypass those policies.
+
+See ADR-013 and `docs/PROJECTCTL_BLUEPRINT.md` for the full protocol and scope boundary.
