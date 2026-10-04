@@ -90,9 +90,11 @@ if args[:5] == ["api", "--hostname", "github.com", "--method", "GET"]:
         raise SystemExit(0)
 
     if endpoint.startswith("repos/acme/widget/issues?"):
-        print(json.dumps([[
-            {"number": 11, "title": "Page", "state": "open", "labels": []}
-        ]]))
+        included(
+            200,
+            [{"number": 11, "title": "Page", "state": "open", "labels": []}],
+            etag='"issues-v1"',
+        )
         raise SystemExit(0)
 
 print("unsupported: " + " ".join(args), file=sys.stderr)
@@ -231,7 +233,7 @@ def test_repository_info_is_conditionally_revalidated(tmp_path: Path, monkeypatc
     assert 'If-None-Match: "repo-v1"' in read_log(log)[-1]
 
 
-def test_paginated_aggregate_reads_remain_unconditional_in_m31c2(
+def test_collection_reads_use_single_page_response_envelopes_after_m31c3(
     tmp_path: Path,
     monkeypatch,
 ):
@@ -242,9 +244,9 @@ def test_paginated_aggregate_reads_remain_unconditional_in_m31c2(
     assert [item["number"] for item in value.list_all()] == [11]
 
     call = read_log(log)[-1]
-    assert "--paginate" in call
-    assert "--slurp" in call
-    assert "--include" not in call
+    assert "--include" in call
+    assert "--paginate" not in call
+    assert "--slurp" not in call
     assert not any(arg.startswith("If-None-Match:") for arg in call)
     assert not any(arg.startswith("If-Modified-Since:") for arg in call)
 
