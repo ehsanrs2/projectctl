@@ -13,10 +13,11 @@ from pathlib import Path
 import yaml
 
 from projectctl import __version__
-from projectctl.core.errors import DigestMismatchError, RepositoryContractError
+from projectctl.core.errors import DigestMismatchError, RepositoryContractError, TaskStoreError
 from projectctl.core.paths import resolve_inside_repo
 from projectctl.core.time import utc_now
 from projectctl.integrations.github.repository import normalize_github_repository
+from projectctl.integrations.linear.team import normalize_linear_team_id
 from projectctl.project.bootstrap import _global_init, _slug, projectctl_home
 from projectctl.project.inspection import inspect_repository
 from projectctl.project.state import PROJECT_STATE_PATH, initial_project_state, write_project_state
@@ -81,6 +82,7 @@ def plan_adoption(
     *,
     task_store_provider: str | None = None,
     task_store_repository: str | None = None,
+    task_store_team: str | None = None,
 ) -> AdoptionPlan:
     if inspection.classification != "existing_unmanaged":
         raise RepositoryContractError(
@@ -98,6 +100,10 @@ def plan_adoption(
         raise RepositoryContractError(
             "task_store_repository is only supported with the GitHub task store."
         )
+    if provider != "linear" and task_store_team is not None:
+        raise RepositoryContractError(
+            "task_store_team is only supported with the Linear task store."
+        )
 
     repository = None
     if provider == "github":
@@ -109,11 +115,20 @@ def plan_adoption(
                     "GitHub task repository must use the owner/repository form."
                 )
 
+    team = None
+    if provider == "linear":
+        try:
+            team = normalize_linear_team_id(task_store_team)
+        except TaskStoreError as exc:
+            raise RepositoryContractError(str(exc)) from exc
+
     unresolved = [d for d in inspection.unresolved_decisions if not d.startswith("task_store")]
     if provider is None:
         unresolved.append("task_store")
     if provider == "github" and not repository:
         unresolved.append("task_store_repository")
+    if provider == "linear" and not team:
+        unresolved.append("task_store_team")
 
     root = Path(inspection.project_root)
     preserve_set = {a.path for a in inspection.assets}
@@ -148,6 +163,7 @@ def plan_adoption(
         knowledge_bindings=inspection.suggested_bindings,
         task_store_provider=provider,
         task_store_repository=repository,
+        task_store_team=team,
         unresolved_decisions=sorted(set(unresolved)),
         conflicts=list(inspection.conflicts),
     )
@@ -222,6 +238,7 @@ def apply_adoption(plan: AdoptionPlan, *, allow_dirty: bool = False) -> Adoption
                 task_store=TaskStoreConfig(
                     provider=plan.task_store_provider or "unresolved",
                     repository=plan.task_store_repository,
+                    team=plan.task_store_team,
                 ),
                 knowledge=_knowledge_from_plan(plan),
             )
@@ -249,6 +266,7 @@ def apply_adoption(plan: AdoptionPlan, *, allow_dirty: bool = False) -> Adoption
                 knowledge_bindings=plan.knowledge_bindings,
                 task_store_provider=plan.task_store_provider,
                 task_store_repository=plan.task_store_repository,
+                task_store_team=plan.task_store_team,
                 unresolved_decisions=plan.unresolved_decisions,
             )
             (staged_ctl / "adoption.yaml").write_text(
