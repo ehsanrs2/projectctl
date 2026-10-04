@@ -620,7 +620,9 @@ Implemented:
 - unique marker commit per claim request
 - absent-only CAS acquisition using explicit Git force-with-lease
 - exact expected-SHA CAS deletion
+- successful-release / immediate-reacquire race handling
 - ABA-safe stale-release rejection
+- post-claim execution-input revalidation
 - remote target/base equality precondition
 - origin repository identity validation
 - durable `TaskClaimRequest v1` and `TaskClaim v1`
