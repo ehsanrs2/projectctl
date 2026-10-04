@@ -127,6 +127,44 @@ class GitHubTaskClaimer:
             ownership_sha=marker_sha,
         )
 
+    def reconcile(self, request: TaskClaimRequest) -> TaskClaim:
+        issue_number = self._issue_number(request.task_id)
+        self._assert_remote_identity()
+        claim_ref = self._claim_ref(issue_number)
+        marker_sha = self.lease.create_marker_commit(
+            base_commit=request.base_commit,
+            message=self._marker_message(request),
+            timestamp=request.requested_at,
+        )
+        current = self.lease.observe(claim_ref)
+        if current == marker_sha:
+            acquired = True
+            reason = "Remote claim matches the durable claim request."
+        elif current is None:
+            acquired = False
+            reason = "Durable claim request exists but no remote claim ref is present."
+        else:
+            acquired = False
+            reason = (
+                f"Remote claim ref is owned by a different marker at {current}."
+            )
+        return TaskClaim(
+            provider="github",
+            task_id=request.task_id,
+            run_id=request.run_id,
+            actor=request.actor,
+            base_commit=request.base_commit,
+            integration_target_ref=request.integration_target_ref,
+            claim_token=request.claim_token,
+            request_digest=digest(request),
+            acquired=acquired,
+            observed_at=utc_now(),
+            reason=reason,
+            repository=self.repository,
+            ownership_ref=claim_ref,
+            ownership_sha=marker_sha,
+        )
+
     def release(self, claim: TaskClaim) -> None:
         if not claim.acquired:
             raise TaskStoreError("Cannot release a task claim that was not acquired.")
