@@ -20,6 +20,8 @@ class FakeClient:
     def show(self, task_id):
         if self.mode == "conflict":
             return {"id": task_id, "status": "in_progress", "assignee": "other"}
+        if self.mode == "success":
+            return {"id": task_id, "status": "in_progress", "assignee": "beads-user"}
         return {"id": task_id, "status": "open", "assignee": ""}
 
     def release_issue(self, task_id):
