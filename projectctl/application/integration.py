@@ -7,10 +7,20 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from projectctl.application.claims import load_durable_claim, record_claim_release
 from projectctl.application.execution import _actor
+from projectctl.application.publication import (
+    load_publication_manifest,
+    load_publication_request,
+    persist_publication_manifest,
+    persist_publication_request,
+    publication_manifest_ref,
+)
+from projectctl.application.task_lifecycle import reconcile_terminal_task
 from projectctl.core.digest import digest
 from projectctl.core.enums import RunStatus, RunTerminalReason
 from projectctl.core.errors import (
+    ClaimConflictError,
     IntegrationError,
     ProjectCtlError,
     RunStoreError,
@@ -20,12 +30,12 @@ from projectctl.core.time import utc_now
 from projectctl.git import WorktreeManager, current_branch, resolve_commit
 from projectctl.integrations.task_authority import resolve_task_authority
 from projectctl.project.locking import project_lock
+from projectctl.schemas.delivery import PublicationManifest, PublicationRequest
 from projectctl.schemas.evidence import EvidenceManifest
-from projectctl.schemas.execution import EvidenceReference, ExecutionPlan
+from projectctl.schemas.execution import EvidenceReference, ExecutionPlan, WorkerResult
 from projectctl.schemas.integration import IntegrationManifest
 from projectctl.schemas.run_store import RunRecord
 from projectctl.schemas.verification import VerificationManifest
-from projectctl.schemas.execution import WorkerResult
 from projectctl.storage.runs import RunStore
 from projectctl.verification.diff import committed_diff_digest
 
@@ -155,20 +165,20 @@ def _mark_stale_target(
     record: RunRecord,
     *,
     current_status: RunStatus,
+    actor: str,
+    reason: str,
 ) -> RunRecord:
-    writer = _completion_writer(store.project_root)
-    try:
-        writer.mark_needs_decision(
-            record.task_id,
-            reason="Integration target advanced after verification.",
-        )
-    except Exception:
-        pass
-    return store.transition(
+    final = store.transition(
         record.run_id,
         expected={current_status},
         status=RunStatus.NEEDS_DECISION,
         terminal_reason=RunTerminalReason.STALE_BASE,
+    )
+    return reconcile_terminal_task(
+        store.project_root,
+        store=store,
+        run_id=final.run_id,
+        actor=actor,
     )
 
 
@@ -196,6 +206,332 @@ def _cleanup_verified_worktree(
         return False
 
 
+def _completion_event_matches(
+    store: RunStore,
+    run_id: str,
+    *,
+    evidence: EvidenceReference,
+) -> bool:
+    for event in reversed(store.events(run_id)):
+        if event.event_type != "task.completion.observed":
+            continue
+        return (
+            event.payload.get("evidence_path") == evidence.path
+            and event.payload.get("evidence_digest") == evidence.digest
+        )
+    return False
+
+
+def _publication_request(
+    root: Path,
+    *,
+    store: RunStore,
+    record: RunRecord,
+    plan: ExecutionPlan,
+    evidence: EvidenceManifest,
+    provider: str,
+    remote_name: str,
+    repository: str | None,
+) -> PublicationRequest:
+    existing = load_publication_request(
+        root,
+        store=store,
+        run_id=record.run_id,
+        allow_missing=True,
+    )
+    evidence_path = f".projectctl/runs/{record.run_id}/evidence-manifest.json"
+    evidence_digest = digest(evidence)
+    if existing is not None:
+        expected = {
+            "task_id": record.task_id,
+            "provider": provider,
+            "repository": repository,
+            "remote_name": remote_name,
+            "target_ref": plan.integration_target_ref,
+            "base_commit": plan.base_commit,
+            "candidate_commit": record.candidate_commit,
+            "evidence_manifest": evidence_path,
+            "evidence_digest": evidence_digest,
+        }
+        for field, value in expected.items():
+            if getattr(existing, field) != value:
+                raise IntegrationError(
+                    f"Durable publication request field {field!r} changed after creation."
+                )
+        return existing
+
+    request = PublicationRequest(
+        run_id=record.run_id,
+        task_id=record.task_id,
+        provider=provider,
+        repository=repository,
+        remote_name=remote_name,
+        target_ref=plan.integration_target_ref,
+        base_commit=plan.base_commit,
+        candidate_commit=record.candidate_commit,
+        evidence_manifest=evidence_path,
+        evidence_digest=evidence_digest,
+        requested_at=utc_now(),
+    )
+    persist_publication_request(root, store=store, request=request)
+    return request
+
+
+def _ensure_publication(
+    root: Path,
+    *,
+    store: RunStore,
+    record: RunRecord,
+    plan: ExecutionPlan,
+    evidence: EvidenceManifest,
+    actor: str,
+):
+    authority = resolve_task_authority(root)
+    policy = authority.delivery_policy
+    if not policy.publication_required:
+        return None
+
+    durable_claim = load_durable_claim(
+        root,
+        store=store,
+        run_id=record.run_id,
+    )
+    assert durable_claim is not None
+    _, claim = durable_claim
+    claimer = authority.require_claimer()
+
+    completed_ref = EvidenceReference(
+        path=publication_manifest_ref(record.run_id),
+        digest="pending",
+    )
+    completion_already_recorded = any(
+        event.event_type == "task.completion.observed"
+        for event in store.events(record.run_id)
+    )
+    if not completion_already_recorded and not claimer.validate(claim):
+        final = store.transition(
+            record.run_id,
+            expected={RunStatus.INTEGRATING},
+            status=RunStatus.NEEDS_DECISION,
+            terminal_reason=RunTerminalReason.CLAIM_LOST,
+        )
+        reconcile_terminal_task(
+            root,
+            store=store,
+            run_id=final.run_id,
+            actor=actor,
+        )
+        raise IntegrationError(
+            "Task claim ownership was lost before remote publication."
+        )
+
+    remote_name = policy.remote_name
+    if not remote_name:
+        raise IntegrationError(
+            "Task authority requires publication but has no publication remote."
+        )
+    request = _publication_request(
+        root,
+        store=store,
+        record=record,
+        plan=plan,
+        evidence=evidence,
+        provider=authority.provider,
+        remote_name=remote_name,
+        repository=claim.repository,
+    )
+    publisher = authority.require_publisher()
+
+    durable_publication = load_publication_manifest(
+        root,
+        store=store,
+        run_id=record.run_id,
+        allow_missing=True,
+    )
+    if durable_publication is not None:
+        _, previous = durable_publication
+        if previous.published and previous.remote_after == record.candidate_commit:
+            observed = publisher.reconcile(request)
+            if observed.published and observed.remote_after == record.candidate_commit:
+                persist_publication_manifest(
+                    root,
+                    store=store,
+                    request=request,
+                    manifest=observed,
+                )
+                return observed
+
+    observed = publisher.reconcile(request)
+    if not observed.published:
+        if observed.remote_after == plan.base_commit:
+            observed = publisher.publish(request)
+        elif observed.remote_after != record.candidate_commit:
+            final = store.transition(
+                record.run_id,
+                expected={RunStatus.INTEGRATING},
+                status=RunStatus.NEEDS_DECISION,
+                terminal_reason=RunTerminalReason.STALE_BASE,
+            )
+            reconcile_terminal_task(
+                root,
+                store=store,
+                run_id=final.run_id,
+                actor=actor,
+            )
+            raise IntegrationError(
+                observed.reason or "Remote publication target diverged."
+            )
+
+    persist_publication_manifest(
+        root,
+        store=store,
+        request=request,
+        manifest=observed,
+    )
+    if not observed.published or observed.remote_after != record.candidate_commit:
+        raise IntegrationError(
+            observed.reason or "Remote publication could not be proven."
+        )
+    return observed
+
+
+def _finalize_delivery(
+    root: Path,
+    *,
+    store: RunStore,
+    record: RunRecord,
+    plan: ExecutionPlan,
+    evidence: EvidenceManifest,
+    target_before: str,
+    actor: str,
+) -> IntegratedRun:
+    authority = resolve_task_authority(root)
+    policy = authority.delivery_policy
+    run_dir = root / ".projectctl" / "runs" / record.run_id
+    target_after = resolve_commit(root, plan.integration_target_ref)
+    if target_after != record.candidate_commit:
+        raise IntegrationError("Integration target does not equal verified candidate.")
+
+    publication = _ensure_publication(
+        root,
+        store=store,
+        record=record,
+        plan=plan,
+        evidence=evidence,
+        actor=actor,
+    )
+
+    if publication is None:
+        completion_evidence = EvidenceReference(
+            path=f".projectctl/runs/{record.run_id}/evidence-manifest.json",
+            digest=digest(evidence),
+        )
+        publication_path = None
+        publication_digest = None
+    else:
+        publication_path = publication_manifest_ref(record.run_id)
+        publication_digest = digest(publication)
+        completion_evidence = EvidenceReference(
+            path=publication_path,
+            digest=publication_digest,
+        )
+
+    if not _completion_event_matches(
+        store,
+        record.run_id,
+        evidence=completion_evidence,
+    ):
+        authority.require_completion_writer().complete(
+            record.task_id,
+            evidence=completion_evidence,
+        )
+        store.append_event(
+            record.run_id,
+            "task.completion.observed",
+            {
+                "evidence_path": completion_evidence.path,
+                "evidence_digest": completion_evidence.digest,
+                "provider": authority.provider,
+            },
+        )
+
+    claim_released = False
+    if policy.release_claim_after_completion:
+        durable_claim = load_durable_claim(
+            root,
+            store=store,
+            run_id=record.run_id,
+        )
+        assert durable_claim is not None
+        _, claim = durable_claim
+        try:
+            authority.require_claimer().release(claim)
+            record_claim_release(store, claim)
+            claim_released = True
+        except ClaimConflictError as exc:
+            final = store.transition(
+                record.run_id,
+                expected={RunStatus.INTEGRATING},
+                status=RunStatus.NEEDS_DECISION,
+                terminal_reason=RunTerminalReason.CLAIM_LOST,
+            )
+            reconcile_terminal_task(
+                root,
+                store=store,
+                run_id=final.run_id,
+                actor=actor,
+            )
+            raise IntegrationError(
+                "Task completed but exact claim release lost ownership: "
+                f"{exc}"
+            ) from exc
+
+    manifest = IntegrationManifest(
+        run_id=record.run_id,
+        task_id=record.task_id,
+        target_ref=plan.integration_target_ref,
+        base_commit=plan.base_commit,
+        candidate_commit=record.candidate_commit,
+        target_before=target_before,
+        target_after=target_after,
+        evidence_manifest=f".projectctl/runs/{record.run_id}/evidence-manifest.json",
+        evidence_digest=digest(evidence),
+        publication_required=policy.publication_required,
+        publication_manifest=publication_path,
+        publication_digest=publication_digest,
+        task_completed=True,
+        claim_released=claim_released,
+        worktree_cleaned=False,
+        integrated_at=utc_now(),
+        completed_at=utc_now(),
+    )
+    _atomic_json(run_dir / "integration-manifest.json", manifest)
+    store.append_event(
+        record.run_id,
+        "integration.applied",
+        {
+            "target_ref": plan.integration_target_ref,
+            "candidate_commit": record.candidate_commit,
+            "evidence_digest": digest(evidence),
+            "publication_digest": publication_digest,
+            "task_completed": True,
+        },
+    )
+
+    final = store.transition(
+        record.run_id,
+        expected={RunStatus.INTEGRATING},
+        status=RunStatus.PASSED,
+        candidate_commit=record.candidate_commit,
+    )
+
+    cleaned = _cleanup_verified_worktree(root, record=final, store=store)
+    if cleaned:
+        manifest = manifest.model_copy(update={"worktree_cleaned": True})
+        _atomic_json(run_dir / "integration-manifest.json", manifest)
+    return IntegratedRun(record=store.get(record.run_id), manifest=manifest)
+
+
 def _integrate_run_locked(project_root: Path, run_id: str) -> IntegratedRun:
     root = project_root.resolve()
     actor = _actor()
@@ -212,7 +548,7 @@ def _integrate_run_locked(project_root: Path, run_id: str) -> IntegratedRun:
 
         plan = _load_json_model(run_dir / "execution-plan.json", ExecutionPlan)
         evidence = _load_json_model(run_dir / "evidence-manifest.json", EvidenceManifest)
-        worktree = _validate_verified_candidate(
+        _validate_verified_candidate(
             root, record, plan, evidence, run_dir=run_dir
         )
 
@@ -234,6 +570,8 @@ def _integrate_run_locked(project_root: Path, run_id: str) -> IntegratedRun:
                 store,
                 record,
                 current_status=RunStatus.READY_TO_INTEGRATE,
+                actor=actor,
+                reason="Integration target advanced after verification.",
             )
             raise IntegrationError(
                 "Integration target advanced after verification. Re-run on the new base."
@@ -261,53 +599,15 @@ def _integrate_run_locked(project_root: Path, run_id: str) -> IntegratedRun:
             )
             current_record = store.get(run_id)
 
-        target_after = resolve_commit(root, plan.integration_target_ref)
-        if target_after != current_record.candidate_commit:
-            raise IntegrationError("Integration target does not equal verified candidate.")
-
-        evidence_ref = EvidenceReference(
-            path=f".projectctl/runs/{run_id}/evidence-manifest.json",
-            digest=digest(evidence),
-        )
-        _completion_writer(root).complete(current_record.task_id, evidence=evidence_ref)
-
-        manifest = IntegrationManifest(
-            run_id=run_id,
-            task_id=current_record.task_id,
-            target_ref=plan.integration_target_ref,
-            base_commit=plan.base_commit,
-            candidate_commit=current_record.candidate_commit,
+        return _finalize_delivery(
+            root,
+            store=store,
+            record=current_record,
+            plan=plan,
+            evidence=evidence,
             target_before=target_before,
-            target_after=target_after,
-            evidence_manifest=evidence_ref.path,
-            evidence_digest=evidence_ref.digest,
-            task_completed=True,
-            worktree_cleaned=False,
-            integrated_at=utc_now(),
+            actor=actor,
         )
-        _atomic_json(run_dir / "integration-manifest.json", manifest)
-        store.append_event(
-            run_id,
-            "integration.applied",
-            {
-                "target_ref": plan.integration_target_ref,
-                "candidate_commit": current_record.candidate_commit,
-                "evidence_digest": evidence_ref.digest,
-            },
-        )
-
-        final = store.transition(
-            run_id,
-            expected={RunStatus.INTEGRATING},
-            status=RunStatus.PASSED,
-            candidate_commit=current_record.candidate_commit,
-        )
-
-        cleaned = _cleanup_verified_worktree(root, record=final, store=store)
-        if cleaned:
-            manifest = manifest.model_copy(update={"worktree_cleaned": True})
-            _atomic_json(run_dir / "integration-manifest.json", manifest)
-        return IntegratedRun(record=store.get(run_id), manifest=manifest)
     except IntegrationError:
         raise
     except Exception as exc:
@@ -336,10 +636,7 @@ def _integrate_run_locked(project_root: Path, run_id: str) -> IntegratedRun:
             pass
 
 
-
 def integrate_run(project_root: Path, run_id: str) -> IntegratedRun:
     root = project_root.resolve()
-    # Git target mutation is project-global, not merely run-local. Serialize all
-    # integrations even when they belong to different tasks/runs.
     with project_lock(root, "integration"):
         return _integrate_run_locked(root, run_id)
