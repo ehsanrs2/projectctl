@@ -32,7 +32,12 @@ from projectctl.schemas.execution import (
     WorkerOutputPayload,
 )
 from projectctl.schemas.health import HealthCheckResult, HealthReport
-from projectctl.schemas.integration import IntegrationManifest, RecoveryAction, RecoveryReport
+from projectctl.schemas.integration import (
+    IntegrationManifest,
+    IntegrationManifestV1,
+    RecoveryAction,
+    RecoveryReport,
+)
 from projectctl.schemas.onboarding import (
     AdoptionManifest,
     AdoptionManifestV1,
@@ -87,6 +92,7 @@ __all__ = [
     "HealthCheckResult",
     "HealthReport",
     "IntegrationManifest",
+    "IntegrationManifestV1",
     "MilestoneState",
     "NormalizedTask",
     "PermissionCapabilities",
