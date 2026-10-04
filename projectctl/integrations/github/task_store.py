@@ -9,7 +9,6 @@ from projectctl.integrations.github.client import GitHubIssuesClient
 from projectctl.schemas.task import (
     NormalizedTask,
     TaskHierarchy,
-    TaskIssueField,
     TaskMilestoneMetadata,
     TaskSnapshot,
     TaskSource,
@@ -158,69 +157,6 @@ def _issue_type_name(raw: dict[str, Any]) -> str | None:
     return None
 
 
-def _issue_field(
-    raw: dict[str, Any],
-    *,
-    notes: list[str],
-) -> TaskIssueField | None:
-    field_id = raw.get("issue_field_id") or raw.get("node_id")
-    name = str(raw.get("issue_field_name") or "").strip()
-    data_type = str(raw.get("data_type") or "").strip()
-    if field_id is None or not name or not data_type:
-        notes.append("GitHub issue field metadata is missing id, name, or data_type.")
-        return None
-
-    value: str | int | float | bool | list[str] | None
-    if data_type == "single_select":
-        option = raw.get("single_select_option")
-        value = (
-            str(option.get("name")).strip()
-            if isinstance(option, dict) and option.get("name") is not None
-            else None
-        )
-    elif data_type == "multi_select":
-        values: list[str] = []
-        for option in raw.get("multi_select_options") or []:
-            if isinstance(option, dict) and option.get("name") is not None:
-                name_value = str(option["name"]).strip()
-                if name_value:
-                    values.append(name_value)
-        value = sorted(set(values), key=str.casefold)
-    else:
-        raw_value = raw.get("value")
-        if raw_value is None or isinstance(raw_value, (str, int, float, bool)):
-            value = raw_value
-        elif isinstance(raw_value, list) and all(
-            isinstance(item, str) for item in raw_value
-        ):
-            value = sorted(set(raw_value), key=str.casefold)
-        else:
-            notes.append(
-                f"GitHub issue field {name!r} has an unsupported value shape; value omitted."
-            )
-            value = None
-
-    return TaskIssueField(
-        field_id=str(field_id),
-        name=name,
-        data_type=data_type,
-        value=value,
-    )
-
-
-def _issue_fields(
-    raw_values: list[dict[str, Any]] | None,
-    *,
-    notes: list[str],
-) -> list[TaskIssueField]:
-    fields = [
-        field
-        for raw in raw_values or []
-        if (field := _issue_field(raw, notes=notes)) is not None
-    ]
-    return sorted(fields, key=lambda field: (field.name.casefold(), field.field_id))
-
-
 def _milestone_metadata(raw: Any) -> TaskMilestoneMetadata | None:
     if not isinstance(raw, dict):
         return None
@@ -305,7 +241,6 @@ class GitHubIssuesTaskStore:
         *,
         blocked_by: list[dict[str, Any]] | None = None,
         sub_issues: list[dict[str, Any]] | None = None,
-        issue_fields: list[dict[str, Any]] | None = None,
     ) -> NormalizedTask:
         number = raw.get("number")
         if not isinstance(number, int) or number <= 0:
@@ -517,7 +452,6 @@ class GitHubIssuesTaskStore:
                 assignees=_assignees(raw, notes=notes),
                 issue_type=native_issue_type,
                 milestone=milestone_metadata,
-                issue_fields=_issue_fields(issue_fields, notes=notes),
             ),
             risk=risk,
             resource_class=resource,
@@ -539,7 +473,6 @@ class GitHubIssuesTaskStore:
         raw_all = self.client.list_all()
         blocked_by: dict[int, list[dict[str, Any]]] = {}
         sub_issues: dict[int, list[dict[str, Any]]] = {}
-        issue_fields: dict[int, list[dict[str, Any]]] = {}
 
         for raw in raw_all:
             number = raw.get("number")
@@ -547,14 +480,12 @@ class GitHubIssuesTaskStore:
                 raise ValueError("GitHub issue list contains an invalid issue number.")
             blocked_by[number] = self.client.list_blocked_by(number)
             sub_issues[number] = self.client.list_sub_issues(number)
-            issue_fields[number] = self.client.list_issue_field_values(number)
 
         tasks = [
             self._normalize(
                 raw,
                 blocked_by=blocked_by[int(raw["number"])],
                 sub_issues=sub_issues[int(raw["number"])],
-                issue_fields=issue_fields[int(raw["number"])],
             )
             for raw in raw_all
         ]
