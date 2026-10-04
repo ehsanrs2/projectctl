@@ -149,7 +149,7 @@ def test_tasks_cli_reads_github_but_speckit_import_refuses_parallel_store(
     assert "refusing to create a parallel tracker" in imported.output
 
 
-def test_doctor_reports_github_reader_as_read_only_warning(tmp_path: Path, monkeypatch):
+def test_doctor_reports_github_claim_transport_without_claiming(tmp_path: Path, monkeypatch):
     repo = make_repo(tmp_path)
     monkeypatch.setenv("PROJECTCTL_HOME", str(tmp_path / "home"))
     assert runner.invoke(
@@ -167,11 +167,26 @@ def test_doctor_reports_github_reader_as_read_only_warning(tmp_path: Path, monke
 
     bin_dir = fake_gh(tmp_path)
     monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ.get("PATH", ""))
+
+    class FakeLease:
+        def __init__(self, root):
+            self.root = root
+
+        def remote_url(self):
+            return "git@github.com:acme/widget.git"
+
+        def probe_readable(self):
+            return "a" * 40
+
+    monkeypatch.setattr("projectctl.doctor.checks.RemoteRefLease", FakeLease)
+
     report = runner.invoke(app, ["doctor", "--project", str(repo), "--json"])
+    assert report.exit_code == 0, report.output
     payload = json.loads(report.output)
     task_store = next(item for item in payload["checks"] if item["check_id"] == "task_store")
     assert task_store["status"] == "warn"
-    assert "read-only" in task_store["summary"]
+    assert "claim transport" in task_store["summary"]
+    assert "remote completion is still disabled" in task_store["summary"]
 
 
 def test_scheduler_can_select_normalized_github_issue(tmp_path: Path, monkeypatch):
