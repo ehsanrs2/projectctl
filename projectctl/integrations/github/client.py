@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from urllib.parse import quote
 from pathlib import Path
 from typing import Any
 
@@ -43,12 +44,18 @@ class GitHubIssuesClient:
             )
         self.timeout_seconds = timeout_seconds
 
-    def _run(self, args: list[str]) -> Any:
+    def _execute(
+        self,
+        args: list[str],
+        *,
+        input_text: str | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         cmd = [self.executable, *args]
         try:
-            result = subprocess.run(
+            return subprocess.run(
                 cmd,
                 cwd=self.project_root,
+                input=input_text,
                 capture_output=True,
                 text=True,
                 timeout=self.timeout_seconds,
@@ -58,12 +65,9 @@ class GitHubIssuesClient:
             raise TaskStoreError(
                 f"Failed to execute GitHub CLI command: {cmd!r}: {exc}"
             ) from exc
-        if result.returncode != 0:
-            message = (result.stderr or result.stdout or "unknown GitHub CLI error").strip()
-            raise TaskStoreError(
-                f"GitHub CLI command failed ({result.returncode}): "
-                f"{' '.join(args)}: {message}"
-            )
+
+    @staticmethod
+    def _decode_json(result: subprocess.CompletedProcess[str], args: list[str]) -> Any:
         raw = result.stdout.strip()
         if not raw:
             return None
@@ -74,6 +78,16 @@ class GitHubIssuesClient:
                 f"GitHub CLI returned non-JSON output for {' '.join(args)}: "
                 f"{raw[:240]!r}"
             ) from exc
+
+    def _run(self, args: list[str], *, input_text: str | None = None) -> Any:
+        result = self._execute(args, input_text=input_text)
+        if result.returncode != 0:
+            message = (result.stderr or result.stdout or "unknown GitHub CLI error").strip()
+            raise TaskStoreError(
+                f"GitHub CLI command failed ({result.returncode}): "
+                f"{' '.join(args)}: {message}"
+            )
+        return self._decode_json(result, args)
 
     @staticmethod
     def issue_list(payload: Any) -> list[dict[str, Any]]:
@@ -151,3 +165,74 @@ class GitHubIssuesClient:
                 f"GitHub item #{value} is a pull request, not an issue task."
             )
         return payload
+
+
+    def ensure_label(
+        self,
+        name: str,
+        *,
+        color: str,
+        description: str,
+    ) -> None:
+        endpoint = f"repos/{self.repository}/labels"
+        args = [
+            "api",
+            "--hostname",
+            "github.com",
+            "--method",
+            "POST",
+            endpoint,
+            "--input",
+            "-",
+        ]
+        payload = json.dumps(
+            {"name": name, "color": color, "description": description},
+            sort_keys=True,
+        )
+        result = self._execute(args, input_text=payload)
+        if result.returncode == 0:
+            return
+
+        # Label creation is idempotent by observation. GitHub reports a
+        # validation failure when the label already exists; do not infer that
+        # from stderr text. Confirm the exact label through a GET instead.
+        encoded = quote(name, safe="")
+        existing = self._run(
+            [
+                "api",
+                "--hostname",
+                "github.com",
+                "--method",
+                "GET",
+                f"repos/{self.repository}/labels/{encoded}",
+            ]
+        )
+        if not isinstance(existing, dict) or str(existing.get("name")) != name:
+            message = (result.stderr or result.stdout or "label creation failed").strip()
+            raise TaskStoreError(
+                f"Could not ensure GitHub label {name!r}: {message}"
+            )
+
+    def add_issue_labels(
+        self,
+        issue_number: str | int,
+        labels: list[str],
+    ) -> dict[str, Any]:
+        issue = self.show(issue_number)
+        number = int(issue["number"])
+        payload = self._run(
+            [
+                "api",
+                "--hostname",
+                "github.com",
+                "--method",
+                "POST",
+                f"repos/{self.repository}/issues/{number}/labels",
+                "--input",
+                "-",
+            ],
+            input_text=json.dumps({"labels": labels}, sort_keys=True),
+        )
+        if not isinstance(payload, list):
+            raise TaskStoreError("GitHub add-label response has an invalid shape.")
+        return self.show(number)
