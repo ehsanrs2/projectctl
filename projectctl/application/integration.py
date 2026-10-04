@@ -16,7 +16,10 @@ from projectctl.application.publication import (
     persist_publication_request,
     publication_manifest_ref,
 )
-from projectctl.application.task_lifecycle import reconcile_terminal_task
+from projectctl.application.task_lifecycle import (
+    reconcile_terminal_task,
+    release_task_for_retry,
+)
 from projectctl.core.digest import digest
 from projectctl.core.enums import RunStatus, RunTerminalReason
 from projectctl.core.errors import (
@@ -177,12 +180,38 @@ def _mark_stale_target(
         status=RunStatus.NEEDS_DECISION,
         terminal_reason=RunTerminalReason.STALE_BASE,
     )
-    return reconcile_terminal_task(
-        store.project_root,
-        store=store,
-        run_id=final.run_id,
-        actor=actor,
-    )
+    try:
+        _completion_writer(store.project_root).mark_needs_decision(
+            record.task_id,
+            reason=reason,
+        )
+        policy = task_delivery_policy(store.project_root)
+        if policy.release_claim_after_decision_block:
+            release_task_for_retry(
+                store.project_root,
+                store=store,
+                run_id=record.run_id,
+                actor=actor,
+            )
+        store.append_event(
+            record.run_id,
+            "task.reconciled",
+            {"action": "blocked", "run_status": final.status.value},
+        )
+        return store.get(record.run_id)
+    except Exception as exc:
+        store.append_event(
+            record.run_id,
+            "task.reconcile_failed",
+            {"run_status": final.status.value, "error": str(exc)},
+        )
+        store.transition(
+            record.run_id,
+            expected={RunStatus.NEEDS_DECISION},
+            status=RunStatus.NEEDS_DECISION,
+            terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
+        )
+        return store.get(record.run_id)
 
 
 def _cleanup_verified_worktree(
@@ -289,10 +318,10 @@ def _ensure_publication(
     evidence: EvidenceManifest,
     actor: str,
 ):
-    authority = resolve_task_authority(root)
-    policy = authority.delivery_policy
+    policy = task_delivery_policy(root)
     if not policy.publication_required:
         return None
+    authority = resolve_task_authority(root)
 
     durable_claim = load_durable_claim(
         root,
