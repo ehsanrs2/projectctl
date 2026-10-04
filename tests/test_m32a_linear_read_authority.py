@@ -2,13 +2,13 @@ import json
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
-
+import yaml
 from projectctl.core.enums import TaskStatus
 from projectctl.core.errors import ProviderUnavailableError, RepositoryContractError, TaskStoreError
 from projectctl.integrations.linear.client import LinearIssuesClient
 from projectctl.integrations.linear.task_store import LinearIssuesTaskStore
 from projectctl.project.adoption import plan_adoption
+from projectctl.project.loader import load_project_config
 from projectctl.schemas.onboarding import ProjectInspection
 
 
@@ -271,3 +271,33 @@ def test_linear_team_is_not_accepted_for_other_provider(tmp_path: Path):
             task_store_provider="beads",
             task_store_team=TEAM_ID,
         )
+
+
+def test_project_config_v3_upgrades_to_v4_without_rewrite(tmp_path: Path):
+    ctl = tmp_path / ".projectctl"
+    ctl.mkdir()
+    path = ctl / "config.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_kind": "projectctl.project_config",
+                "schema_version": 3,
+                "project": {"id": "demo"},
+                "task_store": {
+                    "provider": "github",
+                    "repository": "acme/widget",
+                    "cache_max_age_seconds": 17,
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_project_config(tmp_path)
+
+    assert config.schema_version == 4
+    assert config.task_store.repository == "acme/widget"
+    assert config.task_store.team is None
+    assert config.task_store.cache_max_age_seconds == 17
+    assert yaml.safe_load(path.read_text(encoding="utf-8"))["schema_version"] == 3
