@@ -16,13 +16,21 @@ from projectctl.integrations.github.client import (
 FAKE_GH = r'''#!/usr/bin/env python3
 import json, sys
 args = sys.argv[1:]
+
+def included(payload, *, etag='"test-v1"', last_modified="Sun, 04 Oct 2026 12:00:00 GMT"):
+    print("HTTP/2.0 200 OK")
+    print("etag: " + etag)
+    print("last-modified: " + last_modified)
+    print()
+    print(json.dumps(payload))
+
 if args == ["--version"]:
     print("gh version 2.99.0")
     raise SystemExit(0)
 if args[:5] == ["api", "--hostname", "github.com", "--method", "GET"]:
     endpoint = args[-1]
     if endpoint == "repos/acme/widget":
-        print(json.dumps({"full_name": "acme/widget"}))
+        included({"full_name": "acme/widget"}, etag='"repo-v1"')
         raise SystemExit(0)
     if endpoint == "repos/acme/widget/issues/7/dependencies/blocked_by?per_page=100":
         print(json.dumps([[{"number": 6, "state": "open", "repository_url": "https://api.github.com/repos/acme/widget"}]]))
@@ -31,7 +39,7 @@ if args[:5] == ["api", "--hostname", "github.com", "--method", "GET"]:
         print(json.dumps([[{"number": 9, "state": "open", "repository_url": "https://api.github.com/repos/acme/widget"}]]))
         raise SystemExit(0)
     if endpoint == "repos/acme/widget/issues/7":
-        print(json.dumps({"number": 7, "title": "Issue", "state": "open", "labels": []}))
+        included({"number": 7, "title": "Issue", "state": "open", "labels": []}, etag='"issue-7-v1"')
         raise SystemExit(0)
     if endpoint.startswith("repos/acme/widget/issues?"):
         print(json.dumps([
