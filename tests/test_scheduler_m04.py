@@ -9,7 +9,12 @@ from projectctl.scheduler.router import recommend_model
 from projectctl.scheduler.service import SchedulerService
 from projectctl.schemas.config import ProjectConfig, ProjectIdentity
 from projectctl.schemas.quota import QuotaSnapshot, QuotaWindow
-from projectctl.schemas.task import NormalizedTask, TaskSnapshot, TaskSource
+from projectctl.schemas.task import (
+    NormalizedTask,
+    TaskSnapshot,
+    TaskSource,
+    TaskTeamMetadata,
+)
 
 NOW = datetime(2026, 9, 30, 12, 0, tzinfo=timezone.utc)
 
@@ -87,4 +92,15 @@ def test_semantic_task_digest_ignores_capture_and_observation_times():
     t2.source.observed_at = NOW + timedelta(minutes=2)
     s1 = TaskSnapshot(provider="test", captured_at=NOW, source_revision="r", tasks=[t1])
     s2 = TaskSnapshot(provider="test", captured_at=NOW + timedelta(minutes=5), source_revision="r", tasks=[t2])
+    assert semantic_task_snapshot_digest(s1) == semantic_task_snapshot_digest(s2)
+
+
+
+def test_semantic_task_digest_ignores_observational_team_metadata():
+    t1 = task("a")
+    t2 = t1.model_copy(
+        update={"team": TaskTeamMetadata(assignees=["octocat"])}
+    )
+    s1 = TaskSnapshot(provider="test", captured_at=NOW, source_revision="r", tasks=[t1])
+    s2 = TaskSnapshot(provider="test", captured_at=NOW, source_revision="r", tasks=[t2])
     assert semantic_task_snapshot_digest(s1) == semantic_task_snapshot_digest(s2)
