@@ -52,6 +52,7 @@ from projectctl.schemas.execution import (
 from projectctl.application.recovery import recover_run
 from projectctl.schemas.quota import QuotaSnapshot, QuotaWindow
 from projectctl.schemas.run import WorkerDescriptor
+from projectctl.schemas.task_claim import TaskClaim
 from projectctl.schemas.task import NormalizedTask, TaskSource
 from projectctl.storage.runs import RunStore
 from projectctl.workers.capability_digest import effective_capability_digest
@@ -106,15 +107,24 @@ def supported_capabilities(runtime_version="0.160.0"):
 
 
 class FakeClaimer:
-    def claim(self, task_id: str, *, actor: str):
-        return ClaimResult(
-            task_id=task_id,
-            actor=actor,
-            claimed=True,
+    def claim(self, request):
+        return TaskClaim(
+            provider="beads",
+            task_id=request.task_id,
+            run_id=request.run_id,
+            actor=request.actor,
+            base_commit=request.base_commit,
+            integration_target_ref=request.integration_target_ref,
+            claim_token=request.claim_token,
+            request_digest=digest(request),
+            acquired=True,
             observed_at=NOW,
         )
 
-    def release(self, task_id: str, *, actor: str):
+    def release(self, claim):
+        return None
+
+    def release_legacy(self, task_id: str, *, actor: str):
         return None
 
 
@@ -275,7 +285,7 @@ def setup_prepared(tmp_path: Path, monkeypatch):
     )
     monkeypatch.setattr(
         "projectctl.application.task_lifecycle.release_task_for_retry",
-        lambda root, task_id, actor: None,
+        lambda root, store, run_id, actor: None,
     )
     monkeypatch.setattr(
         "projectctl.application.task_lifecycle.block_task_for_decision",
