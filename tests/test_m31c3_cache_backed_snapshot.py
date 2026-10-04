@@ -294,8 +294,11 @@ def test_capture_task_snapshot_forwards_explicit_freshness_override(
         def snapshot(self, *, tasks=None):
             from projectctl.schemas.task import TaskSnapshot
 
+            from projectctl.core.time import utc_now
+
             return TaskSnapshot(
                 provider="github",
+                captured_at=utc_now(),
                 source_revision="test",
                 tasks=tasks or [],
             )
