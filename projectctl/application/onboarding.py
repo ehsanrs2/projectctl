@@ -11,13 +11,32 @@ def inspect_project(path: Path):
     return inspect_repository(path)
 
 
-def build_adoption_plan(path: Path, *, task_store_provider: str | None = None):
+def build_adoption_plan(
+    path: Path,
+    *,
+    task_store_provider: str | None = None,
+    task_store_repository: str | None = None,
+):
     inspection = inspect_repository(path)
-    return plan_adoption(inspection, task_store_provider=task_store_provider)
+    return plan_adoption(
+        inspection,
+        task_store_provider=task_store_provider,
+        task_store_repository=task_store_repository,
+    )
 
 
-def adopt_project(path: Path, *, task_store_provider: str | None = None, allow_dirty: bool = False):
-    plan = build_adoption_plan(path, task_store_provider=task_store_provider)
+def adopt_project(
+    path: Path,
+    *,
+    task_store_provider: str | None = None,
+    task_store_repository: str | None = None,
+    allow_dirty: bool = False,
+):
+    plan = build_adoption_plan(
+        path,
+        task_store_provider=task_store_provider,
+        task_store_repository=task_store_repository,
+    )
     return apply_adoption(plan, allow_dirty=allow_dirty)
 
 

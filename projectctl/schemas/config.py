@@ -15,8 +15,13 @@ class ProjectIdentity(ProjectCtlModel):
     profile: str = "generic"
 
 
+class TaskStoreConfigV1(ProjectCtlModel):
+    provider: str = "beads"
+
+
 class TaskStoreConfig(ProjectCtlModel):
     provider: str = "beads"
+    repository: str | None = None
 
 
 class ProjectPaths(ProjectCtlModel):
@@ -130,9 +135,22 @@ def default_model_profiles() -> dict[ModelProfile, ModelProfileConfig]:
     }
 
 
-class ProjectConfig(ProjectCtlModel):
+class ProjectConfigV1(ProjectCtlModel):
     schema_kind: Literal["projectctl.project_config"] = "projectctl.project_config"
     schema_version: Literal[1] = 1
+    project: ProjectIdentity
+    task_store: TaskStoreConfigV1 = Field(default_factory=TaskStoreConfigV1)
+    paths: ProjectPaths = Field(default_factory=ProjectPaths)
+    knowledge: KnowledgeConfig = Field(default_factory=KnowledgeConfig)
+    scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
+    quota: QuotaPolicy = Field(default_factory=QuotaPolicy)
+    features: FeatureFlags = Field(default_factory=FeatureFlags)
+    model_profiles: dict[ModelProfile, ModelProfileConfig] = Field(default_factory=default_model_profiles)
+
+
+class ProjectConfig(ProjectCtlModel):
+    schema_kind: Literal["projectctl.project_config"] = "projectctl.project_config"
+    schema_version: Literal[2] = 2
     project: ProjectIdentity
     task_store: TaskStoreConfig = Field(default_factory=TaskStoreConfig)
     paths: ProjectPaths = Field(default_factory=ProjectPaths)

@@ -7,6 +7,7 @@ from pathlib import Path
 from projectctl.core.digest import digest
 from projectctl.core.errors import UnsafePathError
 from projectctl.core.paths import resolve_inside_repo
+from projectctl.integrations.github.repository import parse_github_repository
 from projectctl.project.loader import load_project_config
 from projectctl.project.root import git_root
 from projectctl.schemas.onboarding import DetectedAsset, KnowledgeBinding, ProjectInspection
@@ -115,7 +116,13 @@ def _fingerprint_payload(root: Path, assets: list[DetectedAsset], head: str | No
         except OSError:
             pass
         dirty_entries.append({"status": line[:2], "path": rel, "stat": stat})
-    return {"head": head, "dirty": dirty, "git_status": dirty_entries, "assets": file_entries}
+    return {
+        "head": head,
+        "origin": _git_value(root, "remote", "get-url", "origin"),
+        "dirty": dirty,
+        "git_status": dirty_entries,
+        "assets": file_entries,
+    }
 
 
 def inspect_repository(target: Path) -> ProjectInspection:
@@ -234,10 +241,14 @@ def inspect_repository(target: Path) -> ProjectInspection:
         classification = "existing_unmanaged"
         confidence = "high"
 
+    github_repository = parse_github_repository(
+        _git_value(root, "remote", "get-url", "origin")
+    )
+
     task_systems: list[str] = []
     if any(a.role == "beads" for a in assets):
         task_systems.append("beads")
-    if any(a.role == "github_issues_candidate" for a in assets):
+    if any(a.role == "github_issues_candidate" for a in assets) or github_repository:
         task_systems.append("github")
 
     unresolved: list[str] = []
@@ -260,6 +271,7 @@ def inspect_repository(target: Path) -> ProjectInspection:
         assets=assets,
         suggested_bindings=_suggest_knowledge_bindings(root),
         detected_task_systems=task_systems,
+        github_repository=github_repository,
         unresolved_decisions=unresolved,
         conflicts=sorted(set(conflicts)),
         notes=notes,

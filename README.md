@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M2.2 — Budget-aware Checkpointing & Graceful Quota Stop**, adding durable mid-turn quota checkpoints and safe Codex thread resume.
+This repository currently implements **M3.0a — GitHub Issues Reader & Authority Discovery**, adding a real read-only GitHub task authority while keeping remote execution mutation fail-closed.
 
 ## Implemented
 
@@ -671,3 +671,61 @@ Checkpointed runs may also be explicitly aborted with the existing
 `projectctl run abort RUN_ID` command.
 
 M2.2 keeps the bounded `--max-tasks` contract and does not estimate future token cost.
+
+
+## M3.0a — GitHub Issues Reader & Authority Discovery
+
+M3 begins the external team/project-management integration layer. The first slice adds a
+real GitHub Issues reader without weakening the execution claim boundary.
+
+Brownfield onboarding can detect a github.com `origin` and pin the repository identity:
+
+```yaml
+task_store:
+  provider: github
+  repository: owner/repo
+```
+
+The repository can also be supplied explicitly:
+
+```bash
+projectctl adopt /path/to/repo \
+  --task-store github \
+  --task-store-repository owner/repo \
+  --dry-run
+```
+
+GitHub authentication remains owned by the GitHub CLI. ProjectCTL calls
+`gh api --hostname github.com`; it does not persist a GitHub token.
+
+Repository identity is part of **ProjectConfig v2**. Existing v1 configs remain readable
+and are upgraded only in memory; ProjectCTL does not rewrite them automatically.
+Onboarding inspection/plan/manifest contracts are likewise versioned to v2 while their
+v1 forms remain available for audit compatibility.
+
+Supported read paths include:
+
+```bash
+projectctl tasks --project /path/to/repo
+projectctl next --project /path/to/repo
+projectctl explain-next --project /path/to/repo
+projectctl status --project /path/to/repo
+```
+
+GitHub Issues metadata can be expressed with labels such as
+`type:feature`, `priority:p1`, `resource:small`, `risk:high`,
+`info-gain:3`, and `projectctl:blocked`. Native GitHub milestones are also
+normalized into ProjectCTL milestone metadata.
+
+Conflicting scheduling labels fail closed to `needs_decision`.
+
+### Deliberate M3.0a boundary
+
+GitHub-backed execution is **not** enabled yet. `projectctl run prepare` rejects a
+GitHub task authority before creating any durable run state.
+
+Likewise, Spec Kit import refuses to silently create a Beads tracker when GitHub is the
+configured authority.
+
+M3.0b owns the concurrency-safe GitHub write protocol for claim/release/block/complete.
+Only after that protocol is verified should autonomous execution mutate GitHub Issues.

@@ -101,7 +101,7 @@ def initialize_project(target: Path) -> InitResult:
     _write_if_missing(
         root / "AGENTS.md",
         "# Project workflow\n\nProject intent lives in `docs/` and `specs/`.\n\n"
-        "Beads is the canonical task tracker when configured.\n"
+        "The configured task_store is the canonical task authority.\n"
         "Generated files under `docs/generated/` must not be edited manually.\n"
         "ProjectCTL owns `.projectctl/` operational state.\n"
         "Do not create parallel task tracking systems.\n",

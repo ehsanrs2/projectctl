@@ -17,6 +17,7 @@ from projectctl.doctor.service import run_doctor
 from projectctl.integrations.speckit import SpecKitBeadsImporter
 from projectctl.project.adoption import apply_adoption
 from projectctl.project.bootstrap import initialize_project
+from projectctl.project.loader import load_project_config
 from projectctl.project.root import find_project_root
 from projectctl.schema_export import export_json_schemas
 
@@ -71,6 +72,8 @@ def _show_plan(plan) -> None:
     for item in plan.create:
         typer.echo(f"  {item}")
     typer.echo(f"\nTask store: {plan.task_store_provider or 'unresolved'}")
+    if plan.task_store_repository:
+        typer.echo(f"Task repository: {plan.task_store_repository}")
     if plan.unresolved_decisions:
         typer.echo("\nNEEDS DECISION")
         for item in plan.unresolved_decisions:
@@ -81,7 +84,7 @@ def _prompt_task_store(inspection) -> str:
     typer.echo("\nTask authority")
     typer.echo("-" * 56)
     if "github" in inspection.detected_task_systems:
-        typer.echo("  [1] Use existing GitHub task system (adapter not implemented yet)")
+        typer.echo("  [1] Use existing GitHub Issues task system")
         typer.echo("  [2] Introduce local Beads")
         typer.echo("  [3] Configure later")
         choice = typer.prompt("Choose", default="1")
@@ -142,6 +145,11 @@ def init_command(
     non_interactive: bool = typer.Option(False, "--non-interactive", help="Never prompt for input."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Approve safe, reversible onboarding changes."),
     task_store: str | None = typer.Option(None, "--task-store", help="Task authority for brownfield adoption."),
+    task_store_repository: str | None = typer.Option(
+        None,
+        "--task-store-repository",
+        help="Provider repository identity, e.g. owner/repo for GitHub Issues.",
+    ),
     allow_dirty: bool = typer.Option(False, "--allow-dirty", help="Allow adoption with uncommitted changes."),
 ) -> None:
     try:
@@ -190,12 +198,16 @@ def init_command(
                 return
 
         selected_store = _validate_task_store_choice(task_store)
-        if selected_store is None and inspection.detected_task_systems == ["beads"]:
-            selected_store = "beads"
+        if selected_store is None and len(inspection.detected_task_systems) == 1:
+            selected_store = inspection.detected_task_systems[0]
         if selected_store is None and interactive:
             selected_store = _prompt_task_store(inspection)
 
-        plan = build_adoption_plan(path, task_store_provider=selected_store)
+        plan = build_adoption_plan(
+            path,
+            task_store_provider=selected_store,
+            task_store_repository=task_store_repository,
+        )
 
         if json_output or non_interactive:
             if plan.unresolved_decisions or not yes or (plan.dirty and not allow_dirty):
@@ -247,17 +259,26 @@ def adopt_command(
     non_interactive: bool = typer.Option(False, "--non-interactive", help="Never prompt for input."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Approve safe adoption changes."),
     task_store: str | None = typer.Option(None, "--task-store"),
+    task_store_repository: str | None = typer.Option(
+        None,
+        "--task-store-repository",
+        help="Provider repository identity, e.g. owner/repo for GitHub Issues.",
+    ),
     allow_dirty: bool = typer.Option(False, "--allow-dirty"),
 ) -> None:
     try:
         inspection = inspect_project(path)
         interactive = not non_interactive and not json_output
         selected_store = _validate_task_store_choice(task_store)
-        if selected_store is None and inspection.detected_task_systems == ["beads"]:
-            selected_store = "beads"
+        if selected_store is None and len(inspection.detected_task_systems) == 1:
+            selected_store = inspection.detected_task_systems[0]
         if selected_store is None and interactive and not dry_run:
             selected_store = _prompt_task_store(inspection)
-        plan = build_adoption_plan(path, task_store_provider=selected_store)
+        plan = build_adoption_plan(
+            path,
+            task_store_provider=selected_store,
+            task_store_repository=task_store_repository,
+        )
 
         if dry_run:
             if json_output:
@@ -271,7 +292,11 @@ def adopt_command(
                 typer.echo(_json(_interaction_payload("interaction_required", inspection=inspection, plan=plan, reason="unresolved decisions")))
                 raise typer.Exit(EXIT_INTERACTION_REQUIRED)
             selected_store = _prompt_task_store(inspection)
-            plan = build_adoption_plan(path, task_store_provider=selected_store)
+            plan = build_adoption_plan(
+                path,
+                task_store_provider=selected_store,
+                task_store_repository=task_store_repository,
+            )
 
         if (json_output or non_interactive) and (not yes or (plan.dirty and not allow_dirty)):
             reason = "working tree is dirty" if plan.dirty and not allow_dirty else "human approval required"
@@ -366,6 +391,12 @@ def import_tasks_command(
 ) -> None:
     try:
         root = _project_root(project)
+        provider = load_project_config(root).task_store.provider
+        if provider != "beads":
+            raise TaskStoreError(
+                "Spec Kit import currently targets Beads only. "
+                f"Configured task authority is {provider!r}; refusing to create a parallel tracker."
+            )
         importer = SpecKitBeadsImporter(root)
         plan = importer.preview(str(source))
         result = plan if dry_run else importer.apply(plan)
