@@ -187,6 +187,11 @@ For publication-required authorities, the completion writer receives the Publica
 reference/digest. This makes canonical task completion transitively dependent on the exact remote
 publication proof.
 
+The GitHub completion adapter independently revalidates that reference before mutating the Issue:
+the manifest must exist inside the project, its digest must match, `published=true`, and
+`remote_after` must equal the exact candidate commit. Application-level ordering is therefore not
+the only publication gate.
+
 ### IntegrationManifest v2
 
 `IntegrationManifest v1` remains exported for audit compatibility.
@@ -212,6 +217,10 @@ Examples:
 - crash after publication manifest → re-observe remote candidate;
 - crash after task completion → durable `task.completion.observed` prevents destructive duplicate
   completion and allows claim release to continue;
+- exact claim ownership changes after completion → ProjectCTL records a cleanup anomaly but does
+  not rewrite the completed task into needs-decision or mutate the replacement owner's claim;
+- transient/ambiguous claim release failure after completion → the run remains INTEGRATING so
+  recovery can retry exact release without altering canonical task semantics;
 - crash after exact claim release → idempotent release and final PASSED transition may continue.
 
 Recovery never invents remote publication or task completion from local state alone.
