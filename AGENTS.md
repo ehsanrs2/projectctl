@@ -8,6 +8,9 @@ and roadmap shape.
 `docs/PROJECT_STATE.yaml` is the only structured source for the current goal and active milestone.
 The configured `task_store` is the canonical task execution-state authority.
 Generated files under `docs/generated/` must not be edited manually.
+Public JSON Schemas are generated on demand by `projectctl schema export`; do not version a
+`schemas/generated/` mirror because `projectctl.schema_export.PUBLIC_SCHEMAS` is the
+implementation authority.
 `projectctl.verification.yaml` is human-managed verification policy and workers must not modify it.
 ProjectCTL owns `.projectctl/` operational state and scheduling metadata.
 Do not create parallel task tracking systems.

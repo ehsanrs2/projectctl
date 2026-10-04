@@ -582,7 +582,7 @@ Implemented:
 
 ### M3.1c3 — Cache-backed snapshot assembly and scale
 
-Implemented by the current change:
+Implemented:
 
 - ProjectConfig v3 with explicit task-store `cache_max_age_seconds`
 - page-aware Issue and relation collection reads
@@ -591,6 +591,17 @@ Implemented by the current change:
 - repository-cache invalidation after successful Issue task mutation
 - execution preflight override with cache max-age zero before and after claim
 - scale tests proving repeated snapshots eliminate repeated relation GET fan-out
+
+### M3.1d — Schema export authority and drift policy
+
+Implemented by the current change:
+
+- `PUBLIC_SCHEMAS` and versioned model classes are the sole implementation authority
+- legacy partial `schemas/generated/` mirror removed from Git
+- default generated schema directory ignored by Git
+- deterministic schema filename export order
+- CI rejects reintroduced checked-in generated schema mirrors
+- CI exports the complete registry to a temporary directory and validates exact filenames/JSON
 
 ---
 
@@ -667,13 +678,15 @@ must not be assumed by scheduling or execution code.
 Telemetry is currently a local SQLite event log. OTLP/distributed tracing/evaluation infrastructure
 is future work.
 
-### Finding H — generated public schemas need an explicit drift policy
+### Finding H — generated public schemas needed an explicit drift policy (resolved in M3.1d)
 
-`projectctl schema export` is tested, but the repository also contains checked-in
-`schemas/generated` artifacts. The project needs one clear policy: either CI must verify the
-checked-in files exactly match the exporter, or those files should no longer be versioned.
+The repository previously contained a partial checked-in `schemas/generated/` mirror that had
+drifted behind the public exporter registry.
 
-Until this is resolved, the exporter is the implementation authority, not the checked-in generated
+**Resolution:** ADR-020 makes `projectctl.schema_export.PUBLIC_SCHEMAS` plus the versioned model
+classes the sole implementation authority. Generated schema files are now disposable export/build
+artifacts, `schemas/generated/` is ignored and not versioned, export order is deterministic, and
+CI rejects a checked-in mirror while validating the complete exporter output in a temporary
 directory.
 
 ---
@@ -753,7 +766,7 @@ policy-blocked rather than bypassed.
 
 ### M3.1a — GitHub Dependencies & Sub-issues
 
-**Current milestone / implemented by this change.**
+**Completed.**
 
 Implemented:
 
@@ -825,7 +838,7 @@ cannot incorrectly validate an aggregate. Page-aware reuse belongs to M3.1c3.
 
 ### M3.1c3 — Cache-backed Snapshot Assembly & Scale
 
-**Current milestone / implemented by this change.**
+**Completed.**
 
 Implemented:
 
@@ -845,11 +858,31 @@ Implemented:
   fan-out
 - GitHub remains authoritative; cache remains disposable derived operational state
 
+### M3.1d — Schema Export Authority & Drift Policy
+
+**Current milestone / implemented by this change.**
+
+Implemented:
+
+- public JSON Schema implementation authority is `PUBLIC_SCHEMAS` plus its versioned model classes
+- legacy partial `schemas/generated/` mirror removed
+- `schemas/generated/` ignored so normal local export does not dirty Git
+- deterministic filename ordering in `export_json_schemas`
+- CI fails if a generated schema mirror is checked back into the repository
+- CI exports every registered schema to a clean temporary directory and verifies exact registry
+  coverage plus JSON/schema-object shape
+- ADR-020 records the policy and future release-artifact boundary
+
 ### M3.2 — Additional task authorities
+
+**Next milestone after M3.1d.**
 
 Linear and Jira should reuse the same Task Authority ports/capability model.
 
-Do not add provider-specific branches back into application services.
+Before implementing provider mutations, M3.2 must separately prove each provider's read,
+claim/release, delivery/publication, completion, concurrency and credential-ownership semantics.
+Do not infer parity from GitHub and do not add provider-specific branches back into application
+services.
 
 ### Post-M3 directions — not yet milestone-frozen
 

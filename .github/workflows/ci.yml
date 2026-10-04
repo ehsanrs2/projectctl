@@ -32,13 +32,28 @@ jobs:
       - name: Compile
         run: python -m compileall -q projectctl
 
+      - name: Enforce schema source policy
+        run: |
+          if [ -d schemas/generated ]; then
+            echo "::error::schemas/generated must not be versioned; projectctl.schema_export is the implementation authority."
+            exit 1
+          fi
+
       - name: Validate public schema export
         run: |
           python - <<'PY'
+          import json
           from pathlib import Path
-          from projectctl.schema_export import export_json_schemas
-          written = export_json_schemas(Path("/tmp/projectctl-schemas"))
-          assert written
+          from projectctl.schema_export import PUBLIC_SCHEMAS, export_json_schemas
+
+          destination = Path("/tmp/projectctl-schemas")
+          written = export_json_schemas(destination)
+          assert [path.name for path in written] == sorted(PUBLIC_SCHEMAS)
+          assert {path.name for path in destination.glob("*.schema.json")} == set(PUBLIC_SCHEMAS)
+          for path in written:
+              payload = json.loads(path.read_text(encoding="utf-8"))
+              assert isinstance(payload, dict)
+              assert "properties" in payload or "$defs" in payload
           PY
 
   codex-sdk-contract:
