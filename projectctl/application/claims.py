@@ -115,12 +115,17 @@ def load_durable_claim(
     *,
     store: RunStore,
     run_id: str,
-) -> tuple[TaskClaimRequest, TaskClaim]:
+    allow_legacy_missing: bool = False,
+) -> tuple[TaskClaimRequest, TaskClaim] | None:
     request_path = project_root / claim_request_ref(run_id)
     claim_path = project_root / claim_ref(run_id)
-    if not request_path.exists() or not claim_path.exists():
+    request_exists = request_path.exists()
+    claim_exists = claim_path.exists()
+    if not request_exists and not claim_exists and allow_legacy_missing:
+        return None
+    if not request_exists or not claim_exists:
         raise RunStoreError(
-            f"Run {run_id} is missing durable task claim evidence."
+            f"Run {run_id} has incomplete durable task claim evidence."
         )
 
     try:
