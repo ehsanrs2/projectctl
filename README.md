@@ -815,12 +815,17 @@ git push --force-with-lease=<claim-ref>:<ownership-sha> origin :<claim-ref>
 ```
 
 This means a delayed/stale runner cannot delete a claim that another runner acquired later.
+A successful exact-SHA delete remains successful even if another runner immediately reacquires the
+ref before ProjectCTL's follow-up observation.
 
 Before claiming, ProjectCTL also requires:
 
 - `origin` to represent the configured GitHub repository
 - the remote integration-target branch to exist
 - that remote target to equal the exact execution base
+
+After claim acquisition, ProjectCTL revalidates the execution-plan inputs again before creating the
+worktree, closing the race between preflight and distributed ownership acquisition.
 
 Every new run writes `task-claim-request.json` and `task-claim.json`; their digests are anchored
 in the append-only run event stream. Abort/retry release therefore uses exact durable ownership
