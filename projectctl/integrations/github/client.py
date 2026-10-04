@@ -3,19 +3,32 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
-from urllib.parse import quote
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+from urllib.parse import quote
 
 from projectctl.core.errors import ProviderUnavailableError, TaskStoreError
+from projectctl.core.time import utc_now
 from projectctl.integrations.github.repository import (
     infer_github_repository,
     normalize_github_repository,
 )
+from projectctl.telemetry.events import record_event
+
+if TYPE_CHECKING:
+    from projectctl.integrations.github.cache import GitHubDerivedCache
 
 
 GITHUB_API_VERSION = "2026-03-10"
 GITHUB_ACCEPT = "application/vnd.github+json"
+
+
+@dataclass(frozen=True)
+class GitHubGetResponse:
+    status_code: int
+    headers: dict[str, str]
+    payload: Any
 
 
 class GitHubIssuesClient:
@@ -23,6 +36,11 @@ class GitHubIssuesClient:
 
     ProjectCTL does not persist GitHub credentials. Authentication, host policy,
     and token storage remain owned by GitHub CLI.
+
+    M3.1c2 conditionally revalidates single-response GET representations. It
+    deliberately does not attach one validator to a multi-page
+    `--paginate --slurp` aggregate because an HTTP validator belongs to one
+    concrete response representation/page.
     """
 
     def __init__(
@@ -32,6 +50,7 @@ class GitHubIssuesClient:
         repository: str | None = None,
         executable: str | None = None,
         timeout_seconds: int = 30,
+        cache: GitHubDerivedCache | None = None,
     ):
         self.project_root = project_root.resolve()
         self.executable = executable or shutil.which("gh")
@@ -47,6 +66,14 @@ class GitHubIssuesClient:
                 "Set task_store.repository or configure a github.com origin remote."
             )
         self.timeout_seconds = timeout_seconds
+
+        if cache is None:
+            # Delayed import avoids a module cycle: cache.py imports the stable
+            # representation constants declared above.
+            from projectctl.integrations.github.cache import GitHubDerivedCache
+
+            cache = GitHubDerivedCache(self.project_root)
+        self.cache = cache
 
     def _execute(
         self,
@@ -71,17 +98,62 @@ class GitHubIssuesClient:
             ) from exc
 
     @staticmethod
-    def _decode_json(result: subprocess.CompletedProcess[str], args: list[str]) -> Any:
-        raw = result.stdout.strip()
-        if not raw:
+    def _decode_json_text(raw: str, args: list[str]) -> Any:
+        value = raw.strip()
+        if not value:
             return None
         try:
-            return json.loads(raw)
+            return json.loads(value)
         except json.JSONDecodeError as exc:
             raise TaskStoreError(
                 f"GitHub CLI returned non-JSON output for {' '.join(args)}: "
-                f"{raw[:240]!r}"
+                f"{value[:240]!r}"
             ) from exc
+
+    @classmethod
+    def _decode_json(
+        cls,
+        result: subprocess.CompletedProcess[str],
+        args: list[str],
+    ) -> Any:
+        return cls._decode_json_text(result.stdout, args)
+
+    @classmethod
+    def _decode_included_response(
+        cls,
+        result: subprocess.CompletedProcess[str],
+        args: list[str],
+    ) -> GitHubGetResponse:
+        raw = result.stdout.replace("\r\n", "\n")
+        header_block, separator, body = raw.partition("\n\n")
+        if not separator:
+            raise TaskStoreError(
+                "GitHub CLI conditional GET did not include an HTTP status/header block."
+            )
+
+        lines = header_block.splitlines()
+        if not lines or not lines[0].startswith("HTTP/"):
+            raise TaskStoreError(
+                "GitHub CLI conditional GET returned an invalid HTTP status line."
+            )
+        status_parts = lines[0].split()
+        if len(status_parts) < 2 or not status_parts[1].isdigit():
+            raise TaskStoreError(
+                f"GitHub CLI returned an invalid HTTP status line: {lines[0]!r}"
+            )
+
+        headers: dict[str, str] = {}
+        for line in lines[1:]:
+            if not line.strip() or ":" not in line:
+                continue
+            name, value = line.split(":", 1)
+            headers[name.strip().casefold()] = value.strip()
+
+        return GitHubGetResponse(
+            status_code=int(status_parts[1]),
+            headers=headers,
+            payload=cls._decode_json_text(body, args),
+        )
 
     def _run(self, args: list[str], *, input_text: str | None = None) -> Any:
         result = self._execute(args, input_text=input_text)
@@ -93,12 +165,25 @@ class GitHubIssuesClient:
             )
         return self._decode_json(result, args)
 
+    @staticmethod
+    def _safe_validator(value: str | None, *, name: str) -> str | None:
+        if value is None:
+            return None
+        if "\r" in value or "\n" in value:
+            raise TaskStoreError(
+                f"Cached GitHub {name} validator contains a prohibited line break."
+            )
+        return value
+
     def _get_args(
         self,
         endpoint: str,
         *,
         paginate: bool = False,
         slurp: bool = False,
+        include: bool = False,
+        etag: str | None = None,
+        last_modified: str | None = None,
     ) -> list[str]:
         args = [
             "api",
@@ -111,12 +196,156 @@ class GitHubIssuesClient:
             "-H",
             f"X-GitHub-Api-Version: {GITHUB_API_VERSION}",
         ]
+        if include:
+            args.append("--include")
+
+        safe_etag = self._safe_validator(etag, name="ETag")
+        safe_last_modified = self._safe_validator(
+            last_modified,
+            name="Last-Modified",
+        )
+        if safe_etag is not None:
+            args.extend(["-H", f"If-None-Match: {safe_etag}"])
+        elif safe_last_modified is not None:
+            args.extend(["-H", f"If-Modified-Since: {safe_last_modified}"])
+
         if paginate:
             args.append("--paginate")
         if slurp:
             args.append("--slurp")
         args.append(endpoint)
         return args
+
+    def _record_cache_read(
+        self,
+        *,
+        request,
+        outcome: str,
+        status_code: int | None,
+        conditional_header: str | None,
+    ) -> None:
+        from projectctl.integrations.github.cache import cache_request_fingerprint
+
+        record_event(
+            self.project_root,
+            "github.cache.read",
+            {
+                "repository": self.repository,
+                "endpoint": request.endpoint,
+                "request_fingerprint": cache_request_fingerprint(request),
+                "outcome": outcome,
+                "status_code": status_code,
+                "conditional_header": conditional_header,
+            },
+        )
+
+    def _conditional_get(self, endpoint: str) -> Any:
+        from projectctl.integrations.github.cache import github_cache_request
+
+        request = github_cache_request(
+            repository=self.repository,
+            endpoint=endpoint,
+        )
+        existing = self.cache.load(request)
+        etag = existing.etag if existing is not None else None
+        last_modified = existing.last_modified if existing is not None else None
+        conditional_header = (
+            "if-none-match"
+            if etag is not None
+            else "if-modified-since"
+            if last_modified is not None
+            else None
+        )
+        args = self._get_args(
+            endpoint,
+            include=True,
+            etag=etag,
+            last_modified=last_modified,
+        )
+        result = self._execute(args)
+
+        # Provider/transport failures that do not contain a parseable HTTP
+        # response are errors even when a cache entry exists. Cached data is
+        # never used as an outage fallback.
+        if result.returncode != 0 and not result.stdout.lstrip().startswith("HTTP/"):
+            self._record_cache_read(
+                request=request,
+                outcome="provider_error",
+                status_code=None,
+                conditional_header=conditional_header,
+            )
+            message = (result.stderr or result.stdout or "unknown GitHub CLI error").strip()
+            raise TaskStoreError(
+                f"GitHub CLI command failed ({result.returncode}): "
+                f"{' '.join(args)}: {message}"
+            )
+
+        response = self._decode_included_response(result, args)
+
+        if response.status_code == 304:
+            if existing is None or conditional_header is None:
+                self._record_cache_read(
+                    request=request,
+                    outcome="provider_error",
+                    status_code=304,
+                    conditional_header=conditional_header,
+                )
+                raise TaskStoreError(
+                    "GitHub returned 304 Not Modified without a matching cached validator."
+                )
+            updated = self.cache.revalidate(
+                request,
+                validated_at=utc_now(),
+                etag=response.headers.get("etag"),
+                last_modified=response.headers.get("last-modified"),
+            )
+            self._record_cache_read(
+                request=request,
+                outcome="revalidated_304",
+                status_code=304,
+                conditional_header=conditional_header,
+            )
+            return updated.payload
+
+        if result.returncode != 0 or response.status_code != 200:
+            self._record_cache_read(
+                request=request,
+                outcome="provider_error",
+                status_code=response.status_code,
+                conditional_header=conditional_header,
+            )
+            message = (result.stderr or "GitHub API request failed").strip()
+            raise TaskStoreError(
+                f"GitHub CLI GET failed with HTTP {response.status_code}: "
+                f"{endpoint}: {message}"
+            )
+
+        if not isinstance(response.payload, (dict, list)):
+            self._record_cache_read(
+                request=request,
+                outcome="provider_error",
+                status_code=200,
+                conditional_header=conditional_header,
+            )
+            raise TaskStoreError(
+                "GitHub GET returned a JSON value that cannot be stored in the derived cache."
+            )
+
+        observed_at = utc_now()
+        self.cache.store(
+            request,
+            response.payload,
+            observed_at=observed_at,
+            etag=response.headers.get("etag"),
+            last_modified=response.headers.get("last-modified"),
+        )
+        self._record_cache_read(
+            request=request,
+            outcome="miss_200" if existing is None else "refreshed_200",
+            status_code=200,
+            conditional_header=conditional_header,
+        )
+        return response.payload
 
     @staticmethod
     def issue_list(payload: Any) -> list[dict[str, Any]]:
@@ -152,12 +381,15 @@ class GitHubIssuesClient:
         return first[0].strip() if first else None
 
     def repository_info(self) -> dict[str, Any]:
-        payload = self._run(self._get_args(f"repos/{self.repository}"))
+        payload = self._conditional_get(f"repos/{self.repository}")
         if not isinstance(payload, dict):
             raise TaskStoreError("GitHub repository endpoint returned an invalid payload.")
         return payload
 
     def list_all(self) -> list[dict[str, Any]]:
+        # M3.1c2 intentionally leaves multi-page aggregate reads unconditional.
+        # One validator must not be treated as proof for an entire
+        # --paginate/--slurp aggregate. M3.1c3 owns page-aware snapshot reuse.
         payload = self._run(
             self._get_args(
                 f"repos/{self.repository}/issues?state=all&per_page=100",
@@ -211,8 +443,8 @@ class GitHubIssuesClient:
 
     def show(self, issue_number: str | int) -> dict[str, Any]:
         number = self._issue_number(issue_number)
-        payload = self._run(
-            self._get_args(f"repos/{self.repository}/issues/{number}")
+        payload = self._conditional_get(
+            f"repos/{self.repository}/issues/{number}"
         )
         if not isinstance(payload, dict) or not payload.get("number"):
             raise TaskStoreError(f"GitHub issue not found: {issue_number}")
@@ -221,7 +453,6 @@ class GitHubIssuesClient:
                 f"GitHub item #{number} is a pull request, not an issue task."
             )
         return payload
-
 
     def ensure_label(
         self,

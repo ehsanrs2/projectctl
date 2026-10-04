@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M3.1c1 — GitHub Derived Cache & Freshness Contract**, defining a disposable, integrity-checked local cache foundation before conditional GitHub reads are enabled.
+This repository currently implements **M3.1c2 — Conditional GitHub Reads**, using the M3.1c1 derived-cache validators for authenticated remote revalidation without treating cached data as an outage fallback.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -1087,13 +1087,40 @@ otherwise                             -> stale
 File modification time is not freshness authority. Future timestamps, digest mismatches, request
 identity mismatches, cache-path escapes, and symlink entries fail closed.
 
-M3.1c1 deliberately **does not yet serve task snapshots from cache** and does not send
-`If-None-Match` / `If-Modified-Since`. Therefore this milestone establishes correctness and
-provenance but does not claim an API-call reduction yet.
+M3.1c1 deliberately **does not serve task snapshots from cache**. It established the
+correctness/provenance contract consumed by M3.1c2.
 
 See ADR-017 and `docs/PROJECTCTL_BLUEPRINT.md`.
 
+### M3.1c2 — Conditional GitHub Reads
+
+M3.1c2 activates remote validation for single-response GitHub GET representations.
+
+For cacheable single-response reads, ProjectCTL now:
+
+- captures HTTP status plus `ETag` / `Last-Modified` using authenticated `gh api --include`
+- sends `If-None-Match` when an ETag exists
+- falls back to `If-Modified-Since` only when no ETag is available
+- handles `304 Not Modified` by preserving payload, payload digest and `observed_at` while
+  advancing `validated_at`
+- handles `200 OK` by replacing the derived payload and response validators
+- treats provider, transport, auth, rate-limit and server errors as errors even when cached data
+  exists
+- records `github.cache.read` telemetry outcomes such as `miss_200`, `refreshed_200`,
+  `revalidated_304` and `provider_error`
+- rejects cached validator values containing line breaks before they can become request headers
+
+M3.1c2 deliberately does **not** attach one validator to a `gh api --paginate --slurp`
+aggregate. An HTTP validator proves one concrete response representation/page, not an arbitrary
+multi-page aggregate. Existing paginated Issue/relation reads therefore remain unconditional in
+this milestone.
+
+Likewise, a locally fresh cache entry is not served without contacting GitHub. TTL-based
+cache-backed snapshot assembly and page-aware fan-out reduction belong to M3.1c3.
+
+See ADR-018 and `docs/PROJECTCTL_BLUEPRINT.md`.
+
 Next:
 
-- **M3.1c2** — Conditional GitHub Reads / ETag revalidation
-- **M3.1c3** — Cache-backed snapshot assembly, freshness policy, telemetry and scale tests
+- **M3.1c3** — Cache-backed snapshot assembly, page-aware freshness policy, telemetry/scale
+  validation and GitHub API fan-out reduction

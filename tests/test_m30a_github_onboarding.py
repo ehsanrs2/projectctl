@@ -19,13 +19,20 @@ runner = CliRunner()
 FAKE_GH = r'''#!/usr/bin/env python3
 import json, sys
 args = sys.argv[1:]
+
+def included(payload, *, etag='"test-v1"'):
+    print("HTTP/2.0 200 OK")
+    print("etag: " + etag)
+    print()
+    print(json.dumps(payload))
+
 if args == ["--version"]:
     print("gh version 2.99.0")
     raise SystemExit(0)
 if args[:5] == ["api", "--hostname", "github.com", "--method", "GET"]:
     endpoint = args[-1]
     if endpoint == "repos/acme/widget":
-        print(json.dumps({"full_name": "acme/widget"}))
+        included({"full_name": "acme/widget"}, etag='"repo-v1"')
         raise SystemExit(0)
     if endpoint.endswith("/dependencies/blocked_by?per_page=100"):
         print(json.dumps([[]]))
