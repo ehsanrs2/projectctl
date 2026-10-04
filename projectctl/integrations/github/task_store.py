@@ -6,7 +6,14 @@ from projectctl.core.digest import digest
 from projectctl.core.enums import ResourceClass, RiskLevel, TaskStatus, TaskType
 from projectctl.core.time import utc_now
 from projectctl.integrations.github.client import GitHubIssuesClient
-from projectctl.schemas.task import NormalizedTask, TaskHierarchy, TaskSnapshot, TaskSource
+from projectctl.schemas.task import (
+    NormalizedTask,
+    TaskHierarchy,
+    TaskMilestoneMetadata,
+    TaskSnapshot,
+    TaskSource,
+    TaskTeamMetadata,
+)
 
 
 _PRIORITY = {
@@ -125,6 +132,57 @@ def _relation_id(
     return f"{kind}:{repository}#{number}", False, satisfied, None
 
 
+def _assignees(raw: dict[str, Any], *, notes: list[str]) -> list[str]:
+    result: list[str] = []
+    for item in raw.get("assignees") or []:
+        if not isinstance(item, dict):
+            notes.append("GitHub assignee metadata contains a non-object entry.")
+            continue
+        login = str(item.get("login") or "").strip()
+        if not login:
+            notes.append("GitHub assignee metadata contains an entry without login.")
+            continue
+        result.append(login)
+    return sorted(set(result), key=str.casefold)
+
+
+def _issue_type_name(raw: dict[str, Any]) -> str | None:
+    value = raw.get("type")
+    if isinstance(value, str):
+        result = value.strip()
+        return result or None
+    if isinstance(value, dict):
+        result = str(value.get("name") or "").strip()
+        return result or None
+    return None
+
+
+def _milestone_metadata(raw: Any) -> TaskMilestoneMetadata | None:
+    if not isinstance(raw, dict):
+        return None
+    title = str(raw.get("title") or "").strip()
+    if not title:
+        return None
+    number = raw.get("number")
+    return TaskMilestoneMetadata(
+        number=number if isinstance(number, int) else None,
+        title=title,
+        state=str(raw.get("state")).strip() if raw.get("state") is not None else None,
+        due_on=raw.get("due_on"),
+        external_url=(
+            str(raw.get("html_url")).strip()
+            if raw.get("html_url") is not None
+            else None
+        ),
+        open_issues=raw.get("open_issues") if isinstance(raw.get("open_issues"), int) else None,
+        closed_issues=(
+            raw.get("closed_issues")
+            if isinstance(raw.get("closed_issues"), int)
+            else None
+        ),
+    )
+
+
 def _cycle_nodes(tasks: dict[str, NormalizedTask], *, hierarchy: bool) -> set[str]:
     graph: dict[str, list[str]] = {}
     for task_id, task in tasks.items():
@@ -219,12 +277,31 @@ class GitHubIssuesTaskStore:
 
         metadata_conflict = False
 
+        native_issue_type = _issue_type_name(raw)
+        native_task_type = (
+            _TYPE.get(native_issue_type.casefold(), TaskType.UNKNOWN)
+            if native_issue_type
+            else TaskType.UNKNOWN
+        )
+
         explicit_type, conflicted = _single_prefixed(labels, "type:", notes=notes)
         metadata_conflict = metadata_conflict or conflicted
         if explicit_type is not None:
             task_type = _TYPE.get(explicit_type, TaskType.UNKNOWN)
             if task_type == TaskType.UNKNOWN:
                 notes.append(f"Unknown GitHub task type label: type:{explicit_type}.")
+            if (
+                task_type != TaskType.UNKNOWN
+                and native_task_type != TaskType.UNKNOWN
+                and task_type != native_task_type
+            ):
+                metadata_conflict = True
+                notes.append(
+                    "GitHub native issue type conflicts with explicit ProjectCTL type label: "
+                    f"{native_issue_type!r} vs type:{explicit_type}."
+                )
+        elif native_task_type != TaskType.UNKNOWN:
+            task_type = native_task_type
         elif "bug" in folded:
             task_type = TaskType.BUG
         elif "enhancement" in folded:
@@ -272,11 +349,8 @@ class GitHubIssuesTaskStore:
                 )
 
         native_milestone = raw.get("milestone")
-        native_title = (
-            str(native_milestone.get("title")).strip()
-            if isinstance(native_milestone, dict) and native_milestone.get("title")
-            else None
-        )
+        milestone_metadata = _milestone_metadata(native_milestone)
+        native_title = milestone_metadata.title if milestone_metadata else None
         label_milestone, conflicted = _single_prefixed(labels, "milestone:", notes=notes)
         metadata_conflict = metadata_conflict or conflicted
         milestone = native_title or label_milestone
@@ -364,11 +438,20 @@ class GitHubIssuesTaskStore:
             milestone=milestone,
             created_at=raw.get("created_at"),
             ready_since=None,
-            due_at=None,
+            due_at=(
+                milestone_metadata.due_on
+                if milestone_metadata is not None and milestone is not None
+                else None
+            ),
             dependencies=sorted(set(dependencies)),
             blocks=[],
             hierarchy=TaskHierarchy(
                 sub_issues=sorted(set(hierarchy_children)),
+            ),
+            team=TaskTeamMetadata(
+                assignees=_assignees(raw, notes=notes),
+                issue_type=native_issue_type,
+                milestone=milestone_metadata,
             ),
             risk=risk,
             resource_class=resource,
@@ -522,6 +605,7 @@ class GitHubIssuesTaskStore:
             value = task.model_dump(mode="json")
             if isinstance(value.get("source"), dict):
                 value["source"].pop("observed_at", None)
+            value.pop("team", None)
             material.append(value)
         content_revision = digest(material)
         version = self.client.version()

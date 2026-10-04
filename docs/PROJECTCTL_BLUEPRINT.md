@@ -539,13 +539,24 @@ Implemented:
 
 ### M3.1a — GitHub structured team relationships
 
-Implemented by the current change:
+Implemented:
 
 - native blocked-by dependency normalization
 - cross-repository unresolved dependency safety
 - sub-issue hierarchy without implicit blocking semantics
 - relation cycle/missing-node fail-closed validation
 - TaskSnapshot v2 hierarchy contract
+
+
+### M3.1b — GitHub core team metadata
+
+Implemented by the current change:
+
+- assignee/team observation without ownership semantics
+- native issue-type classification and conflict handling
+- milestone due-date scheduling input
+- TaskSnapshot v3
+- explicit deferral of Projects/custom Issue Fields
 
 ---
 
@@ -591,15 +602,12 @@ ProjectCTL also avoids blind native Issue-state PATCHes. It records additive
 `projectctl:completed` / `projectctl:needs-decision` markers so concurrent human close reasons
 remain authoritative.
 
-### Finding D — GitHub dependencies are currently absent
+### Finding D — GitHub dependency semantics were absent (resolved in M3.1a)
 
-M3.0a deliberately leaves `dependencies=[]` and `blocks=[]` for GitHub Issues.
+M3.0a originally left `dependencies=[]` and `blocks=[]` for GitHub Issues.
 
-That means open GitHub issues without explicit ProjectCTL lifecycle labels can be scheduler-ready
-even when a team models dependency elsewhere.
-
-Before GitHub becomes a rich team authority, dependency/sub-issue/blocked-by semantics must be
-normalized explicitly rather than parsed from prose.
+**Resolution:** M3.1a consumes GitHub's structured blocked-by API, derives reverse blocks edges,
+models sub-issue hierarchy separately, and fails closed on missing/cyclic relationship state.
 
 ### Finding E — autonomous execution remains single-active-run
 
@@ -686,7 +694,7 @@ No GitHub Issue completion occurs in this milestone.
 
 ### M3.0c — Remote Publication & GitHub Completion
 
-**Current milestone / implemented by this change.**
+**Completed.**
 
 Goal: make remote/team completion depend on provable remote-visible delivery without overwriting
 concurrent human workflow intent.
@@ -726,18 +734,23 @@ Implemented:
 
 ### M3.1b — GitHub Team Metadata
 
-**Next milestone after M3.1a.**
+**Current milestone / implemented by this change.**
 
-Candidate scope:
+Implemented:
 
-- richer milestone metadata where semantics are explicit
-- assignee/team metadata only where it safely affects scheduling or explanation
-- GitHub Projects metadata when a stable API/authority contract is available
-- conflict handling between native metadata and explicit ProjectCTL metadata
+- deterministic assignee normalization as observational team context
+- native GitHub issue-type normalization with explicit conflict precedence
+- rich native milestone metadata
+- GitHub milestone due date mapped to scheduler `due_at`
+- team-only metadata excluded from execution/scheduler semantic digest
+- TaskSnapshot v3 with additive v1/v2 compatibility
+- custom Issue Fields and Projects V2 deliberately excluded from implicit scheduling policy
 
-Do not turn assignee or project fields into ownership/claim primitives.
+Assignee/project metadata never becomes claim ownership.
 
 ### M3.1c — Efficient GitHub Synchronization
+
+**Next milestone after M3.1b.**
 
 Candidate scope:
 

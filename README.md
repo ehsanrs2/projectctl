@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M3.1a — GitHub Dependencies & Sub-issues**, making the scheduler consume GitHub's structured blocked-by relationships while keeping sub-issue hierarchy separate from execution dependencies.
+This repository currently implements **M3.1b — GitHub Team Metadata**, exposing stable GitHub assignee, native issue-type, and milestone metadata while keeping ownership and custom-field scheduling semantics explicit.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -976,3 +976,58 @@ Relationship endpoint failures are never interpreted as an empty relationship se
 
 The correctness-first implementation performs additional GitHub API reads while constructing a
 snapshot. Efficient incremental synchronization is intentionally deferred to M3.1c.
+
+
+## M3.1b — GitHub Team Metadata
+
+M3.1b exposes stable Issue-level team metadata without turning team workflow fields into hidden
+execution authority.
+
+Current `TaskTeamMetadata` includes:
+
+```text
+assignees
+issue_type
+milestone:
+  number
+  title
+  state
+  due_on
+  external_url
+  open_issues
+  closed_issues
+```
+
+Assignees are observational context only. They do not claim tasks, affect eligibility, choose a
+worker, or grant permissions.
+
+GitHub native issue type participates in task classification with this precedence:
+
+```text
+explicit ProjectCTL type:
+    ↓
+recognized GitHub native issue type
+    ↓
+generic labels such as bug/enhancement
+    ↓
+unknown
+```
+
+If an explicit recognized `type:` label conflicts with a recognized native GitHub issue type,
+ProjectCTL fails closed to `needs_decision`.
+
+Native milestone title continues to feed milestone relevance. Its explicit `due_on` value now
+feeds `task.due_at`, so the existing deterministic urgency score can use a GitHub milestone
+deadline.
+
+Assignee-only changes remain visible in TaskSnapshot but are excluded from the semantic scheduler
+digest and GitHub semantic source revision. They therefore do not invalidate an otherwise safe
+ExecutionPlan.
+
+M3.1b introduces **TaskSnapshot v3**. v1 and v2 remain exported for audit compatibility.
+
+Organization-specific Issue Fields and GitHub Projects V2 are intentionally not merged into core
+scheduling semantics yet. A field named Priority, Risk, DRI, or Due Date does not automatically
+have ProjectCTL meaning. Those integrations require explicit binding/conflict policy.
+
+See ADR-016 and `docs/PROJECTCTL_BLUEPRINT.md`.

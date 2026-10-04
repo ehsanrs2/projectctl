@@ -59,9 +59,13 @@ from projectctl.schemas.status import ProjectStatus, TaskCounts
 from projectctl.schemas.task import (
     NormalizedTask,
     NormalizedTaskV1,
+    NormalizedTaskV2,
     TaskHierarchy,
+    TaskMilestoneMetadata,
     TaskSnapshot,
     TaskSnapshotV1,
+    TaskSnapshotV2,
+    TaskTeamMetadata,
 )
 from projectctl.schemas.task_authority import TaskAuthorityCapabilities
 from projectctl.schemas.task_claim import TaskClaim, TaskClaimRequest
@@ -102,6 +106,7 @@ __all__ = [
     "MilestoneState",
     "NormalizedTask",
     "NormalizedTaskV1",
+    "NormalizedTaskV2",
     "PermissionCapabilities",
     "PermissionRequest",
     "ProjectConfig",
@@ -127,8 +132,11 @@ __all__ = [
     "TaskCounts",
     "StrategyFallbackPolicy",
     "TaskHierarchy",
+    "TaskMilestoneMetadata",
     "TaskSnapshot",
     "TaskSnapshotV1",
+    "TaskSnapshotV2",
+    "TaskTeamMetadata",
     "VerificationCatalog",
     "VerificationCommand",
     "VerificationManifest",
