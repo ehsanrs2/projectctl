@@ -13,9 +13,11 @@ from projectctl.integrations.task_authority import (
     task_authority_capabilities,
     task_authority_capabilities_for_provider,
 )
+from projectctl.project.ownership import DEFAULT_OWNERSHIP
 from projectctl.schema_export import PUBLIC_SCHEMAS
 from projectctl.schemas.config import ProjectConfig, ProjectIdentity, TaskStoreConfig
 from projectctl.schemas.task_authority import TaskAuthorityCapabilities
+from projectctl.verification.diff import SYSTEM_PROTECTED_PATHS
 
 runner = CliRunner()
 
@@ -91,6 +93,8 @@ def test_application_layer_has_no_task_provider_implementation_imports():
     forbidden = (
         "projectctl.integrations.beads",
         "projectctl.integrations.github",
+        'provider == "beads"',
+        'provider == "github"',
     )
 
     offenders: list[str] = []
@@ -101,3 +105,9 @@ def test_application_layer_has_no_task_provider_implementation_imports():
                 offenders.append(f"{path.name}: {import_path}")
 
     assert offenders == []
+
+
+
+def test_architecture_blueprint_is_human_owned_and_worker_protected():
+    assert "docs/PROJECTCTL_BLUEPRINT.md" in DEFAULT_OWNERSHIP
+    assert "docs/PROJECTCTL_BLUEPRINT.md" in SYSTEM_PROTECTED_PATHS
