@@ -27,6 +27,12 @@ if args[:5] == ["api", "--hostname", "github.com", "--method", "GET"]:
     if endpoint == "repos/acme/widget":
         print(json.dumps({"full_name": "acme/widget"}))
         raise SystemExit(0)
+    if endpoint.endswith("/dependencies/blocked_by?per_page=100"):
+        print(json.dumps([[]]))
+        raise SystemExit(0)
+    if endpoint.endswith("/sub_issues?per_page=100"):
+        print(json.dumps([[]]))
+        raise SystemExit(0)
     if endpoint.startswith("repos/acme/widget/issues?"):
         print(json.dumps([[
             {
