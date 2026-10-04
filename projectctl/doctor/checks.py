@@ -5,6 +5,7 @@ from projectctl.core.enums import HealthStatus
 from projectctl.core.errors import ConfigurationError, DatabaseVersionError, ProviderUnavailableError, QuotaError, RepositoryContractError, TaskStoreError, UnsafePathError
 from projectctl.core.paths import resolve_inside_repo
 from projectctl.integrations.github import GitHubIssuesClient
+from projectctl.integrations.github.repository import parse_github_repository
 from projectctl.project.bootstrap import projectctl_home
 from projectctl.project.loader import load_project_config
 from projectctl.project.state import PROJECT_STATE_PATH, load_project_state
@@ -151,13 +152,47 @@ def check_task_store(root: Path) -> HealthCheckResult:
                 remediation=["Verify `gh auth status`, repository access, and task_store.repository."],
             )
         full_name = str(info.get("full_name") or client.repository)
+        try:
+            lease = RemoteRefLease(root)
+            remote_repository = parse_github_repository(lease.remote_url())
+            if remote_repository != client.repository:
+                return HealthCheckResult(
+                    check_id="task_store",
+                    status=HealthStatus.ERROR,
+                    summary=(
+                        "GitHub task authority and origin remote disagree: "
+                        f"task_store={client.repository}, origin={remote_repository or 'unknown'}."
+                    ),
+                    remediation=[
+                        "Point origin at the configured GitHub repository or update task_store.repository."
+                    ],
+                )
+            lease.probe_readable()
+        except TaskStoreError as exc:
+            return HealthCheckResult(
+                check_id="task_store",
+                status=HealthStatus.WARN,
+                summary=(
+                    f"GitHub Issues is readable for {full_name}, but the Git claim "
+                    f"transport is not ready: {exc}"
+                ),
+                remediation=[
+                    "Verify Git origin authentication/read access before using remote task claims."
+                ],
+            )
+
         return HealthCheckResult(
             check_id="task_store",
             status=HealthStatus.WARN,
-            summary=f"GitHub Issues is readable for {full_name}; M3.0a is read-only.",
+            summary=(
+                f"GitHub Issues and claim transport are readable for {full_name}; "
+                "remote completion is still disabled."
+            ),
             details=[
                 "Scheduling/status reads are enabled.",
-                "Claim, completion, and remote task mutation remain disabled until M3.0b.",
+                "M3.0b2 claim/release uses an exact remote Git ref lease.",
+                "Write permission and repository rules are proven only by an actual claim attempt.",
+                "GitHub-backed execution remains disabled until block/complete publication semantics exist.",
             ],
         )
 
