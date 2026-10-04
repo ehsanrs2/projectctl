@@ -1,4 +1,5 @@
 import subprocess
+from types import SimpleNamespace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -100,3 +101,37 @@ def test_marker_commit_is_deterministic_for_same_inputs(tmp_path: Path):
         timestamp=NOW,
     )
     assert first == second
+
+
+def test_successful_release_stays_successful_if_ref_is_immediately_reacquired(
+    tmp_path: Path, monkeypatch
+):
+    local, remote, base = setup_remote(tmp_path)
+    lease = RemoteRefLease(local)
+    ref = "refs/heads/projectctl/claims/issue-9"
+    marker_a = lease.create_marker_commit(
+        base_commit=base,
+        message="claim-a",
+        timestamp=NOW,
+    )
+    marker_b = lease.create_marker_commit(
+        base_commit=base,
+        message="claim-b",
+        timestamp=NOW,
+    )
+
+    # Model the only ordering that matters here: the server accepted our
+    # exact-SHA CAS delete, then another runner acquired the free ref before
+    # our diagnostic observation. A successful push must remain authoritative.
+    monkeypatch.setattr(
+        lease,
+        "_git",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=0,
+            stdout="ok",
+            stderr="",
+        ),
+    )
+    monkeypatch.setattr(lease, "observe", lambda observed_ref: marker_b)
+
+    lease.release(ref=ref, ownership_sha=marker_a)
