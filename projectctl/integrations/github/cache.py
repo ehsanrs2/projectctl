@@ -12,7 +12,11 @@ from typing import Any
 from projectctl.core.digest import digest
 from projectctl.core.errors import TaskStoreError, UnsafePathError
 from projectctl.integrations.github.client import GITHUB_ACCEPT, GITHUB_API_VERSION
-from projectctl.schemas.github_cache import GitHubCacheEntry, GitHubCacheRequest
+from projectctl.schemas.github_cache import (
+    GitHubCacheEntry,
+    GitHubCacheRequest,
+    github_cache_integrity_digest,
+)
 
 
 class GitHubCacheFreshness(StrEnum):
@@ -143,13 +147,24 @@ class GitHubDerivedCache:
         etag: str | None = None,
         last_modified: str | None = None,
     ) -> GitHubCacheEntry:
+        request_fingerprint = cache_request_fingerprint(request)
+        payload_digest = digest(payload)
+        effective_validated_at = validated_at or observed_at
         entry = GitHubCacheEntry(
             request=request,
-            request_fingerprint=cache_request_fingerprint(request),
+            request_fingerprint=request_fingerprint,
             payload=payload,
-            payload_digest=digest(payload),
+            payload_digest=payload_digest,
+            integrity_digest=github_cache_integrity_digest(
+                request_fingerprint=request_fingerprint,
+                payload_digest=payload_digest,
+                observed_at=observed_at,
+                validated_at=effective_validated_at,
+                etag=etag,
+                last_modified=last_modified,
+            ),
             observed_at=observed_at,
-            validated_at=validated_at or observed_at,
+            validated_at=effective_validated_at,
             etag=etag,
             last_modified=last_modified,
         )
@@ -173,15 +188,24 @@ class GitHubDerivedCache:
             raise TaskStoreError(
                 "GitHub cache revalidation cannot move validated_at backwards."
             )
+        effective_etag = etag if etag is not None else existing.etag
+        effective_last_modified = (
+            last_modified if last_modified is not None else existing.last_modified
+        )
+        integrity_digest = github_cache_integrity_digest(
+            request_fingerprint=existing.request_fingerprint,
+            payload_digest=existing.payload_digest,
+            observed_at=existing.observed_at,
+            validated_at=validated_at,
+            etag=effective_etag,
+            last_modified=effective_last_modified,
+        )
         updated = existing.model_copy(
             update={
                 "validated_at": validated_at,
-                "etag": etag if etag is not None else existing.etag,
-                "last_modified": (
-                    last_modified
-                    if last_modified is not None
-                    else existing.last_modified
-                ),
+                "etag": effective_etag,
+                "last_modified": effective_last_modified,
+                "integrity_digest": integrity_digest,
             }
         )
         # model_copy does not re-run validators; reconstruct before persistence.
