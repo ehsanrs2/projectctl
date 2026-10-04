@@ -165,6 +165,18 @@ class GitHubTaskClaimer:
             ownership_sha=marker_sha,
         )
 
+    def validate(self, claim: TaskClaim) -> bool:
+        if (
+            not claim.acquired
+            or claim.provider != "github"
+            or claim.repository != self.repository
+            or not claim.ownership_ref
+            or not claim.ownership_sha
+        ):
+            return False
+        self._assert_remote_identity()
+        return self.lease.observe(claim.ownership_ref) == claim.ownership_sha
+
     def release(self, claim: TaskClaim) -> None:
         if not claim.acquired:
             raise TaskStoreError("Cannot release a task claim that was not acquired.")
