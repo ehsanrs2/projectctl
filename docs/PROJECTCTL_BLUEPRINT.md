@@ -570,7 +570,7 @@ Implemented:
 
 ### M3.1c2 — Conditional GitHub reads
 
-Implemented by the current change:
+Implemented:
 
 - authenticated single-response conditional GETs through `gh api --include`
 - ETag-first revalidation with Last-Modified fallback
@@ -578,8 +578,19 @@ Implemented by the current change:
 - 304 freshness advancement without payload replacement
 - 200 payload/validator replacement
 - cache-read telemetry for miss, refresh, revalidation and provider failure
-- no cached outage fallback
-- multi-page `--paginate --slurp` aggregates deliberately excluded until page-aware M3.1c3
+- no stale-cache outage fallback
+
+### M3.1c3 — Cache-backed snapshot assembly and scale
+
+Implemented by the current change:
+
+- ProjectConfig v3 with explicit task-store `cache_max_age_seconds`
+- page-aware Issue and relation collection reads
+- bounded local `fresh_hit` reuse of remotely validated pages
+- automatic return to conditional revalidation after freshness expires
+- repository-cache invalidation after successful Issue task mutation
+- execution preflight override with cache max-age zero before and after claim
+- scale tests proving repeated snapshots eliminate repeated relation GET fan-out
 
 ---
 
@@ -792,7 +803,7 @@ This milestone does not yet reduce API calls.
 
 ### M3.1c2 — Conditional GitHub Reads
 
-**Current milestone / implemented by this change.**
+**Completed.**
 
 Implemented:
 
@@ -814,16 +825,25 @@ cannot incorrectly validate an aggregate. Page-aware reuse belongs to M3.1c3.
 
 ### M3.1c3 — Cache-backed Snapshot Assembly & Scale
 
-**Next milestone after M3.1c2.**
+**Current milestone / implemented by this change.**
 
-Candidate scope:
+Implemented:
 
-- use remotely validated cache entries during task snapshot construction
-- explicit configured freshness policy
-- deterministic invalidation
-- reduce per-Issue relation fan-out
-- larger-repository call-count/latency tests
-- GitHub remains authoritative; cache remains disposable and derived
+- ProjectConfig v3 with explicit `task_store.cache_max_age_seconds`
+- v1/v2 project configs remain readable and upgrade in memory
+- `0` disables local fresh hits and forces remote revalidation
+- Issue lists and relationship collections are fetched/cached as independent concrete pages
+- each page has an independent request fingerprint, payload digest, validators and freshness proof
+- fresh validated pages may be reused without another immediate GitHub request
+- stale pages return to the M3.1c2 ETag/Last-Modified conditional path
+- provider/API failure after revalidation is attempted remains an error; stale cache is not an
+  outage fallback
+- successful Issue lifecycle-label mutation invalidates repository-derived cache before reread
+- ordinary status/scheduling reads may use bounded freshness, while execution preflight before
+  and after claim forces `max_age=0` remote validation
+- scale tests measure request-count reduction across repeated snapshots and per-Issue relation
+  fan-out
+- GitHub remains authoritative; cache remains disposable derived operational state
 
 ### M3.2 — Additional task authorities
 
