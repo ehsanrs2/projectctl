@@ -5,6 +5,7 @@ from projectctl.schemas.artifact import ArtifactMetadata
 from projectctl.schemas.auto import AutoRunPolicy, AutoRunReport
 from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDecision
 from projectctl.schemas.config import ProjectConfig, ProjectConfigV1
+from projectctl.schemas.delivery import PublicationManifest, PublicationRequest, TaskDeliveryPolicy
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
 from projectctl.schemas.execution import (ExecutionPlan, ExecutionPlanV1, WorkerCheckpoint, WorkerCheckpointV1, WorkerRequest, WorkerRequestV1, WorkerResult)
 from projectctl.schemas.integration import IntegrationManifest, RecoveryReport
@@ -35,6 +36,9 @@ PUBLIC_SCHEMAS = {
     "quota-snapshot.v2.schema.json": QuotaSnapshot,
     "task-snapshot.v1.schema.json": TaskSnapshot,
     "task-authority-capabilities.v1.schema.json": TaskAuthorityCapabilities,
+    "task-delivery-policy.v1.schema.json": TaskDeliveryPolicy,
+    "publication-request.v1.schema.json": PublicationRequest,
+    "publication-manifest.v1.schema.json": PublicationManifest,
     "task-claim-request.v1.schema.json": TaskClaimRequest,
     "task-claim.v1.schema.json": TaskClaim,
     "scheduler-decision.v1.schema.json": SchedulerDecisionV1,
