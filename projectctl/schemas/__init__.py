@@ -17,6 +17,7 @@ from projectctl.schemas.delivery import (
     TaskDeliveryPolicy,
 )
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
+from projectctl.schemas.github_cache import GitHubCacheEntry, GitHubCacheRequest
 from projectctl.schemas.execution import (
     ClaimResult,
     EvidenceReference,
@@ -95,6 +96,8 @@ __all__ = [
     "EvidenceManifest",
     "EvidenceManifestV1",
     "EvidenceReference",
+    "GitHubCacheEntry",
+    "GitHubCacheRequest",
     "ExecutionPlan",
     "ExecutionPlanV1",
     "ExecutionPolicy",

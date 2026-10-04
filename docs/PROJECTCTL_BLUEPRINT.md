@@ -550,13 +550,23 @@ Implemented:
 
 ### M3.1b — GitHub core team metadata
 
-Implemented by the current change:
+Implemented:
 
 - assignee/team observation without ownership semantics
 - native issue-type classification and conflict handling
 - milestone due-date scheduling input
 - TaskSnapshot v3
 - explicit deferral of Projects/custom Issue Fields
+
+### M3.1c1 — GitHub derived cache foundation
+
+Implemented by the current change:
+
+- cache request/entry public contracts
+- integrity-checked freshness provenance
+- explicit API representation pinning
+- disposable project-local storage and invalidation
+- conditional-request-ready validators without cache-backed reads yet
 
 ---
 
@@ -734,7 +744,7 @@ Implemented:
 
 ### M3.1b — GitHub Team Metadata
 
-**Current milestone / implemented by this change.**
+**Completed.**
 
 Implemented:
 
@@ -748,17 +758,48 @@ Implemented:
 
 Assignee/project metadata never becomes claim ownership.
 
-### M3.1c — Efficient GitHub Synchronization
+### M3.1c1 — GitHub Derived Cache & Freshness Contract
 
-**Next milestone after M3.1b.**
+**Current milestone / implemented by this change.**
+
+Implemented:
+
+- versioned GitHubCacheRequest v1 and GitHubCacheEntry v1
+- repository-scoped deterministic request fingerprints
+- explicit GitHub API-version/media-type representation identity
+- payload and freshness-provenance integrity digests
+- observed_at vs validated_at semantics
+- caller-supplied freshness evaluation
+- atomic project-local derived-cache persistence
+- exact-request and repository invalidation
+- path-containment / symlink safety
+- no SQLite migration and no task-authority duplication
+
+This milestone does not yet reduce API calls.
+
+### M3.1c2 — Conditional GitHub Reads
+
+**Next milestone after M3.1c1.**
 
 Candidate scope:
 
-- incremental relation/task refresh
-- derived cache with explicit freshness
+- capture ETag / Last-Modified response validators
+- authenticated If-None-Match / If-Modified-Since
+- 304 revalidation without payload replacement
+- 200 payload replacement
+- provider failures never become cache hits
+- explicit cache hit/miss/revalidation telemetry
+
+### M3.1c3 — Cache-backed Snapshot Assembly & Scale
+
+Candidate scope:
+
+- use remotely validated cache entries during task snapshot construction
+- explicit configured freshness policy
 - deterministic invalidation
-- reduced API fan-out for larger repositories
-- GitHub remains authoritative; cache remains derived
+- reduce per-Issue relation fan-out
+- larger-repository call-count/latency tests
+- GitHub remains authoritative; cache remains disposable and derived
 
 ### M3.2 — Additional task authorities
 

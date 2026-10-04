@@ -14,6 +14,10 @@ from projectctl.integrations.github.repository import (
 )
 
 
+GITHUB_API_VERSION = "2026-03-10"
+GITHUB_ACCEPT = "application/vnd.github+json"
+
+
 class GitHubIssuesClient:
     """Narrow wrapper around the authenticated `gh api` surface.
 
@@ -89,6 +93,31 @@ class GitHubIssuesClient:
             )
         return self._decode_json(result, args)
 
+    def _get_args(
+        self,
+        endpoint: str,
+        *,
+        paginate: bool = False,
+        slurp: bool = False,
+    ) -> list[str]:
+        args = [
+            "api",
+            "--hostname",
+            "github.com",
+            "--method",
+            "GET",
+            "-H",
+            f"Accept: {GITHUB_ACCEPT}",
+            "-H",
+            f"X-GitHub-Api-Version: {GITHUB_API_VERSION}",
+        ]
+        if paginate:
+            args.append("--paginate")
+        if slurp:
+            args.append("--slurp")
+        args.append(endpoint)
+        return args
+
     @staticmethod
     def issue_list(payload: Any) -> list[dict[str, Any]]:
         if payload is None:
@@ -123,23 +152,18 @@ class GitHubIssuesClient:
         return first[0].strip() if first else None
 
     def repository_info(self) -> dict[str, Any]:
-        payload = self._run(["api", "--hostname", "github.com", "--method", "GET", f"repos/{self.repository}"])
+        payload = self._run(self._get_args(f"repos/{self.repository}"))
         if not isinstance(payload, dict):
             raise TaskStoreError("GitHub repository endpoint returned an invalid payload.")
         return payload
 
     def list_all(self) -> list[dict[str, Any]]:
         payload = self._run(
-            [
-                "api",
-                "--hostname",
-                "github.com",
-                "--method",
-                "GET",
-                "--paginate",
-                "--slurp",
+            self._get_args(
                 f"repos/{self.repository}/issues?state=all&per_page=100",
-            ]
+                paginate=True,
+                slurp=True,
+            )
         )
         return [
             issue
@@ -165,16 +189,11 @@ class GitHubIssuesClient:
     ) -> list[dict[str, Any]]:
         number = self._issue_number(issue_number)
         payload = self._run(
-            [
-                "api",
-                "--hostname",
-                "github.com",
-                "--method",
-                "GET",
-                "--paginate",
-                "--slurp",
+            self._get_args(
                 f"repos/{self.repository}/issues/{number}/{suffix}?per_page=100",
-            ]
+                paginate=True,
+                slurp=True,
+            )
         )
         return self.issue_list(payload)
 
@@ -193,14 +212,7 @@ class GitHubIssuesClient:
     def show(self, issue_number: str | int) -> dict[str, Any]:
         number = self._issue_number(issue_number)
         payload = self._run(
-            [
-                "api",
-                "--hostname",
-                "github.com",
-                "--method",
-                "GET",
-                f"repos/{self.repository}/issues/{number}",
-            ]
+            self._get_args(f"repos/{self.repository}/issues/{number}")
         )
         if not isinstance(payload, dict) or not payload.get("number"):
             raise TaskStoreError(f"GitHub issue not found: {issue_number}")
@@ -242,14 +254,7 @@ class GitHubIssuesClient:
         # from stderr text. Confirm the exact label through a GET instead.
         encoded = quote(name, safe="")
         existing = self._run(
-            [
-                "api",
-                "--hostname",
-                "github.com",
-                "--method",
-                "GET",
-                f"repos/{self.repository}/labels/{encoded}",
-            ]
+            self._get_args(f"repos/{self.repository}/labels/{encoded}")
         )
         if not isinstance(existing, dict) or str(existing.get("name")) != name:
             message = (result.stderr or result.stdout or "label creation failed").strip()
