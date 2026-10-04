@@ -190,6 +190,36 @@ class GitHubIssuesClient:
             "sub_issues",
         )
 
+    def list_issue_field_values(self, issue_number: str | int) -> list[dict[str, Any]]:
+        number = self._issue_number(issue_number)
+        payload = self._run(
+            [
+                "api",
+                "--hostname",
+                "github.com",
+                "--method",
+                "GET",
+                "--paginate",
+                "--slurp",
+                f"repos/{self.repository}/issues/{number}/issue-field-values?per_page=100",
+            ]
+        )
+        if payload is None:
+            return []
+        if not isinstance(payload, list):
+            raise TaskStoreError("Unsupported GitHub issue-field-values response shape.")
+        result: list[dict[str, Any]] = []
+        for item in payload:
+            if isinstance(item, dict):
+                result.append(item)
+            elif isinstance(item, list):
+                result.extend(value for value in item if isinstance(value, dict))
+            else:
+                raise TaskStoreError(
+                    "Unsupported GitHub issue-field-values pagination shape."
+                )
+        return result
+
     def show(self, issue_number: str | int) -> dict[str, Any]:
         number = self._issue_number(issue_number)
         payload = self._run(
