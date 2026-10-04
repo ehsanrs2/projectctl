@@ -69,6 +69,12 @@ class FakeClaimer:
             observed_at=NOW,
         )
 
+    def reconcile(self, request):
+        return self.claim(request)
+
+    def validate(self, claim):
+        return True
+
     def release(self, claim):
         self.released.append(claim.task_id)
 
