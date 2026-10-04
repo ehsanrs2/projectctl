@@ -6,6 +6,7 @@ from projectctl.application.claims import (
     load_durable_claim,
     record_claim_release,
 )
+from projectctl.core.digest import digest
 from projectctl.core.enums import RunStatus, RunTerminalReason
 from projectctl.integrations.task_authority import resolve_task_authority
 from projectctl.storage.runs import RunStore
@@ -24,6 +25,7 @@ def release_task_for_retry(
         store=store,
         run_id=run_id,
         allow_legacy_missing=True,
+        require_acquired=False,
     )
     if durable is None:
         record = store.get(run_id)
@@ -35,6 +37,13 @@ def release_task_for_retry(
         )
         return
     _, claim = durable
+    if not claim.acquired:
+        store.append_event(
+            run_id,
+            "task.claim.release_not_required",
+            {"claim_digest": digest(claim)},
+        )
+        return
     claimer.release(claim)
     record_claim_release(store, claim)
 
