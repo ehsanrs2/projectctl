@@ -137,7 +137,7 @@ def test_failed_run_releases_canonical_task(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(
         task_lifecycle,
         "release_task_for_retry",
-        lambda root, task_id, actor: released.append((task_id, actor)),
+        lambda root, store, run_id, actor: released.append((run_id, actor)),
     )
 
     result = task_lifecycle.reconcile_terminal_task(
@@ -148,7 +148,7 @@ def test_failed_run_releases_canonical_task(monkeypatch, tmp_path: Path):
     )
 
     assert result.status == RunStatus.FAILED
-    assert released == [("task-1", "actor-1")]
+    assert released == [("run-1", "actor-1")]
     assert store.events[-1][0] == "task.reconciled"
 
 
