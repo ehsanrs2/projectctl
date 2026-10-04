@@ -8,6 +8,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from projectctl.core.errors import ProviderUnavailableError, TaskStoreError
+from projectctl.integrations.linear.team import normalize_linear_team_id
 
 
 LINEAR_GRAPHQL_ENDPOINT = "https://api.linear.app/graphql"
@@ -75,9 +76,9 @@ class LinearIssuesClient:
         timeout_seconds: int = 30,
     ):
         self.project_root = project_root.resolve()
-        self.team_id = str(team_id).strip()
-        if not self.team_id:
-            raise TaskStoreError("Linear task authority requires a non-empty team id.")
+        self.team_id = normalize_linear_team_id(team_id)
+        if self.team_id is None:
+            raise TaskStoreError("Linear task authority requires a team UUID.")
 
         key = api_key if api_key is not None else os.environ.get("LINEAR_API_KEY")
         token = (
