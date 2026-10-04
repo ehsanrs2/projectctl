@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
+from projectctl.core.digest import digest
 from projectctl.core.errors import TaskStoreError
 from projectctl.integrations.github.client import GitHubIssuesClient
+from projectctl.schemas.delivery import PublicationManifest
 from projectctl.schemas.execution import EvidenceReference
 
 
@@ -47,6 +50,30 @@ class GitHubTaskCompletionWriter:
             repository=repository,
         )
 
+    def _validate_publication_evidence(self, evidence: EvidenceReference) -> PublicationManifest:
+        path = (self.project_root / evidence.path).resolve()
+        if not path.is_relative_to(self.project_root) or not path.exists():
+            raise TaskStoreError(
+                "GitHub completion requires a durable publication manifest inside the project."
+            )
+        try:
+            manifest = PublicationManifest.model_validate(
+                json.loads(path.read_text(encoding="utf-8"))
+            )
+        except Exception as exc:
+            raise TaskStoreError(
+                f"GitHub completion publication evidence is invalid: {exc}"
+            ) from exc
+        if digest(manifest) != evidence.digest:
+            raise TaskStoreError(
+                "GitHub completion publication evidence digest does not match."
+            )
+        if not manifest.published or manifest.remote_after != manifest.candidate_commit:
+            raise TaskStoreError(
+                "GitHub completion requires proof that the exact candidate is published."
+            )
+        return manifest
+
     def complete(self, task_id: str, *, evidence: EvidenceReference) -> None:
         issue = self.client.show(task_id)
         state = str(issue.get("state") or "").casefold()
@@ -58,6 +85,8 @@ class GitHubTaskCompletionWriter:
                 f"GitHub task {task_id} was closed externally with "
                 f"state_reason={state_reason or 'unknown'}; refusing to overwrite human intent."
             )
+
+        self._validate_publication_evidence(evidence)
 
         self.client.ensure_label(
             COMPLETED_LABEL,
