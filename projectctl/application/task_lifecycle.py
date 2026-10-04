@@ -110,6 +110,14 @@ def reconcile_terminal_task(
                 record.task_id,
                 reason=reason,
             )
+            authority = resolve_task_authority(project_root)
+            if authority.delivery_policy.release_claim_after_decision_block:
+                release_task_for_retry(
+                    project_root,
+                    store=store,
+                    run_id=run_id,
+                    actor=actor,
+                )
             action = "blocked"
         else:
             return record
