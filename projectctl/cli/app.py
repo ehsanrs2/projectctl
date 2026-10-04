@@ -75,6 +75,8 @@ def _show_plan(plan) -> None:
     typer.echo(f"\nTask store: {plan.task_store_provider or 'unresolved'}")
     if plan.task_store_repository:
         typer.echo(f"Task repository: {plan.task_store_repository}")
+    if getattr(plan, "task_store_team", None):
+        typer.echo(f"Task team: {plan.task_store_team}")
     if plan.unresolved_decisions:
         typer.echo("\nNEEDS DECISION")
         for item in plan.unresolved_decisions:
@@ -99,7 +101,7 @@ def _prompt_task_store(inspection) -> str:
 def _validate_task_store_choice(value: str | None) -> str | None:
     if value is None:
         return None
-    allowed = {"beads", "github", "unresolved"}
+    allowed = {"beads", "github", "linear", "unresolved"}
     if value not in allowed:
         raise RepositoryContractError(
             f"Unsupported onboarding task store `{value}`. Choose one of: {', '.join(sorted(allowed))}."
@@ -150,6 +152,11 @@ def init_command(
         None,
         "--task-store-repository",
         help="Provider repository identity, e.g. owner/repo for GitHub Issues.",
+    ),
+    task_store_team: str | None = typer.Option(
+        None,
+        "--task-store-team",
+        help="Provider team identity, currently the Linear team UUID.",
     ),
     allow_dirty: bool = typer.Option(False, "--allow-dirty", help="Allow adoption with uncommitted changes."),
 ) -> None:
@@ -208,6 +215,7 @@ def init_command(
             path,
             task_store_provider=selected_store,
             task_store_repository=task_store_repository,
+            task_store_team=task_store_team,
         )
 
         if json_output or non_interactive:
@@ -265,6 +273,11 @@ def adopt_command(
         "--task-store-repository",
         help="Provider repository identity, e.g. owner/repo for GitHub Issues.",
     ),
+    task_store_team: str | None = typer.Option(
+        None,
+        "--task-store-team",
+        help="Provider team identity, currently the Linear team UUID.",
+    ),
     allow_dirty: bool = typer.Option(False, "--allow-dirty"),
 ) -> None:
     try:
@@ -279,6 +292,7 @@ def adopt_command(
             path,
             task_store_provider=selected_store,
             task_store_repository=task_store_repository,
+            task_store_team=task_store_team,
         )
 
         if dry_run:
