@@ -3,37 +3,21 @@ from __future__ import annotations
 from pathlib import Path
 
 from projectctl.core.enums import RunStatus, RunTerminalReason
-from projectctl.core.errors import ConfigurationError
-from projectctl.integrations.beads.claim import BeadsTaskClaimer
-from projectctl.integrations.beads.completion import BeadsTaskCompletionWriter
-from projectctl.project.loader import load_project_config
+from projectctl.integrations.task_authority import resolve_task_authority
 from projectctl.storage.runs import RunStore
 
 
-def _provider(project_root: Path) -> str:
-    return load_project_config(project_root).task_store.provider
-
-
 def release_task_for_retry(project_root: Path, task_id: str, *, actor: str) -> None:
-    provider = _provider(project_root)
-    if provider == "beads":
-        BeadsTaskClaimer(project_root).release(task_id, actor=actor)
-        return
-    raise ConfigurationError(
-        f"Task release is not implemented for provider {provider!r}."
+    resolve_task_authority(project_root).require_claimer().release(
+        task_id,
+        actor=actor,
     )
 
 
 def block_task_for_decision(project_root: Path, task_id: str, *, reason: str) -> None:
-    provider = _provider(project_root)
-    if provider == "beads":
-        BeadsTaskCompletionWriter(project_root).mark_needs_decision(
-            task_id,
-            reason=reason,
-        )
-        return
-    raise ConfigurationError(
-        f"Task decision blocking is not implemented for provider {provider!r}."
+    resolve_task_authority(project_root).require_completion_writer().mark_needs_decision(
+        task_id,
+        reason=reason,
     )
 
 

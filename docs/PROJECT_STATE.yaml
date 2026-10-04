@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Integrate external team task systems without weakening ProjectCTL deterministic scheduling or execution-safety boundaries.
+current_goal: Make the task-authority boundary provider-neutral before enabling any remote GitHub execution mutations.
 active_milestone:
-  id: M3.0a
-  title: GitHub Issues Reader & Authority Discovery
+  id: M3.0b1
+  title: Task Authority Capability & Resolver Layer
   aliases:
-    - GitHub Issues
-    - External Task Authority
-    - Read-only GitHub Adapter
+    - Task Authority
+    - Provider-neutral Task Lifecycle
+    - Task Authority Capabilities
 updated_at: null

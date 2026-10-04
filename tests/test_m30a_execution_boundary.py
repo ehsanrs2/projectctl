@@ -24,7 +24,7 @@ def test_github_reader_cannot_prepare_execution_run(tmp_path: Path, monkeypatch)
     raw["task_store"] = {"provider": "github", "repository": "acme/widget"}
     config_path.write_text(yaml.safe_dump(raw, sort_keys=False))
 
-    with pytest.raises(ConfigurationError, match="read-only in M3.0a"):
+    with pytest.raises(ConfigurationError, match="not execution-ready"):
         prepare_next_run(repo)
 
     runs_dir = repo / ".projectctl" / "runs"

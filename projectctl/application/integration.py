@@ -10,11 +10,15 @@ from pathlib import Path
 from projectctl.application.execution import _actor
 from projectctl.core.digest import digest
 from projectctl.core.enums import RunStatus, RunTerminalReason
-from projectctl.core.errors import IntegrationError, RunStoreError, WorktreeError
+from projectctl.core.errors import (
+    IntegrationError,
+    ProjectCtlError,
+    RunStoreError,
+    WorktreeError,
+)
 from projectctl.core.time import utc_now
 from projectctl.git import WorktreeManager, current_branch, resolve_commit
-from projectctl.integrations.beads.completion import BeadsTaskCompletionWriter
-from projectctl.project.loader import load_project_config
+from projectctl.integrations.task_authority import resolve_task_authority
 from projectctl.project.locking import project_lock
 from projectctl.schemas.evidence import EvidenceManifest
 from projectctl.schemas.execution import EvidenceReference, ExecutionPlan
@@ -81,12 +85,12 @@ def _repository_clean(root: Path) -> bool:
 
 
 def _completion_writer(project_root: Path):
-    provider = load_project_config(project_root).task_store.provider
-    if provider == "beads":
-        return BeadsTaskCompletionWriter(project_root)
-    raise IntegrationError(
-        f"Task completion is not implemented for provider {provider!r}."
-    )
+    try:
+        return resolve_task_authority(project_root).require_completion_writer()
+    except ProjectCtlError as exc:
+        raise IntegrationError(
+            f"Task completion authority is unavailable: {exc}"
+        ) from exc
 
 
 def _validate_verified_candidate(

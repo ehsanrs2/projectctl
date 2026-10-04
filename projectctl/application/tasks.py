@@ -2,24 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from projectctl.core.errors import ConfigurationError, TaskStoreError
-from projectctl.integrations.beads import BeadsTaskStore
-from projectctl.integrations.github import GitHubIssuesTaskStore
-from projectctl.project.loader import load_project_config
+from projectctl.core.errors import TaskStoreError
+from projectctl.integrations.task_authority import resolve_task_authority
 from projectctl.schemas.task import TaskSnapshot
 
 
 def task_store_for_project(project_root: Path):
-    config = load_project_config(project_root)
-    provider = config.task_store.provider
-    if provider == "beads":
-        return BeadsTaskStore(project_root)
-    if provider == "github":
-        return GitHubIssuesTaskStore(
-            project_root,
-            repository=config.task_store.repository,
-        )
-    raise ConfigurationError(f"Task store provider `{provider}` is not implemented.")
+    return resolve_task_authority(project_root).reader
 
 
 def capture_task_snapshot(project_root: Path, state: str = "all") -> TaskSnapshot:

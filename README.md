@@ -2,7 +2,9 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M3.0a — GitHub Issues Reader & Authority Discovery**, adding a real read-only GitHub task authority while keeping remote execution mutation fail-closed.
+This repository currently implements **M3.0b1 — Task Authority Capability & Resolver Layer**, making task lifecycle access provider-neutral before any remote GitHub execution mutation is enabled.
+
+For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
 ## Implemented
 
@@ -138,9 +140,18 @@ Existing `AGENTS.md` and nested `AGENTS.md` / `AGENTS.override.md` files are dis
 
 Exactly one execution-state authority should be configured per project.
 
-M0.3 implements the Beads adapter. Brownfield onboarding can record an existing GitHub task workflow or defer task-store selection, but those states remain unavailable for scheduling until the corresponding adapter/decision exists.
+Beads is currently a full execution-capable task authority.
 
-When `task_store.provider: beads`, Beads is the execution-state authority. Spec Kit `tasks.md` remains a one-way planning/import artifact.
+GitHub Issues is a real read/scheduling authority, but remote lifecycle mutation remains fail-closed until the later M3 claim/publication milestones are implemented.
+
+Inspect the configured adapter capability surface with:
+
+```bash
+projectctl task-authority --project /path/to/repo
+projectctl task-authority --project /path/to/repo --json
+```
+
+Spec Kit `tasks.md` remains a one-way planning/import artifact and is not allowed to create a parallel Beads tracker when another task authority is configured.
 
 ## Development
 
@@ -729,3 +740,47 @@ configured authority.
 
 M3.0b owns the concurrency-safe GitHub write protocol for claim/release/block/complete.
 Only after that protocol is verified should autonomous execution mutate GitHub Issues.
+
+
+## M3.0b1 — Task Authority Capability & Resolver Layer
+
+M3.0b1 removes historical task-provider branching from the application lifecycle.
+
+The application layer now resolves one provider-neutral Task Authority exposing:
+
+- task reader/snapshot
+- claim/release capability
+- decision-blocking capability
+- completion capability
+
+`TaskAuthorityCapabilities v1` makes those operations explicit and machine-readable.
+
+Current adapter support:
+
+| Provider | Read | Claim | Release | Block | Complete | Execution-ready |
+| --- | --- | --- | --- | --- | --- | --- |
+| Beads | supported | supported | supported | supported | supported | yes |
+| GitHub | supported | unsupported | unsupported | unsupported | unsupported | no |
+
+Capability inspection does not require the provider runtime to be installed or authenticated. Runtime health remains a separate concern.
+
+An architecture test prevents `projectctl/application/*.py` from importing Beads or GitHub task implementations directly.
+
+### Why GitHub execution is still disabled
+
+The architecture review found two distinct missing contracts:
+
+1. ordinary GitHub issue/label/assignee mutations do not provide ProjectCTL a documented atomic claim primitive;
+2. M1.4 integrates locally but does not push, so a GitHub issue must not be closed before required remote publication is observed.
+
+Therefore the sequence is deliberately:
+
+```text
+M3.0b1 provider-neutral lifecycle boundary
+    ↓
+M3.0b2 concurrency-safe GitHub remote claim
+    ↓
+M3.0c remote publication + GitHub completion
+```
+
+See ADR-012 and `docs/PROJECTCTL_BLUEPRINT.md` for the full rationale.

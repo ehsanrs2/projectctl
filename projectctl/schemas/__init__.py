@@ -47,6 +47,7 @@ from projectctl.schemas.run import (
 from projectctl.schemas.scheduler import SchedulerDecision, SchedulerDecisionV1
 from projectctl.schemas.status import ProjectStatus, TaskCounts
 from projectctl.schemas.task import NormalizedTask, TaskSnapshot
+from projectctl.schemas.task_authority import TaskAuthorityCapabilities
 from projectctl.schemas.verification import (
     DiffPolicy,
     VerificationCatalog,
@@ -98,6 +99,7 @@ __all__ = [
     "RunManifestV1",
     "SchedulerDecision",
     "SchedulerDecisionV1",
+    "TaskAuthorityCapabilities",
     "TaskCounts",
     "StrategyFallbackPolicy",
     "TaskSnapshot",

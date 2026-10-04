@@ -36,7 +36,10 @@ from projectctl.core.errors import (
 )
 from projectctl.core.time import utc_now
 from projectctl.git import WorktreeInfo, WorktreeManager, current_branch, resolve_commit
-from projectctl.integrations.beads.claim import BeadsTaskClaimer
+from projectctl.integrations.task_authority import (
+    require_task_authority_execution_ready,
+    resolve_task_authority,
+)
 from projectctl.project.loader import load_project_config
 from projectctl.project.locking import project_lock
 from projectctl.project.state import load_project_state, semantic_project_state_digest
@@ -268,27 +271,11 @@ def _validate_plan_inputs(project_root: Path, plan: ExecutionPlan) -> RunTermina
 
 
 def _claimer(project_root: Path):
-    provider = load_project_config(project_root).task_store.provider
-    if provider == "beads":
-        return BeadsTaskClaimer(project_root)
-    raise ConfigurationError(
-        f"Task claiming is not implemented for provider {provider!r}."
-    )
+    return resolve_task_authority(project_root).require_claimer()
 
 
 def _assert_task_store_execution_capable(project_root: Path) -> None:
-    provider = load_project_config(project_root).task_store.provider
-    if provider == "beads":
-        return
-    if provider == "github":
-        raise ConfigurationError(
-            "GitHub Issues task authority is read-only in M3.0a. "
-            "Scheduling/status reads are supported, but run preparation requires "
-            "the M3.0b concurrency-safe claim protocol."
-        )
-    raise ConfigurationError(
-        f"Task execution is not implemented for provider {provider!r}."
-    )
+    require_task_authority_execution_ready(project_root)
 
 
 def prepare_next_run(
