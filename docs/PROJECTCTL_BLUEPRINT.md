@@ -594,7 +594,7 @@ Implemented:
 
 ### M3.1d — Schema export authority and drift policy
 
-Implemented by the current change:
+Implemented:
 
 - `PUBLIC_SCHEMAS` and versioned model classes are the sole implementation authority
 - legacy partial `schemas/generated/` mirror removed from Git
@@ -602,6 +602,21 @@ Implemented by the current change:
 - deterministic schema filename export order
 - CI rejects reintroduced checked-in generated schema mirrors
 - CI exports the complete registry to a temporary directory and validates exact filenames/JSON
+
+### M3.2a — Linear read authority
+
+Implemented by the current change:
+
+- Linear GraphQL read adapter scoped to one configured team UUID
+- runtime-only LINEAR_API_KEY / LINEAR_ACCESS_TOKEN credentials
+- cursor-paginated team Issue snapshots
+- GraphQL partial-error fail-closed handling
+- ProjectConfig v4 with additive task_store.team
+- AdoptionPlan/Manifest v3 with Linear team scope
+- static Linear capability report: read supported; all lifecycle writes unsupported
+- non-terminal Linear issues withheld from READY eligibility
+- execution remains fail-closed for Linear
+- doctor/readability checks without credential persistence
 
 ---
 
@@ -860,7 +875,7 @@ Implemented:
 
 ### M3.1d — Schema Export Authority & Drift Policy
 
-**Current milestone / implemented by this change.**
+**Completed.**
 
 Implemented:
 
@@ -875,14 +890,49 @@ Implemented:
 
 ### M3.2 — Additional task authorities
 
-**Next milestone after M3.1d.**
+Linear and Jira reuse the same Task Authority ports/capability model, but provider semantics are
+proven incrementally rather than assumed from GitHub.
 
-Linear and Jira should reuse the same Task Authority ports/capability model.
+#### M3.2a — Linear Read Authority
 
-Before implementing provider mutations, M3.2 must separately prove each provider's read,
-claim/release, delivery/publication, completion, concurrency and credential-ownership semantics.
-Do not infer parity from GitHub and do not add provider-specific branches back into application
-services.
+**Current milestone / implemented by this change.**
+
+Implemented:
+
+- official Linear GraphQL endpoint with personal API-key or OAuth access-token authentication
+- credentials remain runtime-only environment input and are never persisted by ProjectCTL
+- one configured Linear team UUID is the task-authority scope
+- Relay-style cursor pagination with cursor-progress validation
+- GraphQL `errors` fail closed even when HTTP 200 contains partial data
+- returned team identity is checked on every page
+- ProjectConfig v4 adds `task_store.team`; v1-v3 remain readable through in-memory upgrade
+- AdoptionPlan/AdoptionManifest v3 carry team scope additively
+- Linear workflow categories normalize terminal/running observations
+- backlog/unstarted issues remain `PLANNED`, never `READY`, until dependency semantics exist
+- Linear capabilities report read=supported and all lifecycle mutations=unsupported
+- execution gate therefore remains fail-closed
+- doctor can prove credential/team readability without performing a mutation
+
+Deliberately not implemented in M3.2a:
+
+- Issue blocking/blocker normalization
+- parent/sub-issue normalization
+- webhook synchronization or derived cache
+- claim/release ownership
+- lifecycle/needs-decision/completion mutations
+- delivery/publication semantics
+- Jira
+
+#### M3.2b — Linear Relationship & Eligibility Semantics
+
+**Next milestone after M3.2a.**
+
+Normalize Linear blocking/hierarchy relationships and define the exact conditions under which a
+Linear issue may become scheduler-eligible. This remains a read-only milestone: provider mutation,
+claim ownership and completion must stay unsupported until separately proven.
+
+Later M3.2 work must separately prove Linear mutation concurrency/ownership and then evaluate Jira.
+Do not add provider-specific branches back into application services.
 
 ### Post-M3 directions — not yet milestone-frozen
 
