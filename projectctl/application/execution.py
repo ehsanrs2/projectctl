@@ -1211,13 +1211,23 @@ def abort_prepared_run(project_root: Path, run_id: str) -> RunRecord:
 
     if record.status in {RunStatus.CLAIMED, RunStatus.RUNNING}:
         try:
-            _, claim = load_durable_claim(
+            durable = load_durable_claim(
                 root,
                 store=store,
                 run_id=run_id,
+                allow_legacy_missing=True,
             )
-            claimer.release(claim)
-            record_claim_release(store, claim)
+            if durable is None:
+                claimer.release_legacy(record.task_id, actor=actor)
+                store.append_event(
+                    run_id,
+                    "task.claim.released_legacy",
+                    {"task_id": record.task_id},
+                )
+            else:
+                _, claim = durable
+                claimer.release(claim)
+                record_claim_release(store, claim)
         except Exception as exc:
             store.transition(
                 run_id,
