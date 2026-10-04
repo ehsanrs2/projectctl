@@ -56,7 +56,13 @@ from projectctl.schemas.run import (
 )
 from projectctl.schemas.scheduler import SchedulerDecision, SchedulerDecisionV1
 from projectctl.schemas.status import ProjectStatus, TaskCounts
-from projectctl.schemas.task import NormalizedTask, TaskSnapshot
+from projectctl.schemas.task import (
+    NormalizedTask,
+    NormalizedTaskV1,
+    TaskHierarchy,
+    TaskSnapshot,
+    TaskSnapshotV1,
+)
 from projectctl.schemas.task_authority import TaskAuthorityCapabilities
 from projectctl.schemas.task_claim import TaskClaim, TaskClaimRequest
 from projectctl.schemas.verification import (
@@ -95,6 +101,7 @@ __all__ = [
     "IntegrationManifestV1",
     "MilestoneState",
     "NormalizedTask",
+    "NormalizedTaskV1",
     "PermissionCapabilities",
     "PermissionRequest",
     "ProjectConfig",
@@ -119,7 +126,9 @@ __all__ = [
     "TaskClaimRequest",
     "TaskCounts",
     "StrategyFallbackPolicy",
+    "TaskHierarchy",
     "TaskSnapshot",
+    "TaskSnapshotV1",
     "VerificationCatalog",
     "VerificationCommand",
     "VerificationManifest",
