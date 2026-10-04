@@ -24,6 +24,9 @@ htmlcov/
 # ProjectCTL runtime state
 .projectctl/
 
+# Derived public schema exports
+schemas/generated/
+
 # Editors / OS
 .idea/
 .vscode/
