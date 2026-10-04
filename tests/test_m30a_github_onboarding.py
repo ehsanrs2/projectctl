@@ -35,13 +35,13 @@ if args[:5] == ["api", "--hostname", "github.com", "--method", "GET"]:
         included({"full_name": "acme/widget"}, etag='"repo-v1"')
         raise SystemExit(0)
     if endpoint.endswith("/dependencies/blocked_by?per_page=100"):
-        print(json.dumps([[]]))
+        included([], etag='"blocked-empty"')
         raise SystemExit(0)
     if endpoint.endswith("/sub_issues?per_page=100"):
-        print(json.dumps([[]]))
+        included([], etag='"sub-empty"')
         raise SystemExit(0)
     if endpoint.startswith("repos/acme/widget/issues?"):
-        print(json.dumps([[
+        included([
             {
                 "number": 11,
                 "title": "Implement widget",
@@ -51,7 +51,7 @@ if args[:5] == ["api", "--hostname", "github.com", "--method", "GET"]:
                 "labels": [{"name": "type:feature"}, {"name": "resource:small"}],
                 "milestone": {"title": "M3.0a"}
             }
-        ]]))
+        ], etag='"issues-v1"')
         raise SystemExit(0)
 print("unsupported: " + " ".join(args), file=sys.stderr)
 raise SystemExit(2)
@@ -112,6 +112,8 @@ def test_inspection_and_adoption_pin_github_repository(tmp_path: Path, monkeypat
     config = load_project_config(repo)
     assert config.task_store.provider == "github"
     assert config.task_store.repository == "acme/widget"
+    assert config.schema_version == 3
+    assert config.task_store.cache_max_age_seconds == 30
 
 
 def test_github_provider_without_repository_identity_requires_decision(tmp_path: Path):
