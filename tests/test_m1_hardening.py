@@ -160,6 +160,11 @@ def test_blocked_run_unassigns_and_blocks_task(monkeypatch, tmp_path: Path):
         "block_task_for_decision",
         lambda root, task_id, reason: blocked.append((task_id, reason)),
     )
+    monkeypatch.setattr(
+        task_lifecycle,
+        "task_delivery_policy",
+        lambda root: SimpleNamespace(release_claim_after_decision_block=False),
+    )
 
     result = task_lifecycle.reconcile_terminal_task(
         tmp_path,
