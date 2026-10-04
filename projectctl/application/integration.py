@@ -10,7 +10,12 @@ from pathlib import Path
 from projectctl.application.execution import _actor
 from projectctl.core.digest import digest
 from projectctl.core.enums import RunStatus, RunTerminalReason
-from projectctl.core.errors import IntegrationError, RunStoreError, WorktreeError
+from projectctl.core.errors import (
+    IntegrationError,
+    ProjectCtlError,
+    RunStoreError,
+    WorktreeError,
+)
 from projectctl.core.time import utc_now
 from projectctl.git import WorktreeManager, current_branch, resolve_commit
 from projectctl.integrations.task_authority import resolve_task_authority
@@ -82,7 +87,7 @@ def _repository_clean(root: Path) -> bool:
 def _completion_writer(project_root: Path):
     try:
         return resolve_task_authority(project_root).require_completion_writer()
-    except Exception as exc:
+    except ProjectCtlError as exc:
         raise IntegrationError(
             f"Task completion authority is unavailable: {exc}"
         ) from exc
