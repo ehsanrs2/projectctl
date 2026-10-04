@@ -57,6 +57,13 @@ class BeadsTaskClaimer:
             observed_at=utc_now(),
         )
 
+    def reconcile(self, request: TaskClaimRequest) -> TaskClaim | None:
+        # Pre-M3.0b2 Beads ownership is represented by task status/assignee, but
+        # the provider does not expose a token that can prove it belongs to this
+        # exact durable request. Do not guess ownership during crash recovery.
+        del request
+        return None
+
     def release(self, claim: TaskClaim) -> None:
         if not claim.acquired:
             raise TaskStoreError("Cannot release a task claim that was not acquired.")
