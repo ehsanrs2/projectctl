@@ -172,9 +172,15 @@ def test_prepare_and_abort_use_durable_run_state_and_external_worktree(
             strategy=strategy,
         ),
     )
+    validation_calls = []
+
+    def validate_inputs(root, value):
+        validation_calls.append(value.plan_id)
+        return None
+
     monkeypatch.setattr(
         "projectctl.application.execution._validate_plan_inputs",
-        lambda root, value: None,
+        validate_inputs,
     )
     monkeypatch.setattr(
         "projectctl.application.execution._claimer",
@@ -196,6 +202,7 @@ def test_prepare_and_abort_use_durable_run_state_and_external_worktree(
     assert not worktree.is_relative_to(repo)
     assert git(repo, "rev-parse", "HEAD") == base
     assert claimer.claimed == ["bd-1"]
+    assert validation_calls == ["ep-test", "ep-test"]
 
     shown = runner.invoke(
         app,
