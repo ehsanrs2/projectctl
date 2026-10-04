@@ -106,8 +106,32 @@ After the provider observes acquisition/conflict, ProjectCTL writes:
 
 Successful release records `task.claim.released`.
 
+Before the first worker turn and before resuming a quota-checkpointed worker, ProjectCTL validates
+that the provider still reports the exact durable claim as owned. Lost ownership stops execution
+with `CLAIM_LOST`; ProjectCTL does not mutate the replacement owner's claim.
+
 Loading a claim for release requires the request and claim artifacts to match their append-only run
 event digests. Partial or modified artifacts fail closed.
+
+### Crash recovery
+
+A durable `TaskClaimRequest` is written before remote claim mutation. This ordering makes the
+important crash window observable.
+
+For a PREPARING run with a durable request but no durable claim result:
+
+- the task authority may perform a **non-mutating reconciliation**
+- GitHub deterministically reconstructs the expected marker SHA from the request and observes the
+  remote claim ref
+- if the ref equals that marker, ProjectCTL persists the missing TaskClaim and can reconstruct the
+  isolated worktree
+- if the ref is absent or belongs to another marker, the run records claim loss
+- if the provider cannot prove ownership, recovery escalates rather than guessing
+
+Recovery never creates a new claim as part of reconciliation.
+
+A CLAIMED run with durable ownership but a missing worktree may rebuild the worktree only from the
+exact execution base. Existing but dirty, wrong-branch, or wrong-HEAD worktrees fail closed.
 
 ### Legacy Beads compatibility
 
