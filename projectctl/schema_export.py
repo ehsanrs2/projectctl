@@ -85,7 +85,8 @@ PUBLIC_SCHEMAS = {
 def export_json_schemas(destination: Path) -> list[Path]:
     destination.mkdir(parents=True, exist_ok=True)
     written = []
-    for filename, model in PUBLIC_SCHEMAS.items():
+    for filename in sorted(PUBLIC_SCHEMAS):
+        model = PUBLIC_SCHEMAS[filename]
         path = destination / filename
         path.write_text(
             json.dumps(model.model_json_schema(), indent=2, sort_keys=True) + "\n",
