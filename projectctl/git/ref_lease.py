@@ -71,6 +71,19 @@ class RemoteRefLease:
             self.remote_name,
         ).stdout.strip()
 
+    def probe_readable(self) -> str:
+        result = self._git(
+            "ls-remote",
+            self.remote_name,
+            "HEAD",
+        )
+        line = result.stdout.strip().splitlines()
+        if not line:
+            raise TaskStoreError(
+                f"Git remote {self.remote_name!r} did not expose HEAD."
+            )
+        return line[0].split("\t", 1)[0]
+
     def observe(self, ref: str) -> str | None:
         result = self._git(
             "ls-remote",
