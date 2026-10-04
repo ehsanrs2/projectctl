@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from projectctl.core.errors import TaskStoreError
+from projectctl.core.errors import ClaimConflictError, TaskStoreError
 from projectctl.core.time import utc_now
 from projectctl.integrations.beads.client import BeadsClient
 from projectctl.core.digest import digest
@@ -64,12 +64,24 @@ class BeadsTaskClaimer:
         del request
         return None
 
+    def validate(self, claim: TaskClaim) -> bool:
+        if not claim.acquired or claim.provider != "beads":
+            return False
+        current = self.client.show(claim.task_id)
+        status = str(current.get("status") or "").lower()
+        assignee = str(current.get("assignee") or "").strip()
+        return status == "in_progress" and assignee == claim.actor
+
     def release(self, claim: TaskClaim) -> None:
         if not claim.acquired:
             raise TaskStoreError("Cannot release a task claim that was not acquired.")
         if claim.provider != "beads":
             raise TaskStoreError(
                 f"Beads claimer cannot release provider {claim.provider!r}."
+            )
+        if not self.validate(claim):
+            raise ClaimConflictError(
+                f"Beads task {claim.task_id} is no longer owned by this durable claim."
             )
         self.client.release_issue(claim.task_id)
 
