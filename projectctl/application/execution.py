@@ -36,7 +36,10 @@ from projectctl.core.errors import (
 )
 from projectctl.core.time import utc_now
 from projectctl.git import WorktreeInfo, WorktreeManager, current_branch, resolve_commit
-from projectctl.integrations.task_authority import resolve_task_authority
+from projectctl.integrations.task_authority import (
+    require_task_authority_execution_ready,
+    resolve_task_authority,
+)
 from projectctl.project.loader import load_project_config
 from projectctl.project.locking import project_lock
 from projectctl.project.state import load_project_state, semantic_project_state_digest
@@ -272,7 +275,7 @@ def _claimer(project_root: Path):
 
 
 def _assert_task_store_execution_capable(project_root: Path) -> None:
-    resolve_task_authority(project_root).require_execution_ready()
+    require_task_authority_execution_ready(project_root)
 
 
 def prepare_next_run(
