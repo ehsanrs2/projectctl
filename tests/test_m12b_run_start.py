@@ -31,6 +31,7 @@ from projectctl.core.enums import (
 )
 from projectctl.core.errors import (
     CapabilityMismatchError,
+    ClaimConflictError,
     RunStoreError,
     WorkerError,
     WorktreeError,
@@ -107,6 +108,9 @@ def supported_capabilities(runtime_version="0.160.0"):
 
 
 class FakeClaimer:
+    def __init__(self, *, valid=True):
+        self.valid = valid
+
     def claim(self, request):
         return TaskClaim(
             provider="beads",
@@ -125,7 +129,7 @@ class FakeClaimer:
         return self.claim(request)
 
     def validate(self, claim):
-        return True
+        return self.valid
 
     def release(self, claim):
         return None
@@ -510,3 +514,52 @@ def test_checkpoint_resume_rejects_tampered_checkpoint_artifact(tmp_path: Path, 
     record = RunStore(repo).get(prepared.record.run_id)
     assert record.status == RunStatus.NEEDS_DECISION
     assert record.terminal_reason == RunTerminalReason.RECOVERY_UNSAFE
+
+
+
+def test_worker_start_refuses_lost_task_claim(tmp_path: Path, monkeypatch):
+    repo, prepared, task, caps = setup_prepared(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "projectctl.application.execution._claimer",
+        lambda root: FakeClaimer(valid=False),
+    )
+    monkeypatch.setattr(
+        "projectctl.application.execution._adapter_for_provider",
+        lambda provider: FakeAdapter(caps),
+    )
+
+    with pytest.raises(ClaimConflictError, match="ownership was lost"):
+        start_prepared_run(repo, prepared.record.run_id)
+
+    record = RunStore(repo).get(prepared.record.run_id)
+    assert record.status == RunStatus.FAILED
+    assert record.terminal_reason == RunTerminalReason.CLAIM_LOST
+    events = RunStore(repo).events(prepared.record.run_id)
+    assert any(event.event_type == "task.claim.lost" for event in events)
+
+
+def test_checkpoint_resume_refuses_lost_task_claim(tmp_path: Path, monkeypatch):
+    repo, prepared, task, caps = setup_prepared(tmp_path, monkeypatch)
+    adapter = FakeAdapter(caps, checkpoint=True)
+    monkeypatch.setattr(
+        "projectctl.application.execution._adapter_for_provider",
+        lambda provider: adapter,
+    )
+    started = start_prepared_run(repo, prepared.record.run_id)
+    assert started.checkpoint is not None
+
+    monkeypatch.setattr(
+        "projectctl.application.execution._claimer",
+        lambda root: FakeClaimer(valid=False),
+    )
+    monkeypatch.setattr(
+        "projectctl.application.execution.read_current_quota",
+        lambda account: fresh_quota(),
+    )
+
+    with pytest.raises(ClaimConflictError, match="ownership was lost"):
+        resume_checkpointed_run(repo, prepared.record.run_id)
+
+    record = RunStore(repo).get(prepared.record.run_id)
+    assert record.status == RunStatus.FAILED
+    assert record.terminal_reason == RunTerminalReason.CLAIM_LOST
