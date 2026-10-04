@@ -6,7 +6,11 @@ from pathlib import Path
 import pytest
 
 from projectctl.core.errors import TaskStoreError
-from projectctl.integrations.github.client import GitHubIssuesClient
+from projectctl.integrations.github.client import (
+    GITHUB_ACCEPT,
+    GITHUB_API_VERSION,
+    GitHubIssuesClient,
+)
 
 
 FAKE_GH = r'''#!/usr/bin/env python3
@@ -74,3 +78,19 @@ def test_github_client_rejects_invalid_issue_id_before_cli_call(tmp_path: Path):
     )
     with pytest.raises(TaskStoreError, match="Invalid GitHub issue id"):
         client.show("../secrets")
+
+
+def test_github_get_representation_is_explicitly_versioned(tmp_path: Path):
+    client = GitHubIssuesClient(
+        tmp_path,
+        repository="acme/widget",
+        executable=str(fake_gh(tmp_path)),
+    )
+    args = client._get_args(
+        "repos/acme/widget/issues?state=all&per_page=100",
+        paginate=True,
+        slurp=True,
+    )
+    assert f"Accept: {GITHUB_ACCEPT}" in args
+    assert f"X-GitHub-Api-Version: {GITHUB_API_VERSION}" in args
+    assert args[-1] == "repos/acme/widget/issues?state=all&per_page=100"
