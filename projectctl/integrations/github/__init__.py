@@ -10,10 +10,15 @@ from projectctl.integrations.github.repository import (
 from projectctl.integrations.github.task_store import GitHubIssuesTaskStore
 
 __all__ = [
+    "GitHubCacheFreshness",
+    "GitHubCacheLookup",
+    "GitHubDerivedCache",
     "GitHubTaskClaimer",
     "GitHubIssuesClient",
     "GitHubTaskCompletionWriter",
     "GitHubIssuesTaskStore",
+    "cache_request_fingerprint",
+    "github_cache_request",
     "infer_github_repository",
     "normalize_github_repository",
     "parse_github_repository",
