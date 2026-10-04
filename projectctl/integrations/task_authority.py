@@ -177,7 +177,11 @@ def require_task_authority_execution_ready(project_root: Path) -> None:
         )
 
 
-def resolve_task_authority(project_root: Path) -> TaskAuthority:
+def resolve_task_authority(
+    project_root: Path,
+    *,
+    read_cache_max_age_seconds: float | None = None,
+) -> TaskAuthority:
     root = project_root.resolve()
     config = load_project_config(root)
     provider = config.task_store.provider
@@ -198,6 +202,11 @@ def resolve_task_authority(project_root: Path) -> TaskAuthority:
         client = GitHubIssuesClient(
             root,
             repository=config.task_store.repository,
+            cache_max_age_seconds=(
+                config.task_store.cache_max_age_seconds
+                if read_cache_max_age_seconds is None
+                else read_cache_max_age_seconds
+            ),
         )
         repository = config.task_store.repository
         if repository is None:
