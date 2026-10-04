@@ -674,6 +674,7 @@ class GitHubIssuesTaskStore:
             value = task.model_dump(mode="json")
             if isinstance(value.get("source"), dict):
                 value["source"].pop("observed_at", None)
+            value.pop("team", None)
             material.append(value)
         content_revision = digest(material)
         version = self.client.version()
