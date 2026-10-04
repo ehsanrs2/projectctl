@@ -560,13 +560,26 @@ Implemented:
 
 ### M3.1c1 — GitHub derived cache foundation
 
-Implemented by the current change:
+Implemented:
 
 - cache request/entry public contracts
 - integrity-checked freshness provenance
 - explicit API representation pinning
 - disposable project-local storage and invalidation
 - conditional-request-ready validators without cache-backed reads yet
+
+### M3.1c2 — Conditional GitHub reads
+
+Implemented by the current change:
+
+- authenticated single-response conditional GETs through `gh api --include`
+- ETag-first revalidation with Last-Modified fallback
+- explicit 200 / 304 / provider-error handling
+- 304 freshness advancement without payload replacement
+- 200 payload/validator replacement
+- cache-read telemetry for miss, refresh, revalidation and provider failure
+- no cached outage fallback
+- multi-page `--paginate --slurp` aggregates deliberately excluded until page-aware M3.1c3
 
 ---
 
@@ -760,7 +773,7 @@ Assignee/project metadata never becomes claim ownership.
 
 ### M3.1c1 — GitHub Derived Cache & Freshness Contract
 
-**Current milestone / implemented by this change.**
+**Completed.**
 
 Implemented:
 
@@ -779,18 +792,29 @@ This milestone does not yet reduce API calls.
 
 ### M3.1c2 — Conditional GitHub Reads
 
-**Next milestone after M3.1c1.**
+**Current milestone / implemented by this change.**
 
-Candidate scope:
+Implemented:
 
-- capture ETag / Last-Modified response validators
-- authenticated If-None-Match / If-Modified-Since
-- 304 revalidation without payload replacement
-- 200 payload replacement
-- provider failures never become cache hits
-- explicit cache hit/miss/revalidation telemetry
+- authenticated `gh api --include` response-envelope reads
+- response ETag / Last-Modified capture for single-response GET representations
+- `If-None-Match` preferred when ETag exists
+- `If-Modified-Since` fallback when ETag is absent
+- `304 Not Modified` revalidation that preserves payload, payload digest and `observed_at`
+- `200 OK` replacement of payload and validator provenance
+- provider/transport/API failures remain errors even when derived cache data exists
+- cache-read telemetry distinguishes `miss_200`, `refreshed_200`,
+  `revalidated_304` and `provider_error`
+- validator header line-break rejection before request construction
+- no TTL-based local fresh hit and no multi-page aggregate validator reuse
+
+A `gh api --paginate --slurp` result is not treated as one HTTP representation. Existing
+multi-page Issue/relation reads remain unconditional in M3.1c2 so a validator from one response
+cannot incorrectly validate an aggregate. Page-aware reuse belongs to M3.1c3.
 
 ### M3.1c3 — Cache-backed Snapshot Assembly & Scale
+
+**Next milestone after M3.1c2.**
 
 Candidate scope:
 
