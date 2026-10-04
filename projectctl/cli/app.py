@@ -116,12 +116,11 @@ def _validate_task_store_choice(value: str | None) -> str | None:
     return value
 
 
-
-
 def _prompt_task_store_team(provider: str | None, current: str | None) -> str | None:
     if provider != "linear" or current is not None:
         return current
     return typer.prompt("Linear team UUID").strip()
+
 
 def _interaction_payload(status: str, *, inspection=None, plan=None, reason: str | None = None) -> dict:
     payload = {"status": status}
@@ -339,6 +338,7 @@ def adopt_command(
                 path,
                 task_store_provider=selected_store,
                 task_store_repository=task_store_repository,
+                task_store_team=task_store_team,
             )
 
         if (json_output or non_interactive) and (not yes or (plan.dirty and not allow_dirty)):
