@@ -110,12 +110,51 @@ def _anchored(
     return False
 
 
+def load_durable_claim_request(
+    project_root: Path,
+    *,
+    store: RunStore,
+    run_id: str,
+    allow_missing: bool = False,
+) -> TaskClaimRequest | None:
+    request_path = project_root / claim_request_ref(run_id)
+    if not request_path.exists():
+        if allow_missing:
+            return None
+        raise RunStoreError(
+            f"Run {run_id} is missing durable task claim request evidence."
+        )
+    try:
+        request = TaskClaimRequest.model_validate(
+            json.loads(request_path.read_text(encoding="utf-8"))
+        )
+    except Exception as exc:
+        raise RunStoreError(
+            f"Run {run_id} task claim request evidence is invalid: {exc}"
+        ) from exc
+    if request.run_id != run_id:
+        raise RunStoreError("Task claim request run identity does not match durable run.")
+    request_digest = digest(request)
+    if not _anchored(
+        store,
+        run_id,
+        event_type="task.claim.requested",
+        ref_key="claim_request_ref",
+        ref_value=claim_request_ref(run_id),
+        digest_key="claim_request_digest",
+        digest_value=request_digest,
+    ):
+        raise RunStoreError("Task claim request is not anchored in durable run events.")
+    return request
+
+
 def load_durable_claim(
     project_root: Path,
     *,
     store: RunStore,
     run_id: str,
     allow_legacy_missing: bool = False,
+    require_acquired: bool = True,
 ) -> tuple[TaskClaimRequest, TaskClaim] | None:
     request_path = project_root / claim_request_ref(run_id)
     claim_path = project_root / claim_ref(run_id)
@@ -128,10 +167,13 @@ def load_durable_claim(
             f"Run {run_id} has incomplete durable task claim evidence."
         )
 
+    request = load_durable_claim_request(
+        project_root,
+        store=store,
+        run_id=run_id,
+    )
+    assert request is not None
     try:
-        request = TaskClaimRequest.model_validate(
-            json.loads(request_path.read_text(encoding="utf-8"))
-        )
         claim = TaskClaim.model_validate(
             json.loads(claim_path.read_text(encoding="utf-8"))
         )
@@ -140,22 +182,11 @@ def load_durable_claim(
             f"Run {run_id} task claim evidence is invalid: {exc}"
         ) from exc
 
-    if request.run_id != run_id or claim.run_id != run_id:
-        raise RunStoreError("Task claim run identity does not match durable run.")
-    request_digest = digest(request)
+    if claim.run_id != run_id or claim.task_id != request.task_id:
+        raise RunStoreError("Task claim identity does not match durable request/run.")
     claim_digest = digest(claim)
-    if claim.request_digest != request_digest:
+    if claim.request_digest != digest(request):
         raise RunStoreError("Task claim no longer matches its durable request.")
-    if not _anchored(
-        store,
-        run_id,
-        event_type="task.claim.requested",
-        ref_key="claim_request_ref",
-        ref_value=claim_request_ref(run_id),
-        digest_key="claim_request_digest",
-        digest_value=request_digest,
-    ):
-        raise RunStoreError("Task claim request is not anchored in durable run events.")
     if not _anchored(
         store,
         run_id,
@@ -166,7 +197,7 @@ def load_durable_claim(
         digest_value=claim_digest,
     ):
         raise RunStoreError("Task claim is not anchored in durable run events.")
-    if not claim.acquired:
+    if require_acquired and not claim.acquired:
         raise RunStoreError("Durable task claim evidence does not record acquisition.")
     return request, claim
 
