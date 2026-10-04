@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M3.1c3 — Cache-backed Snapshot Assembly & Scale**, using page-aware GitHub representations and an explicit bounded freshness policy to reduce repeated task-snapshot API fan-out while preserving forced remote validation at execution preflight.
+This repository currently implements **M3.1d — Schema Export Authority & Drift Policy**, removing a stale checked-in schema mirror and making the deterministic public schema exporter the single implementation authority enforced by CI.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -1162,6 +1162,35 @@ Scale tests verify that repeated snapshots reuse Issue and per-Issue relationshi
 repeating the original REST fan-out.
 
 See ADR-019 and `docs/PROJECTCTL_BLUEPRINT.md`.
+
+### M3.1d — Schema Export Authority & Drift Policy
+
+M3.1d resolves the repository's public-schema drift ambiguity.
+
+Public JSON Schema contracts are defined by the versioned model classes registered in
+`projectctl.schema_export.PUBLIC_SCHEMAS`. The previously checked-in `schemas/generated/`
+directory was only a partial, stale mirror, so it is no longer versioned.
+
+Generate schemas when needed:
+
+```bash
+projectctl schema export
+```
+
+The default `schemas/generated/` output is now Git-ignored. Exported files are derived artifacts,
+not a second source of truth.
+
+The exporter writes filenames deterministically. CI enforces that:
+
+- `schemas/generated/` is not checked into the repository
+- every `PUBLIC_SCHEMAS` entry exports successfully
+- the exported filename set exactly equals the registry
+- each exported artifact parses as a JSON schema object
+
+This keeps additive schema compatibility in code/history while eliminating manual generated-file
+drift and review noise.
+
+See ADR-020 and `docs/PROJECTCTL_BLUEPRINT.md`.
 
 Next:
 
