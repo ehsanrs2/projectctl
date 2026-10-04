@@ -7,6 +7,7 @@ from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDe
 from projectctl.schemas.config import ProjectConfig, ProjectConfigV1
 from projectctl.schemas.delivery import PublicationManifest, PublicationRequest, TaskDeliveryPolicy
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
+from projectctl.schemas.github_cache import GitHubCacheEntry, GitHubCacheRequest
 from projectctl.schemas.execution import (ExecutionPlan, ExecutionPlanV1, WorkerCheckpoint, WorkerCheckpointV1, WorkerRequest, WorkerRequestV1, WorkerResult)
 from projectctl.schemas.integration import IntegrationManifest, IntegrationManifestV1, RecoveryReport
 from projectctl.schemas.onboarding import (
@@ -63,6 +64,8 @@ PUBLIC_SCHEMAS = {
     "verification-manifest.v2.schema.json": VerificationManifest,
     "evidence-manifest.v1.schema.json": EvidenceManifestV1,
     "evidence-manifest.v2.schema.json": EvidenceManifest,
+    "github-cache-request.v1.schema.json": GitHubCacheRequest,
+    "github-cache-entry.v1.schema.json": GitHubCacheEntry,
     "artifact-metadata.v1.schema.json": ArtifactMetadata,
     "auto-run-policy.v1.schema.json": AutoRunPolicy,
     "auto-run-report.v1.schema.json": AutoRunReport,
