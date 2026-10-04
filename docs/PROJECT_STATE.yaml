@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Expose stable GitHub team metadata without accidentally turning assignees, Projects fields, or optional custom fields into execution ownership or implicit scheduling policy.
+current_goal: Define a disposable, integrity-checked GitHub derived-cache and freshness contract before using conditional requests or cache-backed task snapshots.
 active_milestone:
-  id: M3.1b
-  title: GitHub Team Metadata
+  id: M3.1c1
+  title: GitHub Derived Cache & Freshness Contract
   aliases:
-    - GitHub Team Metadata
-    - Native Issue Type
-    - Assignees and Milestones
+    - GitHub Derived Cache
+    - Freshness Contract
+    - Conditional Request Foundation
 updated_at: null
