@@ -536,6 +536,17 @@ Implemented:
 - post-completion claim cleanup cannot rewrite canonical task semantics
 - GitHub full execution gate enabled under the direct-publication policy
 
+
+### M3.1a — GitHub structured team relationships
+
+Implemented by the current change:
+
+- native blocked-by dependency normalization
+- cross-repository unresolved dependency safety
+- sub-issue hierarchy without implicit blocking semantics
+- relation cycle/missing-node fail-closed validation
+- TaskSnapshot v2 hierarchy contract
+
 ---
 
 ## 9. Architecture review findings — 2026-10-04
@@ -698,14 +709,43 @@ Implemented:
 Direct PR creation/merge is not implemented; repositories that require PR-only delivery remain
 policy-blocked rather than bypassed.
 
-### M3.1 — GitHub Team Semantics
+### M3.1a — GitHub Dependencies & Sub-issues
+
+**Current milestone / implemented by this change.**
+
+Implemented:
+
+- native GitHub blocked-by relationships normalized into scheduler dependencies
+- reverse blocks edges derived from the canonical blocked-by graph
+- open cross-repository dependencies fail closed through stable external identities
+- closed/completed external dependencies are treated as satisfied
+- sub-issue parent/child hierarchy represented separately from dependencies
+- dependency and hierarchy cycle detection
+- missing/ambiguous relation fail-closed behavior
+- TaskSnapshot v2 with additive v1 compatibility
+
+### M3.1b — GitHub Team Metadata
+
+**Next milestone after M3.1a.**
 
 Candidate scope:
 
-- blocked-by/dependency normalization
-- sub-issues
-- richer milestone/project metadata
-- incremental/cached reads for larger repositories
+- richer milestone metadata where semantics are explicit
+- assignee/team metadata only where it safely affects scheduling or explanation
+- GitHub Projects metadata when a stable API/authority contract is available
+- conflict handling between native metadata and explicit ProjectCTL metadata
+
+Do not turn assignee or project fields into ownership/claim primitives.
+
+### M3.1c — Efficient GitHub Synchronization
+
+Candidate scope:
+
+- incremental relation/task refresh
+- derived cache with explicit freshness
+- deterministic invalidation
+- reduced API fan-out for larger repositories
+- GitHub remains authoritative; cache remains derived
 
 ### M3.2 — Additional task authorities
 

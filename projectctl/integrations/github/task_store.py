@@ -6,7 +6,7 @@ from projectctl.core.digest import digest
 from projectctl.core.enums import ResourceClass, RiskLevel, TaskStatus, TaskType
 from projectctl.core.time import utc_now
 from projectctl.integrations.github.client import GitHubIssuesClient
-from projectctl.schemas.task import NormalizedTask, TaskSnapshot, TaskSource
+from projectctl.schemas.task import NormalizedTask, TaskHierarchy, TaskSnapshot, TaskSource
 
 
 _PRIORITY = {
@@ -37,6 +37,7 @@ _LIFECYCLE = {
     "projectctl:needs-decision": TaskStatus.NEEDS_DECISION,
     "projectctl:completed": TaskStatus.DONE,
 }
+_TERMINAL = {TaskStatus.DONE, TaskStatus.CANCELLED}
 
 
 def _labels(raw: dict[str, Any]) -> list[str]:
@@ -77,12 +78,90 @@ def _single_prefixed(
     return None, False
 
 
-class GitHubIssuesTaskStore:
-    """Read-only GitHub Issues adapter for M3.0a.
+def _issue_repository(raw: dict[str, Any]) -> str | None:
+    repository_url = str(raw.get("repository_url") or "").strip()
+    prefix = "https://api.github.com/repos/"
+    if repository_url.startswith(prefix):
+        value = repository_url[len(prefix):].strip("/")
+        if value.count("/") == 1:
+            return value
 
-    The adapter deliberately exposes no remote claim/completion mutation.
-    M3.0b will add a concurrency-safe write protocol instead of pretending that
-    labels or assignees provide compare-and-swap semantics.
+    html_url = str(raw.get("html_url") or "").strip()
+    html_prefix = "https://github.com/"
+    if html_url.startswith(html_prefix):
+        parts = html_url[len(html_prefix):].strip("/").split("/")
+        if len(parts) >= 2 and parts[0] and parts[1]:
+            return f"{parts[0]}/{parts[1]}"
+    return None
+
+
+def _relation_id(
+    raw: dict[str, Any],
+    *,
+    current_repository: str,
+) -> tuple[str | None, bool, bool, str | None]:
+    number = raw.get("number")
+    if not isinstance(number, int) or number <= 0:
+        return None, False, False, "GitHub relation is missing a positive issue number."
+
+    repository = _issue_repository(raw)
+    if repository is None:
+        return (
+            None,
+            False,
+            False,
+            f"GitHub relation #{number} has no trustworthy repository identity.",
+        )
+
+    state = str(raw.get("state") or "").casefold()
+    state_reason = str(raw.get("state_reason") or "").casefold()
+    satisfied = state == "closed" and state_reason != "not_planned"
+    is_pull_request = "pull_request" in raw
+
+    if repository.casefold() == current_repository.casefold() and not is_pull_request:
+        return f"gh-{number}", True, satisfied, None
+
+    kind = "github-pr" if is_pull_request else "github"
+    return f"{kind}:{repository}#{number}", False, satisfied, None
+
+
+def _cycle_nodes(tasks: dict[str, NormalizedTask], *, hierarchy: bool) -> set[str]:
+    graph: dict[str, list[str]] = {}
+    for task_id, task in tasks.items():
+        edges = task.hierarchy.sub_issues if hierarchy else task.dependencies
+        graph[task_id] = [edge for edge in edges if edge in tasks]
+
+    color: dict[str, int] = {}
+    stack: list[str] = []
+    stack_index: dict[str, int] = {}
+    cyclic: set[str] = set()
+
+    def visit(node: str) -> None:
+        color[node] = 1
+        stack_index[node] = len(stack)
+        stack.append(node)
+        for target in graph.get(node, []):
+            state = color.get(target, 0)
+            if state == 0:
+                visit(target)
+            elif state == 1:
+                start = stack_index[target]
+                cyclic.update(stack[start:])
+        stack.pop()
+        stack_index.pop(node, None)
+        color[node] = 2
+
+    for node in sorted(graph):
+        if color.get(node, 0) == 0:
+            visit(node)
+    return cyclic
+
+
+class GitHubIssuesTaskStore:
+    """GitHub Issues task adapter with structured team relations.
+
+    Native GitHub issue dependencies drive scheduler blocking. Sub-issues are
+    hierarchy only and never become dependencies implicitly.
     """
 
     def __init__(
@@ -98,7 +177,13 @@ class GitHubIssuesTaskStore:
             repository=repository,
         )
 
-    def _normalize(self, raw: dict[str, Any]) -> NormalizedTask:
+    def _normalize(
+        self,
+        raw: dict[str, Any],
+        *,
+        blocked_by: list[dict[str, Any]] | None = None,
+        sub_issues: list[dict[str, Any]] | None = None,
+    ) -> NormalizedTask:
         number = raw.get("number")
         if not isinstance(number, int) or number <= 0:
             raise ValueError("GitHub issue payload is missing a positive issue number.")
@@ -206,12 +291,62 @@ class GitHubIssuesTaskStore:
                 "GitHub milestone and milestone: label disagree; milestone scoring disabled."
             )
 
+        dependencies: list[str] = []
+        unresolved_dependency = False
+        for relation in blocked_by or []:
+            relation_id, local, satisfied, error = _relation_id(
+                relation,
+                current_repository=self.client.repository,
+            )
+            if error:
+                human_decision = True
+                notes.append(error)
+                continue
+            if relation_id is None:
+                continue
+            if local:
+                dependencies.append(relation_id)
+                if not satisfied:
+                    unresolved_dependency = True
+            elif not satisfied:
+                dependencies.append(relation_id)
+                unresolved_dependency = True
+                notes.append(
+                    f"Open external GitHub dependency {relation_id} blocks this task."
+                )
+            else:
+                notes.append(
+                    f"External GitHub dependency {relation_id} is already closed/completed."
+                )
+
+        hierarchy_children: list[str] = []
+        for relation in sub_issues or []:
+            relation_id, _local, _satisfied, error = _relation_id(
+                relation,
+                current_repository=self.client.repository,
+            )
+            if error:
+                human_decision = True
+                notes.append(error)
+                continue
+            if relation_id is not None:
+                hierarchy_children.append(relation_id)
+
         if state != "closed" and metadata_conflict:
             status = TaskStatus.NEEDS_DECISION
             human_decision = True
             notes.append(
                 "Conflicting GitHub scheduling metadata requires human normalization."
             )
+        elif status == TaskStatus.READY and unresolved_dependency:
+            status = TaskStatus.BLOCKED
+
+        if state != "closed" and human_decision and status not in {
+            TaskStatus.RUNNING,
+            TaskStatus.BLOCKED,
+            TaskStatus.PLANNED,
+        }:
+            status = TaskStatus.NEEDS_DECISION
 
         return NormalizedTask(
             id=task_id,
@@ -230,8 +365,11 @@ class GitHubIssuesTaskStore:
             created_at=raw.get("created_at"),
             ready_since=None,
             due_at=None,
-            dependencies=[],
+            dependencies=sorted(set(dependencies)),
             blocks=[],
+            hierarchy=TaskHierarchy(
+                sub_issues=sorted(set(hierarchy_children)),
+            ),
             risk=risk,
             resource_class=resource,
             information_gain=information_gain,
@@ -240,30 +378,144 @@ class GitHubIssuesTaskStore:
             normalization_notes=notes,
         )
 
+    @staticmethod
+    def _mark_needs_decision(task: NormalizedTask, note: str) -> None:
+        if note not in task.normalization_notes:
+            task.normalization_notes.append(note)
+        task.human_decision_required = True
+        if task.status not in _TERMINAL:
+            task.status = TaskStatus.NEEDS_DECISION
+
+    def _build_tasks(self) -> list[NormalizedTask]:
+        raw_all = self.client.list_all()
+        blocked_by: dict[int, list[dict[str, Any]]] = {}
+        sub_issues: dict[int, list[dict[str, Any]]] = {}
+
+        for raw in raw_all:
+            number = raw.get("number")
+            if not isinstance(number, int) or number <= 0:
+                raise ValueError("GitHub issue list contains an invalid issue number.")
+            blocked_by[number] = self.client.list_blocked_by(number)
+            sub_issues[number] = self.client.list_sub_issues(number)
+
+        tasks = [
+            self._normalize(
+                raw,
+                blocked_by=blocked_by[int(raw["number"])],
+                sub_issues=sub_issues[int(raw["number"])],
+            )
+            for raw in raw_all
+        ]
+        by_id = {task.id: task for task in tasks}
+
+        # Reverse dependency edges are derived from the canonical blocked_by
+        # relation, avoiding a second independent representation.
+        for task in tasks:
+            for dependency in task.dependencies:
+                if dependency in by_id and task.id not in by_id[dependency].blocks:
+                    by_id[dependency].blocks.append(task.id)
+                    by_id[dependency].blocks.sort()
+
+        # Parent pointers are derived from the canonical sub-issue lists.
+        parents: dict[str, str] = {}
+        for task in tasks:
+            for child in task.hierarchy.sub_issues:
+                if child not in by_id:
+                    continue
+                previous = parents.get(child)
+                if previous is not None and previous != task.id:
+                    self._mark_needs_decision(
+                        by_id[child],
+                        f"GitHub sub-issue {child} has multiple parents: {previous}, {task.id}.",
+                    )
+                    self._mark_needs_decision(
+                        task,
+                        f"Sub-issue hierarchy conflicts for {child}.",
+                    )
+                    self._mark_needs_decision(
+                        by_id[previous],
+                        f"Sub-issue hierarchy conflicts for {child}.",
+                    )
+                    continue
+                parents[child] = task.id
+
+        for child, parent in parents.items():
+            by_id[child].hierarchy.parent = parent
+
+        # Missing same-repository dependency nodes are ambiguous: the relation
+        # endpoint proved they exist, but they are absent from the authority
+        # snapshot (for example due to visibility or filtering).
+        for task in tasks:
+            missing = [
+                dependency
+                for dependency in task.dependencies
+                if dependency.startswith("gh-") and dependency not in by_id
+            ]
+            if missing:
+                self._mark_needs_decision(
+                    task,
+                    "GitHub dependencies are absent from the current task snapshot: "
+                    + ", ".join(sorted(missing))
+                    + ".",
+                )
+
+        dependency_cycles = _cycle_nodes(by_id, hierarchy=False)
+        for task_id in dependency_cycles:
+            self._mark_needs_decision(
+                by_id[task_id],
+                "GitHub dependency graph contains a cycle involving this task.",
+            )
+
+        hierarchy_cycles = _cycle_nodes(by_id, hierarchy=True)
+        for task_id in hierarchy_cycles:
+            self._mark_needs_decision(
+                by_id[task_id],
+                "GitHub sub-issue hierarchy contains a cycle involving this task.",
+            )
+
+        return sorted(tasks, key=lambda task: int(task.source.external_id))
+
     def get(self, task_id: str) -> NormalizedTask:
-        return self._normalize(self.client.show(task_id))
+        for task in self._build_tasks():
+            if task.id == task_id:
+                return task
+        # Preserve the provider's precise not-found/error behavior.
+        self.client.show(task_id)
+        raise ValueError(f"GitHub task {task_id!r} is not present in the authority snapshot.")
 
     def list_all(self) -> list[NormalizedTask]:
-        return sorted(
-            (self._normalize(raw) for raw in self.client.list_all()),
-            key=lambda task: int(task.source.external_id),
-        )
+        return self._build_tasks()
 
     def list_ready(self) -> list[NormalizedTask]:
+        tasks = self._build_tasks()
+        by_id = {task.id: task for task in tasks}
         return [
-            task for task in self.list_all()
-            if task.status == TaskStatus.READY and not task.human_decision_required
+            task
+            for task in tasks
+            if task.status == TaskStatus.READY
+            and not task.human_decision_required
+            and all(
+                dependency in by_id and by_id[dependency].status == TaskStatus.DONE
+                for dependency in task.dependencies
+            )
         ]
 
     def list_blocked(self) -> list[NormalizedTask]:
+        tasks = self._build_tasks()
+        by_id = {task.id: task for task in tasks}
         return [
-            task for task in self.list_all()
+            task
+            for task in tasks
             if task.status in {TaskStatus.BLOCKED, TaskStatus.NEEDS_DECISION}
             or task.human_decision_required
+            or any(
+                dependency not in by_id or by_id[dependency].status != TaskStatus.DONE
+                for dependency in task.dependencies
+            )
         ]
 
     def snapshot(self, *, tasks: list[NormalizedTask] | None = None) -> TaskSnapshot:
-        values = tasks if tasks is not None else self.list_all()
+        values = tasks if tasks is not None else self._build_tasks()
         tasks_sorted = sorted(values, key=lambda task: int(task.source.external_id))
         material = []
         for task in tasks_sorted:

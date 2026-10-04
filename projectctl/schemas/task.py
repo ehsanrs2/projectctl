@@ -22,7 +22,12 @@ class TaskReferences(ProjectCtlModel):
     research: list[RepoRelativePath] = Field(default_factory=list)
 
 
-class NormalizedTask(ProjectCtlModel):
+class TaskHierarchy(ProjectCtlModel):
+    parent: str | None = None
+    sub_issues: list[str] = Field(default_factory=list)
+
+
+class NormalizedTaskV1(ProjectCtlModel):
     id: str
     title: str
     source: TaskSource
@@ -44,9 +49,41 @@ class NormalizedTask(ProjectCtlModel):
     normalization_notes: list[str] = Field(default_factory=list)
 
 
-class TaskSnapshot(ProjectCtlModel):
+class NormalizedTask(ProjectCtlModel):
+    id: str
+    title: str
+    source: TaskSource
+    type: TaskType = TaskType.UNKNOWN
+    status: TaskStatus
+    priority: Priority = 5
+    milestone: str | None = None
+    created_at: AwareDatetime | None = None
+    ready_since: AwareDatetime | None = None
+    due_at: AwareDatetime | None = None
+    dependencies: list[str] = Field(default_factory=list)
+    blocks: list[str] = Field(default_factory=list)
+    hierarchy: TaskHierarchy = Field(default_factory=TaskHierarchy)
+    risk: RiskLevel = RiskLevel.UNKNOWN
+    resource_class: ResourceClass = ResourceClass.UNKNOWN
+    information_gain: Signal5 = 0
+    human_decision_required: bool = False
+    references: TaskReferences = Field(default_factory=TaskReferences)
+    tags: list[str] = Field(default_factory=list)
+    normalization_notes: list[str] = Field(default_factory=list)
+
+
+class TaskSnapshotV1(ProjectCtlModel):
     schema_kind: Literal["projectctl.task_snapshot"] = "projectctl.task_snapshot"
     schema_version: Literal[1] = 1
+    provider: str
+    captured_at: AwareDatetime
+    source_revision: str | None = None
+    tasks: list[NormalizedTaskV1] = Field(default_factory=list)
+
+
+class TaskSnapshot(ProjectCtlModel):
+    schema_kind: Literal["projectctl.task_snapshot"] = "projectctl.task_snapshot"
+    schema_version: Literal[2] = 2
     provider: str
     captured_at: AwareDatetime
     source_revision: str | None = None

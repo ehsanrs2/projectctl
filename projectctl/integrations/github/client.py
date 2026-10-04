@@ -147,7 +147,8 @@ class GitHubIssuesClient:
             if "pull_request" not in issue
         ]
 
-    def show(self, issue_number: str | int) -> dict[str, Any]:
+    @staticmethod
+    def _issue_number(issue_number: str | int) -> int:
         value = str(issue_number).strip()
         if value.startswith("gh-"):
             value = value[3:]
@@ -155,14 +156,57 @@ class GitHubIssuesClient:
             value = value[1:]
         if not value.isdigit() or int(value) <= 0:
             raise TaskStoreError(f"Invalid GitHub issue id: {issue_number!r}")
+        return int(value)
+
+    def _list_issue_relation(
+        self,
+        issue_number: str | int,
+        suffix: str,
+    ) -> list[dict[str, Any]]:
+        number = self._issue_number(issue_number)
         payload = self._run(
-            ["api", "--hostname", "github.com", "--method", "GET", f"repos/{self.repository}/issues/{int(value)}"]
+            [
+                "api",
+                "--hostname",
+                "github.com",
+                "--method",
+                "GET",
+                "--paginate",
+                "--slurp",
+                f"repos/{self.repository}/issues/{number}/{suffix}?per_page=100",
+            ]
+        )
+        return self.issue_list(payload)
+
+    def list_blocked_by(self, issue_number: str | int) -> list[dict[str, Any]]:
+        return self._list_issue_relation(
+            issue_number,
+            "dependencies/blocked_by",
+        )
+
+    def list_sub_issues(self, issue_number: str | int) -> list[dict[str, Any]]:
+        return self._list_issue_relation(
+            issue_number,
+            "sub_issues",
+        )
+
+    def show(self, issue_number: str | int) -> dict[str, Any]:
+        number = self._issue_number(issue_number)
+        payload = self._run(
+            [
+                "api",
+                "--hostname",
+                "github.com",
+                "--method",
+                "GET",
+                f"repos/{self.repository}/issues/{number}",
+            ]
         )
         if not isinstance(payload, dict) or not payload.get("number"):
             raise TaskStoreError(f"GitHub issue not found: {issue_number}")
         if "pull_request" in payload:
             raise TaskStoreError(
-                f"GitHub item #{value} is a pull request, not an issue task."
+                f"GitHub item #{number} is a pull request, not an issue task."
             )
         return payload
 
