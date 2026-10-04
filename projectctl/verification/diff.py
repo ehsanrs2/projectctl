@@ -24,6 +24,7 @@ SYSTEM_PROTECTED_PATHS = (
     "AGENTS.override.md",
     "**/AGENTS.override.md",
     "docs/PROJECT_STATE.yaml",
+    "docs/PROJECTCTL_BLUEPRINT.md",
     "specs/**",
     "docs/decisions/**",
     "projectctl.verification.yaml",
