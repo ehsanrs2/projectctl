@@ -9,6 +9,7 @@ from projectctl.integrations.beads.claim import BeadsTaskClaimer
 from projectctl.integrations.beads.client import BeadsClient
 from projectctl.integrations.beads.completion import BeadsTaskCompletionWriter
 from projectctl.integrations.beads.task_store import BeadsTaskStore
+from projectctl.integrations.github.claim import GitHubTaskClaimer
 from projectctl.integrations.github.client import GitHubIssuesClient
 from projectctl.integrations.github.task_store import GitHubIssuesTaskStore
 from projectctl.ports.task_store import (
@@ -93,14 +94,14 @@ def task_authority_capabilities_for_provider(
         return TaskAuthorityCapabilities(
             provider="github",
             read=CapabilityState.SUPPORTED,
-            claim=CapabilityState.UNSUPPORTED,
-            release=CapabilityState.UNSUPPORTED,
+            claim=CapabilityState.SUPPORTED,
+            release=CapabilityState.SUPPORTED,
             block_for_decision=CapabilityState.UNSUPPORTED,
             complete=CapabilityState.UNSUPPORTED,
             notes=[
-                "M3.0b1 keeps GitHub task mutation fail-closed.",
-                "A concurrency-safe remote claim and publication-aware completion "
-                "contract must be implemented before GitHub becomes execution-ready.",
+                "M3.0b2 provides a CAS-style remote Git ref claim/release protocol.",
+                "GitHub execution remains fail-closed until decision blocking and "
+                "publication-aware completion are implemented.",
             ],
         )
     raise ConfigurationError(
@@ -153,12 +154,21 @@ def resolve_task_authority(project_root: Path) -> TaskAuthority:
             root,
             repository=config.task_store.repository,
         )
+        repository = config.task_store.repository
+        if repository is None:
+            raise ConfigurationError(
+                "GitHub task authority requires task_store.repository."
+            )
         return TaskAuthority(
             capabilities=capabilities,
             reader=GitHubIssuesTaskStore(
                 root,
-                repository=config.task_store.repository,
+                repository=repository,
                 client=client,
+            ),
+            claimer=GitHubTaskClaimer(
+                root,
+                repository=repository,
             ),
         )
 
