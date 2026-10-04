@@ -22,7 +22,7 @@ from projectctl.schemas.quota import QuotaSnapshot, QuotaSnapshotV1
 from projectctl.schemas.run import ContextManifest, ContextManifestV1, RunManifest, RunManifestV1
 from projectctl.schemas.scheduler import SchedulerDecision, SchedulerDecisionV1
 from projectctl.schemas.status import ProjectStatus
-from projectctl.schemas.task import TaskSnapshot
+from projectctl.schemas.task import TaskSnapshot, TaskSnapshotV1
 from projectctl.schemas.task_authority import TaskAuthorityCapabilities
 from projectctl.schemas.task_claim import TaskClaim, TaskClaimRequest
 from projectctl.schemas.verification import VerificationCatalog, VerificationManifest, VerificationManifestV1
@@ -34,7 +34,8 @@ PUBLIC_SCHEMAS = {
     "worker-strategy-decision.v1.schema.json": WorkerStrategyDecision,
     "quota-snapshot.v1.schema.json": QuotaSnapshotV1,
     "quota-snapshot.v2.schema.json": QuotaSnapshot,
-    "task-snapshot.v1.schema.json": TaskSnapshot,
+    "task-snapshot.v1.schema.json": TaskSnapshotV1,
+    "task-snapshot.v2.schema.json": TaskSnapshot,
     "task-authority-capabilities.v1.schema.json": TaskAuthorityCapabilities,
     "task-delivery-policy.v1.schema.json": TaskDeliveryPolicy,
     "publication-request.v1.schema.json": PublicationRequest,
