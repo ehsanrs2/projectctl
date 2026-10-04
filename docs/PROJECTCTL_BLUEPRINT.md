@@ -486,7 +486,7 @@ Implemented:
 
 ### M3.0b1 — provider-neutral task authority boundary
 
-Implemented by the current change:
+Implemented:
 
 - TaskAuthorityCapabilities v1
 - one Task Authority resolver
@@ -502,7 +502,7 @@ Implemented by the current change:
 The M0–M2 core is coherent. The main risk is no longer the worker loop itself; it is extending the
 system to external team authorities without weakening earlier invariants.
 
-### Finding A — task provider abstraction is incomplete
+### Finding A — task provider abstraction was incomplete (resolved in M3.0b1)
 
 The repository already defines `TaskStoreReader`, `TaskClaimer`, and
 `TaskCompletionWriter` ports, but application code still directly imports and branches on Beads
@@ -510,21 +510,22 @@ in execution, integration, and terminal task reconciliation.
 
 This is acceptable historical M1 code but is the wrong foundation for GitHub/Linear/Jira.
 
-**Required correction before GitHub writes:** introduce one provider-neutral Task Authority
-resolver/capability layer and make application services depend only on the ports.
+**Resolution:** M3.0b1 introduced one provider-neutral Task Authority resolver/capability layer,
+and application services now depend on the ports rather than provider implementations.
 
-### Finding B — GitHub issue mutation does not provide a documented claim CAS
+### Finding B — GitHub issue mutation did not provide a claim CAS (claim ownership resolved in M3.0b2)
 
 GitHub supports normal issue/label/assignee mutation, but those APIs do not provide ProjectCTL a
 documented compare-and-swap ownership primitive.
 
 Therefore labels/assignees alone must not be treated as an atomic claim.
 
-The GitHub Git-reference create operation does provide create-or-conflict semantics for a
-deterministic ref name. A future GitHub claim protocol may use a reserved remote ref namespace as
-the ownership primitive, subject to explicit permission, recovery, and cleanup rules.
+M3.0b2 implements claim ownership with a reserved remote Git branch and exact Git
+`--force-with-lease` semantics. Each claim points to a unique marker commit, making release
+ownership-verifiable and ABA-safe. The claim request/result are also bound to durable run events.
 
-This design is not considered implemented until tested against real GitHub behavior.
+This resolves claim/release ownership only. GitHub block/completion and publication remain
+deliberately unsupported.
 
 ### Finding C — local integration is insufficient for remote completion
 
@@ -592,7 +593,7 @@ architecture sequence.
 
 ### M3.0b1 — Task Authority Capability & Resolver Layer
 
-**Current milestone / implemented by this change.**
+**Completed.**
 
 Goal: remove provider-specific task lifecycle logic from the application layer before adding more
 remote writes.
@@ -609,23 +610,33 @@ Deliverables:
 
 ### M3.0b2 — GitHub Remote Claim Protocol
 
-**Next milestone after M3.0b1.**
+**Current milestone / implemented by this change.**
 
-Goal: establish a concurrency-safe ownership primitive before creating a GitHub-backed run.
+Goal: establish concurrency-safe GitHub claim ownership without enabling remote completion.
 
-Candidate design to validate:
+Implemented:
 
-- deterministic reserved remote Git ref per issue
-- create-ref success = claim acquired
-- existing ref/conflict = claim lost
-- local durable run records the remote claim identity
-- explicit release deletes only the expected claim
-- ambiguous/stale remote claims fail closed
-- recovery never steals an unproven claim
+- reserved `refs/heads/projectctl/claims/issue-N` namespace
+- unique marker commit per claim request
+- absent-only CAS acquisition using explicit Git force-with-lease
+- exact expected-SHA CAS deletion
+- successful-release / immediate-reacquire race handling
+- ABA-safe stale-release rejection
+- post-claim execution-input revalidation
+- remote target/base equality precondition
+- origin repository identity validation
+- durable `TaskClaimRequest v1` and `TaskClaim v1`
+- claim artifact digests anchored in append-only run events
+- safe retry/abort release from durable ownership evidence
+- legacy Beads-only release compatibility for pre-M3.0b2 runs
+- GitHub claim/release capabilities marked supported
+- GitHub block/complete remain unsupported, so GitHub is still not execution-ready
 
-No issue completion in this milestone.
+No GitHub Issue completion occurs in this milestone.
 
 ### M3.0c — Remote Publication & GitHub Completion
+
+**Next milestone.**
 
 Goal: define what “delivered” means for a remote/team task authority.
 

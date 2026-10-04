@@ -12,6 +12,12 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from projectctl.application.claims import (
+    load_durable_claim,
+    persist_claim,
+    persist_claim_request,
+    record_claim_release,
+)
 from projectctl.application.scheduling import collect_scheduling_bundle
 from projectctl.application.tasks import capture_task_snapshot, task_store_for_project
 from projectctl.application.task_lifecycle import reconcile_terminal_task
@@ -59,6 +65,7 @@ from projectctl.schemas.execution import (
     parse_worker_checkpoint,
 )
 from projectctl.schemas.run import ContextManifest, RunManifest, WorkerDescriptor
+from projectctl.schemas.task_claim import TaskClaimRequest
 from projectctl.schemas.run_store import RunRecord
 from projectctl.storage.runs import RunStore
 from projectctl.runtime import LeaseHeartbeat
@@ -348,8 +355,41 @@ def prepare_next_run(
             )
 
         claimer = _claimer(root)
-        claim = claimer.claim(plan.task_id, actor=actor)
-        if not claim.claimed:
+        claim_request = TaskClaimRequest(
+            task_id=plan.task_id,
+            run_id=run_id,
+            actor=actor,
+            base_commit=plan.base_commit,
+            integration_target_ref=plan.integration_target_ref,
+            claim_token=uuid.uuid4().hex,
+            requested_at=utc_now(),
+        )
+        persist_claim_request(
+            root,
+            store=store,
+            request=claim_request,
+        )
+        try:
+            claim = claimer.claim(claim_request)
+            persist_claim(
+                root,
+                store=store,
+                request=claim_request,
+                claim=claim,
+            )
+        except Exception as exc:
+            # The durable request is sufficient for providers that can reconcile
+            # exact ownership after a crash/transport failure. Do not guess that
+            # no remote mutation happened and do not discard the request.
+            store.append_event(
+                run_id,
+                "task.claim.unresolved",
+                {"error_type": type(exc).__name__, "error": str(exc)},
+            )
+            store.release_lease(run_id, owner=actor)
+            raise
+
+        if not claim.acquired:
             store.transition(
                 run_id,
                 expected={RunStatus.PREPARING},
@@ -361,13 +401,36 @@ def prepare_next_run(
                 claim.reason or f"Task {plan.task_id} could not be claimed."
             )
 
-        store.transition(
-            run_id,
-            expected={RunStatus.PREPARING},
-            status=RunStatus.CLAIMED,
-        )
+        # Close the distributed race between the pre-claim snapshot check and
+        # provider ownership acquisition. Human/task/quota/Git inputs may have
+        # changed while the remote claim was being acquired.
+        stale_after_claim = _validate_plan_inputs(root, plan)
+        if stale_after_claim is not None:
+            release_ok = True
+            try:
+                claimer.release(claim)
+                record_claim_release(store, claim)
+            except Exception:
+                release_ok = False
+            store.transition(
+                run_id,
+                expected={RunStatus.PREPARING},
+                status=RunStatus.FAILED if release_ok else RunStatus.NEEDS_DECISION,
+                terminal_reason=(
+                    stale_after_claim
+                    if release_ok
+                    else RunTerminalReason.RECOVERY_UNSAFE
+                ),
+            )
+            store.release_lease(run_id, owner=actor)
+            raise StaleSnapshotError(
+                "Execution inputs changed after task claim acquisition: "
+                f"{stale_after_claim.value}"
+            )
 
         try:
+            # Keep PREPARING until both remote ownership and the isolated
+            # workspace exist. A crash can then be reconciled deterministically.
             worktree = manager.create(
                 worktree_id=worktree_id,
                 branch_name=branch_name,
@@ -376,7 +439,8 @@ def prepare_next_run(
         except Exception as exc:
             release_ok = True
             try:
-                claimer.release(plan.task_id, actor=actor)
+                claimer.release(claim)
+                record_claim_release(store, claim)
             except Exception:
                 release_ok = False
             reason = (
@@ -387,13 +451,18 @@ def prepare_next_run(
             status = RunStatus.FAILED if release_ok else RunStatus.NEEDS_DECISION
             store.transition(
                 run_id,
-                expected={RunStatus.CLAIMED},
+                expected={RunStatus.PREPARING},
                 status=status,
                 terminal_reason=reason,
             )
             store.release_lease(run_id, owner=actor)
             raise WorktreeError(f"Could not prepare isolated worktree: {exc}") from exc
 
+        store.transition(
+            run_id,
+            expected={RunStatus.PREPARING},
+            status=RunStatus.CLAIMED,
+        )
         record = store.release_lease(run_id, owner=actor)
         return PreparedRun(plan=plan, record=record, worktree=worktree)
 
@@ -411,6 +480,57 @@ def _mark_start_failure(
         expected={expected},
         status=status,
         terminal_reason=reason,
+    )
+
+
+def _validate_durable_task_claim(
+    project_root: Path,
+    *,
+    store: RunStore,
+    run_id: str,
+    expected_status: RunStatus,
+) -> None:
+    durable = load_durable_claim(
+        project_root,
+        store=store,
+        run_id=run_id,
+        allow_legacy_missing=True,
+    )
+    if durable is None:
+        # Compatibility for runs prepared before TaskClaim v1 existed.
+        return
+    _, claim = durable
+    claimer = _claimer(project_root)
+    if claimer.validate(claim):
+        store.append_event(
+            run_id,
+            "task.claim.validated",
+            {
+                "claim_digest": digest(claim),
+                "ownership_ref": claim.ownership_ref,
+                "ownership_sha": claim.ownership_sha,
+            },
+        )
+        return
+
+    _mark_start_failure(
+        store,
+        run_id,
+        expected=expected_status,
+        status=RunStatus.FAILED,
+        reason=RunTerminalReason.CLAIM_LOST,
+    )
+    store.append_event(
+        run_id,
+        "task.claim.lost",
+        {
+            "claim_digest": digest(claim),
+            "ownership_ref": claim.ownership_ref,
+            "ownership_sha": claim.ownership_sha,
+        },
+    )
+    raise ClaimConflictError(
+        f"Task claim ownership was lost before run {run_id} could continue."
     )
 
 
@@ -783,6 +903,13 @@ def start_prepared_run(project_root: Path, run_id: str) -> StartedRun:
             )
             raise RunStoreError("Stored worker strategy resolution differs from ExecutionPlan.")
 
+        _validate_durable_task_claim(
+            root,
+            store=store,
+            run_id=run_id,
+            expected_status=RunStatus.CLAIMED,
+        )
+
         manager = WorktreeManager(root)
         expected_worktree = manager.path_for(record.worktree_id)
         actual_worktree = Path(record.worktree_path).resolve()
@@ -961,6 +1088,12 @@ def resume_checkpointed_run(project_root: Path, run_id: str) -> StartedRun:
             )
 
         plan = _load_json_model(run_dir / "execution-plan.json", ExecutionPlan)
+        _validate_durable_task_claim(
+            root,
+            store=store,
+            run_id=run_id,
+            expected_status=RunStatus.RUNNING,
+        )
         if digest(plan) != record.execution_plan_digest:
             _mark_start_failure(
                 store,
@@ -1183,7 +1316,23 @@ def abort_prepared_run(project_root: Path, run_id: str) -> RunRecord:
 
     if record.status in {RunStatus.CLAIMED, RunStatus.RUNNING}:
         try:
-            claimer.release(record.task_id, actor=actor)
+            durable = load_durable_claim(
+                root,
+                store=store,
+                run_id=run_id,
+                allow_legacy_missing=True,
+            )
+            if durable is None:
+                claimer.release_legacy(record.task_id, actor=actor)
+                store.append_event(
+                    run_id,
+                    "task.claim.released_legacy",
+                    {"task_id": record.task_id},
+                )
+            else:
+                _, claim = durable
+                claimer.release(claim)
+                record_claim_release(store, claim)
         except Exception as exc:
             store.transition(
                 run_id,

@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Make the task-authority boundary provider-neutral before enabling any remote GitHub execution mutations.
+current_goal: Establish concurrency-safe GitHub task claim/release ownership while keeping remote completion fail-closed until publication semantics exist.
 active_milestone:
-  id: M3.0b1
-  title: Task Authority Capability & Resolver Layer
+  id: M3.0b2
+  title: GitHub Remote Claim Protocol
   aliases:
-    - Task Authority
-    - Provider-neutral Task Lifecycle
-    - Task Authority Capabilities
+    - GitHub Remote Claim
+    - Remote Ref Lease
+    - Claim Ownership
 updated_at: null

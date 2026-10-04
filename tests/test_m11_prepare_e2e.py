@@ -29,7 +29,8 @@ from projectctl.schemas.capabilities import (
     WorkerRuntimeDescriptor,
     WorkerStrategyDecision,
 )
-from projectctl.schemas.execution import ClaimResult, ExecutionPlan
+from projectctl.schemas.execution import ExecutionPlan
+from projectctl.schemas.task_claim import TaskClaim
 from projectctl.schemas.run import RunManifest, WorkerDescriptor
 from projectctl.storage.runs import RunStore
 from projectctl.workers.capability_digest import effective_capability_digest
@@ -53,16 +54,31 @@ class FakeClaimer:
         self.claimed = []
         self.released = []
 
-    def claim(self, task_id: str, *, actor: str):
-        self.claimed.append(task_id)
-        return ClaimResult(
-            task_id=task_id,
-            actor=actor,
-            claimed=True,
+    def claim(self, request):
+        self.claimed.append(request.task_id)
+        return TaskClaim(
+            provider="beads",
+            task_id=request.task_id,
+            run_id=request.run_id,
+            actor=request.actor,
+            base_commit=request.base_commit,
+            integration_target_ref=request.integration_target_ref,
+            claim_token=request.claim_token,
+            request_digest=digest(request),
+            acquired=True,
             observed_at=NOW,
         )
 
-    def release(self, task_id: str, *, actor: str):
+    def reconcile(self, request):
+        return self.claim(request)
+
+    def validate(self, claim):
+        return True
+
+    def release(self, claim):
+        self.released.append(claim.task_id)
+
+    def release_legacy(self, task_id: str, *, actor: str):
         self.released.append(task_id)
 
 
@@ -156,9 +172,15 @@ def test_prepare_and_abort_use_durable_run_state_and_external_worktree(
             strategy=strategy,
         ),
     )
+    validation_calls = []
+
+    def validate_inputs(root, value):
+        validation_calls.append(value.plan_id)
+        return None
+
     monkeypatch.setattr(
         "projectctl.application.execution._validate_plan_inputs",
-        lambda root, value: None,
+        validate_inputs,
     )
     monkeypatch.setattr(
         "projectctl.application.execution._claimer",
@@ -180,6 +202,7 @@ def test_prepare_and_abort_use_durable_run_state_and_external_worktree(
     assert not worktree.is_relative_to(repo)
     assert git(repo, "rev-parse", "HEAD") == base
     assert claimer.claimed == ["bd-1"]
+    assert validation_calls == ["ep-test", "ep-test"]
 
     shown = runner.invoke(
         app,
@@ -191,6 +214,8 @@ def test_prepare_and_abort_use_durable_run_state_and_external_worktree(
     assert [event["event_type"] for event in shown_payload["events"]] == [
         "run.created",
         "run.transition",
+        "task.claim.requested",
+        "task.claim.observed",
         "run.transition",
     ]
 
@@ -236,7 +261,10 @@ def test_abort_marks_recovery_unsafe_when_claim_release_fails(tmp_path: Path, mo
     )
 
     class FailingClaimer:
-        def release(self, task_id: str, *, actor: str):
+        def release(self, claim):
+            raise RuntimeError("release failed")
+
+        def release_legacy(self, task_id: str, *, actor: str):
             raise RuntimeError("release failed")
 
     monkeypatch.setattr(

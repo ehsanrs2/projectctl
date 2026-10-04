@@ -123,6 +123,10 @@ def _advance_run(project_root: Path, run_id: str):
     record = store.get(run_id)
 
     # Recover crash windows before attempting their next deterministic phase.
+    if record.status in {RunStatus.PREPARING, RunStatus.CLAIMED}:
+        recover_run(project_root, run_id)
+        record = store.get(run_id)
+
     if record.status == RunStatus.RUNNING:
         if record.checkpoint_ref:
             resume_checkpointed_run(project_root, run_id)
@@ -234,7 +238,7 @@ def run_auto(project_root: Path, policy: AutoRunPolicy | None = None) -> AutoRun
                         steps=steps,
                     )
 
-                if record.status in {RunStatus.PLANNED, RunStatus.PREPARING}:
+                if record.status == RunStatus.PLANNED:
                     steps.append(
                         AutoRunStep(
                             iteration=len(steps) + 1,
@@ -244,7 +248,7 @@ def run_auto(project_root: Path, policy: AutoRunPolicy | None = None) -> AutoRun
                             final_status=record.status,
                             action="unsafe_partial_prepare",
                             details=[
-                                "Automatic recovery cannot prove whether task claim/worktree preparation completed."
+                                "Automatic recovery cannot prove whether run creation reached durable prepare state."
                             ],
                         )
                     )
