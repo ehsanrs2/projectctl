@@ -37,18 +37,10 @@ class TaskMilestoneMetadata(ProjectCtlModel):
     closed_issues: int | None = None
 
 
-class TaskIssueField(ProjectCtlModel):
-    field_id: str
-    name: str
-    data_type: str
-    value: str | int | float | bool | list[str] | None = None
-
-
 class TaskTeamMetadata(ProjectCtlModel):
     assignees: list[str] = Field(default_factory=list)
     issue_type: str | None = None
     milestone: TaskMilestoneMetadata | None = None
-    issue_fields: list[TaskIssueField] = Field(default_factory=list)
 
 
 class NormalizedTaskV1(ProjectCtlModel):
