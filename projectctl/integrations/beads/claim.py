@@ -65,3 +65,7 @@ class BeadsTaskClaimer:
                 f"Beads claimer cannot release provider {claim.provider!r}."
             )
         self.client.release_issue(claim.task_id)
+
+    def release_legacy(self, task_id: str, *, actor: str) -> None:
+        del actor
+        self.client.release_issue(task_id)
