@@ -148,3 +148,9 @@ class GitHubTaskClaimer:
             ref=claim.ownership_ref,
             ownership_sha=claim.ownership_sha,
         )
+
+    def release_legacy(self, task_id: str, *, actor: str) -> None:
+        del task_id, actor
+        raise TaskStoreError(
+            "GitHub claims cannot be released without durable ownership evidence."
+        )
