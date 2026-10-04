@@ -497,21 +497,36 @@ def _finalize_delivery(
             record_claim_release(store, claim)
             claim_released = True
         except ClaimConflictError as exc:
-            final = store.transition(
+            # Delivery and canonical task completion are already durable at this
+            # point. Losing ownership during cleanup must not rewrite the task
+            # back to needs-decision or mutate another owner's claim.
+            store.append_event(
                 record.run_id,
-                expected={RunStatus.INTEGRATING},
-                status=RunStatus.NEEDS_DECISION,
-                terminal_reason=RunTerminalReason.CLAIM_LOST,
+                "task.claim.ownership_lost_after_completion",
+                {
+                    "claim_digest": digest(claim),
+                    "ownership_ref": claim.ownership_ref,
+                    "ownership_sha": claim.ownership_sha,
+                    "error": str(exc),
+                },
             )
-            reconcile_terminal_task(
-                root,
-                store=store,
-                run_id=final.run_id,
-                actor=actor,
+            claim_released = False
+        except ProjectCtlError as exc:
+            # A transient/ambiguous release failure leaves the run INTEGRATING
+            # so recovery can retry the exact release. Do not alter the already
+            # completed canonical task.
+            store.append_event(
+                record.run_id,
+                "task.claim.release_deferred_after_completion",
+                {
+                    "claim_digest": digest(claim),
+                    "ownership_ref": claim.ownership_ref,
+                    "ownership_sha": claim.ownership_sha,
+                    "error": str(exc),
+                },
             )
             raise IntegrationError(
-                "Task completed but exact claim release lost ownership: "
-                f"{exc}"
+                "Task completion is durable but exact claim release could not be proven."
             ) from exc
 
     manifest = IntegrationManifest(
