@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 
 from projectctl.core.digest import digest
-from projectctl.core.errors import IntegrationError, TaskStoreError
+from projectctl.core.errors import IntegrationError
 from projectctl.core.time import utc_now
 from projectctl.integrations.github.repository import parse_github_repository
 from projectctl.schemas.delivery import PublicationManifest, PublicationRequest
