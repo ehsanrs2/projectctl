@@ -4,6 +4,7 @@ from pathlib import Path
 from projectctl.core.enums import HealthStatus
 from projectctl.core.errors import ConfigurationError, DatabaseVersionError, ProviderUnavailableError, QuotaError, RepositoryContractError, TaskStoreError, UnsafePathError
 from projectctl.core.paths import resolve_inside_repo
+from projectctl.git.ref_lease import RemoteRefLease
 from projectctl.integrations.github import GitHubIssuesClient
 from projectctl.integrations.github.repository import parse_github_repository
 from projectctl.project.bootstrap import projectctl_home
