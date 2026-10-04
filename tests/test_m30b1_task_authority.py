@@ -7,6 +7,7 @@ from typer.testing import CliRunner
 
 from projectctl.cli.app import app
 from projectctl.core.enums import CapabilityState
+from projectctl.core.errors import ConfigurationError
 from projectctl.integrations.task_authority import (
     require_task_authority_execution_ready,
     task_authority_capabilities,
@@ -87,7 +88,7 @@ def test_linear_is_readable_but_deliberately_not_execution_ready(tmp_path: Path)
     assert capabilities.block_for_decision == CapabilityState.UNSUPPORTED
     assert capabilities.complete == CapabilityState.UNSUPPORTED
 
-    with pytest.raises(Exception, match="Unsupported lifecycle operations"):
+    with pytest.raises(ConfigurationError, match="Unsupported lifecycle operations"):
         require_task_authority_execution_ready(tmp_path)
 
 def test_task_authority_cli_is_machine_readable_without_provider_probe(tmp_path: Path):
