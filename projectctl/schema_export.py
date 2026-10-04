@@ -13,8 +13,10 @@ from projectctl.schemas.integration import IntegrationManifest, IntegrationManif
 from projectctl.schemas.onboarding import (
     AdoptionManifest,
     AdoptionManifestV1,
+    AdoptionManifestV2,
     AdoptionPlan,
     AdoptionPlanV1,
+    AdoptionPlanV2,
     ProjectInspection,
     ProjectInspectionV1,
 )
@@ -77,9 +79,11 @@ PUBLIC_SCHEMAS = {
     "project-inspection.v1.schema.json": ProjectInspectionV1,
     "project-inspection.v2.schema.json": ProjectInspection,
     "adoption-plan.v1.schema.json": AdoptionPlanV1,
-    "adoption-plan.v2.schema.json": AdoptionPlan,
+    "adoption-plan.v2.schema.json": AdoptionPlanV2,
+    "adoption-plan.v3.schema.json": AdoptionPlan,
     "adoption-manifest.v1.schema.json": AdoptionManifestV1,
-    "adoption-manifest.v2.schema.json": AdoptionManifest,
+    "adoption-manifest.v2.schema.json": AdoptionManifestV2,
+    "adoption-manifest.v3.schema.json": AdoptionManifest,
 }
 
 
