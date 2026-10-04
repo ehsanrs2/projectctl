@@ -44,10 +44,11 @@ def load_project_config(project_root: Path) -> ProjectConfig:
         if version == 1:
             legacy = ProjectConfigV1.model_validate(raw)
             upgraded = legacy.model_dump(mode="python")
-            upgraded["schema_version"] = 3
+            upgraded["schema_version"] = 4
             upgraded["task_store"] = {
                 "provider": legacy.task_store.provider,
                 "repository": None,
+                "team": None,
                 "cache_max_age_seconds": 30,
             }
             return ProjectConfig.model_validate(upgraded)
