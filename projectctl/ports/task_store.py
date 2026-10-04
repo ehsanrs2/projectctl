@@ -1,6 +1,7 @@
 from typing import Protocol
 
-from projectctl.schemas.execution import ClaimResult, EvidenceReference
+from projectctl.schemas.execution import EvidenceReference
+from projectctl.schemas.task_claim import TaskClaim, TaskClaimRequest
 from projectctl.schemas.task import NormalizedTask, TaskSnapshot
 
 
@@ -13,8 +14,8 @@ class TaskStoreReader(Protocol):
 
 
 class TaskClaimer(Protocol):
-    def claim(self, task_id: str, *, actor: str) -> ClaimResult: ...
-    def release(self, task_id: str, *, actor: str) -> None: ...
+    def claim(self, request: TaskClaimRequest) -> TaskClaim: ...
+    def release(self, claim: TaskClaim) -> None: ...
 
 
 class TaskCompletionWriter(Protocol):
