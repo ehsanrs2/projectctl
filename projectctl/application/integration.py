@@ -28,7 +28,10 @@ from projectctl.core.errors import (
 )
 from projectctl.core.time import utc_now
 from projectctl.git import WorktreeManager, current_branch, resolve_commit
-from projectctl.integrations.task_authority import resolve_task_authority
+from projectctl.integrations.task_authority import (
+    resolve_task_authority,
+    task_delivery_policy,
+)
 from projectctl.project.locking import project_lock
 from projectctl.schemas.delivery import PublicationManifest, PublicationRequest
 from projectctl.schemas.evidence import EvidenceManifest
@@ -405,8 +408,7 @@ def _finalize_delivery(
     target_before: str,
     actor: str,
 ) -> IntegratedRun:
-    authority = resolve_task_authority(root)
-    policy = authority.delivery_policy
+    policy = task_delivery_policy(root)
     run_dir = root / ".projectctl" / "runs" / record.run_id
     target_after = resolve_commit(root, plan.integration_target_ref)
     if target_after != record.candidate_commit:
@@ -441,7 +443,7 @@ def _finalize_delivery(
         record.run_id,
         evidence=completion_evidence,
     ):
-        authority.require_completion_writer().complete(
+        _completion_writer(root).complete(
             record.task_id,
             evidence=completion_evidence,
         )
@@ -451,12 +453,13 @@ def _finalize_delivery(
             {
                 "evidence_path": completion_evidence.path,
                 "evidence_digest": completion_evidence.digest,
-                "provider": authority.provider,
+                "provider": policy.provider,
             },
         )
 
     claim_released = False
     if policy.release_claim_after_completion:
+        authority = resolve_task_authority(root)
         durable_claim = load_durable_claim(
             root,
             store=store,
