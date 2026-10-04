@@ -332,10 +332,6 @@ def _ensure_publication(
     _, claim = durable_claim
     claimer = authority.require_claimer()
 
-    completed_ref = EvidenceReference(
-        path=publication_manifest_ref(record.run_id),
-        digest="pending",
-    )
     completion_already_recorded = any(
         event.event_type == "task.completion.observed"
         for event in store.events(record.run_id)
