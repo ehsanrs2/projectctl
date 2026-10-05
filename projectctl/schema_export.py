@@ -5,6 +5,7 @@ from projectctl.schemas.artifact import ArtifactMetadata
 from projectctl.schemas.auto import AutoRunPolicy, AutoRunReport
 from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDecision
 from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3, ProjectConfigV4
+from projectctl.schemas.ownership import ExecutionOwnershipPolicy
 from projectctl.schemas.delivery import PublicationManifest, PublicationRequest, TaskDeliveryPolicy
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
 from projectctl.schemas.github_cache import GitHubCacheEntry, GitHubCacheRequest
@@ -44,6 +45,7 @@ PUBLIC_SCHEMAS = {
     "task-snapshot.v2.schema.json": TaskSnapshotV2,
     "task-snapshot.v3.schema.json": TaskSnapshot,
     "task-authority-capabilities.v1.schema.json": TaskAuthorityCapabilities,
+    "execution-ownership-policy.v1.schema.json": ExecutionOwnershipPolicy,
     "task-delivery-policy.v1.schema.json": TaskDeliveryPolicy,
     "publication-request.v1.schema.json": PublicationRequest,
     "publication-manifest.v1.schema.json": PublicationManifest,
