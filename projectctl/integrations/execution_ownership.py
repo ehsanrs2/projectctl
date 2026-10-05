@@ -6,6 +6,10 @@ from pathlib import Path
 from projectctl.core.enums import CapabilityState
 from projectctl.core.errors import ConfigurationError
 from projectctl.git.task_claim import GitRemoteTaskClaimer
+from projectctl.integrations.delivery import (
+    code_delivery_policy,
+    require_code_delivery_execution_ready,
+)
 from projectctl.integrations.github.claim import GitHubTaskClaimer
 from projectctl.integrations.local_claim import LocalTaskClaimer
 from projectctl.integrations.task_authority import (
@@ -156,11 +160,12 @@ def require_project_execution_ready(project_root: Path) -> None:
     # Policy resolution validates ownership intent without requiring the
     # provider runtime. The actual claimer is resolved only when a claim is
     # attempted.
-    ownership = execution_ownership_policy(root)
+    execution_ownership_policy(root)
+    require_code_delivery_execution_ready(root)
 
-    config = load_project_config(root)
-    if capabilities.provider == "github" and ownership.transport_mode != "git_remote":
+    delivery = code_delivery_policy(root)
+    if capabilities.provider == "github" and delivery.mode != "direct_git":
         raise ConfigurationError(
-            "GitHub task completion currently requires a git_remote code transport "
-            "because completion is gated on remote-visible publication."
+            "GitHub task completion currently requires code_delivery.mode='direct_git' "
+            "because completion is gated on remote-visible publication evidence."
         )
