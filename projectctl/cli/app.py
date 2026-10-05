@@ -79,6 +79,10 @@ def _show_plan(plan) -> None:
         typer.echo(f"Task repository: {plan.task_store_repository}")
     if getattr(plan, "task_store_team", None):
         typer.echo(f"Task team: {plan.task_store_team}")
+    if getattr(plan, "task_store_site", None):
+        typer.echo(
+            f"Jira authority: {plan.task_store_site} / {plan.task_store_project}"
+        )
     typer.echo(f"Code transport: {getattr(plan, 'code_transport_mode', 'local')}")
     if getattr(plan, "code_remote_name", None):
         typer.echo(f"Code remote: {plan.code_remote_name} -> {plan.code_remote_identity}")
@@ -95,26 +99,34 @@ def _prompt_task_store(inspection) -> str:
     if "github" in inspection.detected_task_systems:
         typer.echo("  [1] Use existing GitHub Issues task system")
         typer.echo("  [2] Use Linear")
-        typer.echo("  [3] Introduce local Beads")
-        typer.echo("  [4] Configure later")
+        typer.echo("  [3] Use Jira Cloud")
+        typer.echo("  [4] Introduce local Beads")
+        typer.echo("  [5] Configure later")
         choice = typer.prompt("Choose", default="1")
         return {
             "1": "github",
             "2": "linear",
-            "3": "beads",
-            "4": "unresolved",
+            "3": "jira",
+            "4": "beads",
+            "5": "unresolved",
         }.get(choice, "github")
     typer.echo("  [1] Use local Beads")
     typer.echo("  [2] Use Linear")
-    typer.echo("  [3] Configure later")
+    typer.echo("  [3] Use Jira Cloud")
+    typer.echo("  [4] Configure later")
     choice = typer.prompt("Choose", default="1")
-    return {"1": "beads", "2": "linear", "3": "unresolved"}.get(choice, "beads")
+    return {
+        "1": "beads",
+        "2": "linear",
+        "3": "jira",
+        "4": "unresolved",
+    }.get(choice, "beads")
 
 
 def _validate_task_store_choice(value: str | None) -> str | None:
     if value is None:
         return None
-    allowed = {"beads", "github", "linear", "unresolved"}
+    allowed = {"beads", "github", "linear", "jira", "unresolved"}
     if value not in allowed:
         raise RepositoryContractError(
             f"Unsupported onboarding task store `{value}`. Choose one of: {', '.join(sorted(allowed))}."
@@ -148,6 +160,20 @@ def _prompt_task_store_team(provider: str | None, current: str | None) -> str | 
     if provider != "linear" or current is not None:
         return current
     return typer.prompt("Linear team UUID").strip()
+
+
+def _prompt_task_store_jira(
+    provider: str | None,
+    site: str | None,
+    project: str | None,
+) -> tuple[str | None, str | None]:
+    if provider != "jira":
+        return site, project
+    if site is None:
+        site = typer.prompt("Jira Cloud site (e.g. acme.atlassian.net)").strip()
+    if project is None:
+        project = typer.prompt("Jira project key (e.g. ENG)").strip()
+    return site, project
 
 
 def _interaction_payload(status: str, *, inspection=None, plan=None, reason: str | None = None) -> dict:
@@ -198,6 +224,16 @@ def init_command(
         None,
         "--task-store-team",
         help="Provider team identity, currently the Linear team UUID.",
+    ),
+    task_store_site: str | None = typer.Option(
+        None,
+        "--task-store-site",
+        help="Jira Cloud site host, e.g. acme.atlassian.net.",
+    ),
+    task_store_project: str | None = typer.Option(
+        None,
+        "--task-store-project",
+        help="Jira project key, e.g. ENG.",
     ),
     code_transport: str | None = typer.Option(
         None,
@@ -278,12 +314,19 @@ def init_command(
                 selected_store,
                 task_store_team,
             )
+            task_store_site, task_store_project = _prompt_task_store_jira(
+                selected_store,
+                task_store_site,
+                task_store_project,
+            )
 
         plan = build_adoption_plan(
             path,
             task_store_provider=selected_store,
             task_store_repository=task_store_repository,
             task_store_team=task_store_team,
+            task_store_site=task_store_site,
+            task_store_project=task_store_project,
             code_transport_mode=selected_transport,
             code_remote_name=git_remote_name,
             code_remote_identity=git_remote_identity,
@@ -350,6 +393,16 @@ def adopt_command(
         "--task-store-team",
         help="Provider team identity, currently the Linear team UUID.",
     ),
+    task_store_site: str | None = typer.Option(
+        None,
+        "--task-store-site",
+        help="Jira Cloud site host, e.g. acme.atlassian.net.",
+    ),
+    task_store_project: str | None = typer.Option(
+        None,
+        "--task-store-project",
+        help="Jira project key, e.g. ENG.",
+    ),
     code_transport: str | None = typer.Option(
         None,
         "--code-transport",
@@ -387,11 +440,18 @@ def adopt_command(
                 selected_store,
                 task_store_team,
             )
+            task_store_site, task_store_project = _prompt_task_store_jira(
+                selected_store,
+                task_store_site,
+                task_store_project,
+            )
         plan = build_adoption_plan(
             path,
             task_store_provider=selected_store,
             task_store_repository=task_store_repository,
             task_store_team=task_store_team,
+            task_store_site=task_store_site,
+            task_store_project=task_store_project,
             code_transport_mode=selected_transport,
             code_remote_name=git_remote_name,
             code_remote_identity=git_remote_identity,
@@ -413,6 +473,11 @@ def adopt_command(
             task_store_team = _prompt_task_store_team(
                 selected_store,
                 task_store_team,
+            )
+            task_store_site, task_store_project = _prompt_task_store_jira(
+                selected_store,
+                task_store_site,
+                task_store_project,
             )
             plan = build_adoption_plan(
                 path,
