@@ -1166,7 +1166,7 @@ same read/lifecycle/ownership/delivery proof sequence.
 
 #### M3.3a — Jira Read Authority
 
-**Current milestone / implemented by this change.**
+**Completed.**
 
 Implemented:
 
@@ -1200,21 +1200,43 @@ Safety boundary:
 
 #### M3.3b — Jira Relationship & Workflow Eligibility
 
-**Next milestone after M3.3a.**
+**Current milestone / implemented by this change.**
 
-Prove the scheduler-facing semantics Jira read authority still lacks:
+Implemented:
 
-- issue-link blocker direction and supported link types
-- cross-project dependency identities
-- dependency resolution based on blocker terminal state
-- parent/sub-task hierarchy kept separate from dependencies
-- dependency/hierarchy cycle detection
-- explicit Jira workflow/status readiness mapping rather than category heuristics
-- read consistency for linked issues and project boundaries
-- fail-closed handling for unknown/custom relationship semantics
+- ProjectConfig v8 with explicit `task_store.jira_policy`
+- READY policy pinned by Jira status id + name
+- to-do/new status becomes READY only when explicitly allowlisted
+- configured READY status drift in name/category -> NEEDS_DECISION
+- issue-link policy pinned by type id, type name, inward label and outward label
+- each configured link side maps explicitly to `dependency`, `blocks`, or `ignore`
+- unknown/unconfigured Jira link types on a task fail closed to NEEDS_DECISION
+- provider link metadata drift fails closed
+- local dependency/blocks edges are materialized symmetrically from either observed link side
+- unresolved local blockers move READY tasks to BLOCKED
+- terminal blockers are treated as satisfied
+- cross-project blockers use stable `jira:<site>:<issue-id>` identities
+- cross-project blocker status is independently re-read before scheduler eligibility is released
+- embedded external linked-issue status may be treated as stale but never as final authority
+- cross-project id/key mismatch fails closed
+- parent/sub-task hierarchy remains separate from dependency semantics
+- dependency cycles and hierarchy cycles are detected independently and fail closed
+- `projectctl jira-metadata` exposes current status/link metadata for deliberate policy authoring
+- Doctor verifies configured READY statuses and link rules still match provider metadata
+- Jira lifecycle capabilities remain read-only; execution is still fail-closed
 
-Only after Jira relationship and eligibility semantics are proven should a later milestone evaluate
-additive Jira lifecycle markers/properties and completion behavior.
+Safety boundary:
+
+- Jira status categories alone never grant READY
+- link direction is never inferred from type name alone
+- unknown/custom link semantics are never silently ignored
+- parent hierarchy never blocks implicitly
+- stale embedded cross-project blocker status cannot incorrectly unblock a task
+- no Jira workflow mutation, issue-property write, claim or completion mutation occurs in M3.3b
+
+A subsequent Jira lifecycle milestone is intentionally not numbered yet. Before freezing it,
+current Jira issue-property and transition concurrency semantics must be reviewed with the same
+human-intent and crash-safety standard used for Linear.
 
 ### Post-M3 directions — not yet milestone-frozen
 
