@@ -94,7 +94,7 @@ def _prompt_task_store(inspection) -> str:
     typer.echo("-" * 56)
     if "github" in inspection.detected_task_systems:
         typer.echo("  [1] Use existing GitHub Issues task system")
-        typer.echo("  [2] Use Linear (read-only in M3.2a)")
+        typer.echo("  [2] Use Linear")
         typer.echo("  [3] Introduce local Beads")
         typer.echo("  [4] Configure later")
         choice = typer.prompt("Choose", default="1")
@@ -105,7 +105,7 @@ def _prompt_task_store(inspection) -> str:
             "4": "unresolved",
         }.get(choice, "github")
     typer.echo("  [1] Use local Beads")
-    typer.echo("  [2] Use Linear (read-only in M3.2a)")
+    typer.echo("  [2] Use Linear")
     typer.echo("  [3] Configure later")
     choice = typer.prompt("Choose", default="1")
     return {"1": "beads", "2": "linear", "3": "unresolved"}.get(choice, "beads")
