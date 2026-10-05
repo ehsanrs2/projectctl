@@ -1,6 +1,6 @@
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, Field
+from pydantic import AfterValidator, Field, model_validator
 
 from projectctl.core.enums import ModelProfile, QuotaMode, ReasoningLevel
 from projectctl.core.paths import validate_repo_path
@@ -51,6 +51,27 @@ class TaskStoreConfig(ProjectCtlModel):
             "Zero disables local fresh hits and forces remote revalidation."
         ),
     )
+
+
+class CodeTransportConfig(ProjectCtlModel):
+    mode: Literal["local", "git_remote"] = "local"
+    remote_name: str | None = None
+    remote_identity: str | None = None
+
+    @model_validator(mode="after")
+    def validate_transport(self):
+        if self.mode == "local":
+            if self.remote_name is not None or self.remote_identity is not None:
+                raise ValueError(
+                    "Local code transport cannot configure a remote name or identity."
+                )
+            return self
+
+        if not self.remote_name or not self.remote_name.strip():
+            raise ValueError("git_remote code transport requires remote_name.")
+        if not self.remote_identity or not self.remote_identity.strip():
+            raise ValueError("git_remote code transport requires remote_identity.")
+        return self
 
 
 class ProjectPaths(ProjectCtlModel):
@@ -203,11 +224,25 @@ class ProjectConfigV3(ProjectCtlModel):
     model_profiles: dict[ModelProfile, ModelProfileConfig] = Field(default_factory=default_model_profiles)
 
 
-class ProjectConfig(ProjectCtlModel):
+class ProjectConfigV4(ProjectCtlModel):
     schema_kind: Literal["projectctl.project_config"] = "projectctl.project_config"
     schema_version: Literal[4] = 4
     project: ProjectIdentity
     task_store: TaskStoreConfig = Field(default_factory=TaskStoreConfig)
+    paths: ProjectPaths = Field(default_factory=ProjectPaths)
+    knowledge: KnowledgeConfig = Field(default_factory=KnowledgeConfig)
+    scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
+    quota: QuotaPolicy = Field(default_factory=QuotaPolicy)
+    features: FeatureFlags = Field(default_factory=FeatureFlags)
+    model_profiles: dict[ModelProfile, ModelProfileConfig] = Field(default_factory=default_model_profiles)
+
+
+class ProjectConfig(ProjectCtlModel):
+    schema_kind: Literal["projectctl.project_config"] = "projectctl.project_config"
+    schema_version: Literal[5] = 5
+    project: ProjectIdentity
+    task_store: TaskStoreConfig = Field(default_factory=TaskStoreConfig)
+    code_transport: CodeTransportConfig = Field(default_factory=CodeTransportConfig)
     paths: ProjectPaths = Field(default_factory=ProjectPaths)
     knowledge: KnowledgeConfig = Field(default_factory=KnowledgeConfig)
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
