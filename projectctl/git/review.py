@@ -186,12 +186,6 @@ class ReviewGitTransport:
             raise IntegrationError(
                 "Merged review head no longer equals the verified candidate."
             )
-        if not receipt.merge_commit:
-            raise IntegrationError(
-                "Merged review did not expose a merge commit identity; "
-                "exact-base ancestry cannot be proven."
-            )
-
         self._assert_remote_identity()
         target_ref = self._branch_ref(request.target_ref)
         before = self.observe(request.target_ref)
@@ -207,6 +201,15 @@ class ReviewGitTransport:
             )
 
         merge_commit = receipt.merge_commit
+        if not merge_commit:
+            if fetched == request.candidate_commit:
+                merge_commit = request.candidate_commit
+            else:
+                raise IntegrationError(
+                    "Merged review did not expose a merge commit identity and "
+                    "the remote target is not the exact candidate."
+                )
+
         merge_exists = self._git(
             "cat-file", "-e", f"{merge_commit}^{{commit}}", check=False
         )
