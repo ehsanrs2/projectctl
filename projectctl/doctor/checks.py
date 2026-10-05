@@ -5,9 +5,11 @@ from projectctl.core.enums import HealthStatus
 from projectctl.core.errors import ConfigurationError, DatabaseVersionError, ProviderUnavailableError, QuotaError, RepositoryContractError, TaskStoreError, UnsafePathError
 from projectctl.core.paths import resolve_inside_repo
 from projectctl.git.ref_lease import RemoteRefLease
+from projectctl.git.remote import normalize_git_remote_identity
 from projectctl.integrations.github import GitHubIssuesClient
 from projectctl.integrations.github.repository import parse_github_repository
 from projectctl.integrations.linear.client import LinearIssuesClient
+from projectctl.integrations.execution_ownership import resolve_execution_ownership
 from projectctl.project.bootstrap import projectctl_home
 from projectctl.project.loader import load_project_config
 from projectctl.project.state import PROJECT_STATE_PATH, load_project_state
@@ -154,34 +156,6 @@ def check_task_store(root: Path) -> HealthCheckResult:
                 remediation=["Verify `gh auth status`, repository access, and task_store.repository."],
             )
         full_name = str(info.get("full_name") or client.repository)
-        try:
-            lease = RemoteRefLease(root)
-            remote_repository = parse_github_repository(lease.remote_url())
-            if remote_repository != client.repository:
-                return HealthCheckResult(
-                    check_id="task_store",
-                    status=HealthStatus.ERROR,
-                    summary=(
-                        "GitHub task authority and origin remote disagree: "
-                        f"task_store={client.repository}, origin={remote_repository or 'unknown'}."
-                    ),
-                    remediation=[
-                        "Point origin at the configured GitHub repository or update task_store.repository."
-                    ],
-                )
-            lease.probe_readable()
-        except TaskStoreError as exc:
-            return HealthCheckResult(
-                check_id="task_store",
-                status=HealthStatus.WARN,
-                summary=(
-                    f"GitHub Issues is readable for {full_name}, but the Git claim "
-                    f"transport is not ready: {exc}"
-                ),
-                remediation=[
-                    "Verify Git origin authentication/read access before using remote task claims."
-                ],
-            )
 
         return HealthCheckResult(
             check_id="task_store",
@@ -192,8 +166,9 @@ def check_task_store(root: Path) -> HealthCheckResult:
             ),
             details=[
                 "Scheduling/status reads are enabled.",
-                "Claim/release uses an exact remote Git ref lease.",
-                "M3.0c gates completion on exact-base remote publication.",
+                "Task API readability is independent from code transport/ownership.",
+                "Execution ownership and Git transport are checked separately.",
+                "M3.0c completion still requires remote publication for GitHub tasks.",
                 "Completion/needs-decision mutations are additive ProjectCTL labels and do not overwrite native issue close reasons.",
                 "Git write permission and repository rules are proven only by actual claim/publication attempts.",
             ],
@@ -260,6 +235,79 @@ def check_task_store(root: Path) -> HealthCheckResult:
             summary=f"Beads executable and repository state found: {executable}",
         )
     return HealthCheckResult(check_id="task_store", status=HealthStatus.ERROR, summary=f"Task store provider `{provider}` is configured but its adapter is not implemented yet.")
+
+
+
+def check_execution_ownership(root: Path) -> HealthCheckResult:
+    try:
+        ownership = resolve_execution_ownership(root)
+        policy = ownership.policy
+    except (ConfigurationError, ProviderUnavailableError, TaskStoreError) as exc:
+        return HealthCheckResult(
+            check_id="execution_ownership",
+            status=HealthStatus.ERROR,
+            summary=f"Execution ownership configuration is invalid: {exc}",
+        )
+
+    if policy.strategy == "local_lock":
+        return HealthCheckResult(
+            check_id="execution_ownership",
+            status=HealthStatus.WARN,
+            summary="Execution ownership is project-local only.",
+            details=[
+                f"task_provider={policy.task_provider}",
+                "Concurrent ProjectCTL processes sharing this project filesystem are serialized.",
+                "No cross-machine distributed ownership is claimed.",
+            ],
+        )
+
+    if policy.strategy == "task_native":
+        return HealthCheckResult(
+            check_id="execution_ownership",
+            status=HealthStatus.PASS,
+            summary=f"Execution ownership is task-native for {policy.task_provider}.",
+        )
+
+    try:
+        assert policy.remote_name is not None
+        assert policy.remote_identity is not None
+        lease = RemoteRefLease(root, remote_name=policy.remote_name)
+        observed_identity = normalize_git_remote_identity(lease.remote_url())
+        if observed_identity != policy.remote_identity:
+            return HealthCheckResult(
+                check_id="execution_ownership",
+                status=HealthStatus.ERROR,
+                summary="Configured Git remote identity does not match the actual remote.",
+                details=[
+                    f"configured={policy.remote_identity}",
+                    f"observed={observed_identity or 'unknown'}",
+                ],
+            )
+        lease.probe_readable()
+    except TaskStoreError as exc:
+        return HealthCheckResult(
+            check_id="execution_ownership",
+            status=HealthStatus.WARN,
+            summary=f"Distributed Git ownership transport is not readable: {exc}",
+            remediation=[
+                "Verify the configured Git remote and authentication. "
+                "Write permission is proven only by a real claim attempt."
+            ],
+        )
+
+    return HealthCheckResult(
+        check_id="execution_ownership",
+        status=HealthStatus.WARN,
+        summary=(
+            f"Distributed ownership remote is readable: "
+            f"{policy.remote_name} -> {policy.remote_identity}."
+        ),
+        details=[
+            "Claim acquisition uses exact remote Git ref leases.",
+            "Git hosting vendor is not part of the ownership contract.",
+            "Remote write/rules policy is proven only during a real claim.",
+        ],
+    )
 
 
 def check_optional_tools(root: Path) -> list[HealthCheckResult]:
