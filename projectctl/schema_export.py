@@ -4,9 +4,9 @@ from pathlib import Path
 from projectctl.schemas.artifact import ArtifactMetadata
 from projectctl.schemas.auto import AutoRunPolicy, AutoRunReport
 from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDecision
-from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3, ProjectConfigV4
+from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3, ProjectConfigV4, ProjectConfigV5
 from projectctl.schemas.ownership import ExecutionOwnershipPolicy
-from projectctl.schemas.delivery import PublicationManifest, PublicationRequest, TaskDeliveryPolicy
+from projectctl.schemas.delivery import CodeDeliveryPolicy, PublicationManifest, PublicationRequest, TaskDeliveryPolicy
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
 from projectctl.schemas.github_cache import GitHubCacheEntry, GitHubCacheRequest
 from projectctl.schemas.execution import (ExecutionPlan, ExecutionPlanV1, WorkerCheckpoint, WorkerCheckpointV1, WorkerRequest, WorkerRequestV1, WorkerResult)
@@ -39,7 +39,8 @@ PUBLIC_SCHEMAS = {
     "project-config.v2.schema.json": ProjectConfigV2,
     "project-config.v3.schema.json": ProjectConfigV3,
     "project-config.v4.schema.json": ProjectConfigV4,
-    "project-config.v5.schema.json": ProjectConfig,
+    "project-config.v5.schema.json": ProjectConfigV5,
+    "project-config.v6.schema.json": ProjectConfig,
     "worker-capabilities.v1.schema.json": WorkerCapabilities,
     "worker-strategy-decision.v1.schema.json": WorkerStrategyDecision,
     "quota-snapshot.v1.schema.json": QuotaSnapshotV1,
@@ -50,6 +51,7 @@ PUBLIC_SCHEMAS = {
     "task-authority-capabilities.v1.schema.json": TaskAuthorityCapabilities,
     "execution-ownership-policy.v1.schema.json": ExecutionOwnershipPolicy,
     "task-delivery-policy.v1.schema.json": TaskDeliveryPolicy,
+    "code-delivery-policy.v1.schema.json": CodeDeliveryPolicy,
     "publication-request.v1.schema.json": PublicationRequest,
     "publication-manifest.v1.schema.json": PublicationManifest,
     "task-claim-request.v1.schema.json": TaskClaimRequest,
