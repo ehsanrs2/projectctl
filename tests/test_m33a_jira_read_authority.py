@@ -221,7 +221,7 @@ def test_jira_capabilities_are_read_only():
     assert caps.complete == CapabilityState.UNSUPPORTED
 
 
-def test_project_config_v6_upgrades_to_v7_without_rewrite(tmp_path: Path):
+def test_project_config_v6_upgrades_to_v8_without_rewrite(tmp_path: Path):
     ctl = tmp_path / ".projectctl"
     ctl.mkdir()
     path = ctl / "config.yaml"
@@ -236,7 +236,7 @@ def test_project_config_v6_upgrades_to_v7_without_rewrite(tmp_path: Path):
 
     config = load_project_config(tmp_path)
 
-    assert config.schema_version == 7
+    assert config.schema_version == 8
     assert config.task_store.site is None
     assert config.task_store.project is None
     assert yaml.safe_load(path.read_text(encoding="utf-8"))["schema_version"] == 6
