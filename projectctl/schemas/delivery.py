@@ -54,3 +54,21 @@ class PublicationManifest(ProjectCtlModel):
     published: bool
     observed_at: AwareDatetime
     reason: str | None = None
+
+
+class CodeDeliveryPolicy(ProjectCtlModel):
+    schema_kind: Literal["projectctl.code_delivery_policy"] = "projectctl.code_delivery_policy"
+    schema_version: Literal[1] = 1
+
+    mode: Literal["local", "direct_git", "review_required"]
+    supported: bool
+    publication_required: bool
+    completion_evidence: Literal[
+        "evidence_manifest",
+        "publication_manifest",
+        "review_receipt",
+    ]
+    transport_mode: Literal["local", "git_remote"]
+    remote_name: str | None = None
+    remote_identity: str | None = None
+    notes: list[str] = Field(default_factory=list)
