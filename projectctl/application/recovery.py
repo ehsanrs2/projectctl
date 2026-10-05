@@ -27,7 +27,7 @@ from projectctl.core.enums import RunStatus, RunTerminalReason, WorkerResultStat
 from projectctl.core.errors import RecoveryError, RunLeaseError
 from projectctl.core.time import utc_now
 from projectctl.git import WorktreeManager, current_branch, resolve_commit
-from projectctl.integrations.task_authority import resolve_task_authority
+from projectctl.integrations.execution_ownership import resolve_execution_ownership
 from projectctl.schemas.evidence import EvidenceManifest
 from projectctl.schemas.execution import (
     EvidenceReference,
@@ -139,7 +139,7 @@ def _recover_preparing(
         assert durable is not None
         _, claim = durable
     else:
-        claimer = resolve_task_authority(root).require_claimer()
+        claimer = resolve_execution_ownership(root).claimer
         claim = claimer.reconcile(request)
         if claim is None:
             final = store.transition(
@@ -182,7 +182,7 @@ def _recover_preparing(
             details=details,
         )
 
-    claimer = resolve_task_authority(root).require_claimer()
+    claimer = resolve_execution_ownership(root).claimer
     if not claimer.validate(claim):
         final = store.transition(
             record.run_id,
@@ -294,7 +294,7 @@ def recover_run(project_root: Path, run_id: str) -> RecoveryAction:
             )
             if durable is not None:
                 _, claim = durable
-                claimer = resolve_task_authority(root).require_claimer()
+                claimer = resolve_execution_ownership(root).claimer
                 if not claimer.validate(claim):
                     final = store.transition(
                         run_id,
