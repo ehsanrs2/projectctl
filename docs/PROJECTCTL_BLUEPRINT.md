@@ -450,43 +450,54 @@ scheduler decision
   ↓
 ExecutionPlan
   ↓
-durable task claim
-  ↓
-isolated worktree
-  ↓
-ContextManifest + WorkerRequest
-  ↓
-Codex turn
-  ├─ quota unsafe → interrupt → durable checkpoint → later resume same thread
-  └─ implemented
-         ↓
-      VERIFYING
-         ↓
- independent verification
-         ↓
- verified candidate commit
-         ↓
- READY_TO_INTEGRATE
-         ↓
- ff-only local integration
-         ↓
- delivery mode?
-   ├─ local → canonical task completion from EvidenceManifest
-   ├─ direct_git → durable PublicationRequest
-               ↓
+execution-readiness gate
+  ├─ unsupported task lifecycle / ownership / delivery → STOP before claim
+  └─ ready
+       ↓
+    durable task claim
+       ↓
+    isolated worktree
+       ↓
+    ContextManifest + WorkerRequest
+       ↓
+    Codex turn
+      ├─ quota unsafe → interrupt → durable checkpoint → later resume same thread
+      └─ implemented
+             ↓
+          VERIFYING
+             ↓
+       independent verification
+             ↓
+       verified candidate commit
+             ↓
+       READY_TO_INTEGRATE
+             ↓
+       ff-only local integration
+             ↓
+       delivery mode
+         ├─ local
+         │    ↓
+         │  canonical task completion from EvidenceManifest
+         │
+         └─ direct_git
+              ↓
+            durable PublicationRequest
+              ↓
             exact-base remote publication
-               ↓
+              ↓
             remote candidate observation
-               ↓
+              ↓
             durable PublicationManifest
-               ↓
+              ↓
             canonical task completion
-               ↓
-            exact independent claim release
-   └─ review_required → STOP before claim (adapter unsupported)
-         ↓
- PASSED
+             ↓
+       independent claim release when applicable
+             ↓
+           PASSED
 ```
+
+`review_required` currently fails at the execution-readiness gate because no review-delivery
+adapter exists; it never reaches task claim or local integration.
 
 Beads, GitHub Issues, and Linear may use local or direct-Git delivery where their lifecycle and
 ownership semantics are supported. GitHub completion remains direct-publication-gated today.
