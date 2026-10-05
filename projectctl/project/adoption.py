@@ -23,6 +23,7 @@ from projectctl.project.bootstrap import _global_init, _slug, projectctl_home
 from projectctl.project.inspection import inspect_repository
 from projectctl.project.state import PROJECT_STATE_PATH, initial_project_state, write_project_state
 from projectctl.schemas.config import (
+    CodeDeliveryConfig,
     CodeTransportConfig,
     KnowledgeConfig,
     KnowledgeRoleBinding,
@@ -88,6 +89,7 @@ def plan_adoption(
     code_transport_mode: str | None = None,
     code_remote_name: str | None = None,
     code_remote_identity: str | None = None,
+    code_delivery_mode: str | None = None,
 ) -> AdoptionPlan:
     if inspection.classification != "existing_unmanaged":
         raise RepositoryContractError(
@@ -155,6 +157,26 @@ def plan_adoption(
         else:
             remote_identity = None
 
+    delivery_mode = code_delivery_mode
+    if delivery_mode is None:
+        if (
+            provider == "github"
+            and repository
+            and transport_mode == "git_remote"
+            and remote_identity == f"github.com/{repository}"
+        ):
+            delivery_mode = "direct_git"
+        else:
+            delivery_mode = "local"
+    if delivery_mode not in {"local", "direct_git", "review_required"}:
+        raise RepositoryContractError(
+            "code_delivery_mode must be 'local', 'direct_git', or 'review_required'."
+        )
+    if delivery_mode in {"direct_git", "review_required"} and transport_mode != "git_remote":
+        raise RepositoryContractError(
+            f"{delivery_mode} code delivery requires code_transport_mode='git_remote'."
+        )
+
     unresolved = [d for d in inspection.unresolved_decisions if not d.startswith("task_store")]
     if provider is None:
         unresolved.append("task_store")
@@ -202,6 +224,7 @@ def plan_adoption(
         code_transport_mode=transport_mode,
         code_remote_name=remote_name,
         code_remote_identity=remote_identity,
+        code_delivery_mode=delivery_mode,
         unresolved_decisions=sorted(set(unresolved)),
         conflicts=list(inspection.conflicts),
     )
@@ -277,6 +300,9 @@ def apply_adoption(plan: AdoptionPlan, *, allow_dirty: bool = False) -> Adoption
                 remote_name=plan.code_remote_name,
                 remote_identity=plan.code_remote_identity,
             )
+            code_delivery = CodeDeliveryConfig(
+                mode=plan.code_delivery_mode,
+            )
 
             config = ProjectConfig(
                 project=ProjectIdentity(id=_slug(root.name), name=root.name),
@@ -286,6 +312,7 @@ def apply_adoption(plan: AdoptionPlan, *, allow_dirty: bool = False) -> Adoption
                     team=plan.task_store_team,
                 ),
                 code_transport=code_transport,
+                code_delivery=code_delivery,
                 knowledge=_knowledge_from_plan(plan),
             )
             (staged_ctl / "config.yaml").write_text(
@@ -316,6 +343,7 @@ def apply_adoption(plan: AdoptionPlan, *, allow_dirty: bool = False) -> Adoption
                 code_transport_mode=plan.code_transport_mode,
                 code_remote_name=plan.code_remote_name,
                 code_remote_identity=plan.code_remote_identity,
+                code_delivery_mode=plan.code_delivery_mode,
                 unresolved_decisions=plan.unresolved_decisions,
             )
             (staged_ctl / "adoption.yaml").write_text(
