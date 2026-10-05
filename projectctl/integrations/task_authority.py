@@ -16,6 +16,7 @@ from projectctl.integrations.github.completion import GitHubTaskCompletionWriter
 from projectctl.integrations.github.task_store import GitHubIssuesTaskStore
 from projectctl.integrations.linear.client import LinearIssuesClient
 from projectctl.integrations.jira.client import JiraCloudClient
+from projectctl.integrations.jira.completion import JiraTaskCompletionWriter
 from projectctl.integrations.jira.task_store import JiraIssuesTaskStore
 from projectctl.integrations.linear.completion import LinearTaskCompletionWriter
 from projectctl.integrations.linear.task_store import LinearIssuesTaskStore
@@ -145,12 +146,13 @@ def task_authority_capabilities_for_provider(
             read=CapabilityState.SUPPORTED,
             claim=CapabilityState.UNSUPPORTED,
             release=CapabilityState.UNSUPPORTED,
-            block_for_decision=CapabilityState.UNSUPPORTED,
-            complete=CapabilityState.UNSUPPORTED,
+            block_for_decision=CapabilityState.SUPPORTED,
+            complete=CapabilityState.SUPPORTED,
             notes=[
                 "M3.3a provides Jira Cloud project-scoped read authority.",
                 "M3.3b adds explicit status-id readiness and pinned issue-link dependency semantics.",
-                "Lifecycle writes and provider-native ownership remain unsupported, so autonomous execution is still fail-closed.",
+                "M3.3c adds CAS-backed ProjectCTL lifecycle issue properties without changing native Jira workflow state.",
+                "Provider-native claim/release remain unsupported; execution ownership is resolved independently.",
             ],
         )
     raise ConfigurationError(
@@ -327,6 +329,13 @@ def resolve_task_authority(
             capabilities=capabilities,
             delivery_policy=delivery_policy,
             reader=JiraIssuesTaskStore(
+                root,
+                site=site,
+                project_key=project_key,
+                policy=config.task_store.jira_policy,
+                client=client,
+            ),
+            completion_writer=JiraTaskCompletionWriter(
                 root,
                 site=site,
                 project_key=project_key,
