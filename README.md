@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M3.2a — Linear Read Authority**, adding authenticated Linear team snapshots through the provider-neutral Task Authority boundary while deliberately withholding execution eligibility and mutations until Linear dependency and ownership semantics are proven.
+This repository currently implements **M3.2b — Linear Relationship & Eligibility Semantics**, mapping Linear blocker and parent/sub-issue relationships into the shared task graph so scheduler eligibility is safe while all Linear mutations remain unsupported.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -1247,8 +1247,57 @@ projectctl adopt . --task-store linear --task-store-team <TEAM_UUID>
 
 See ADR-021 and `docs/PROJECTCTL_BLUEPRINT.md`.
 
+### M3.2b — Linear Relationship & Eligibility Semantics
+
+M3.2b completes the read-side dependency semantics required before Linear tasks can participate
+safely in scheduler eligibility.
+
+ProjectCTL reads each issue's incoming Linear `inverseRelations` connection independently with
+cursor pagination. For a relation of type `blocks`, the source issue is the blocker and the
+requested issue is the blocked target.
+
+Dependency normalization follows these rules:
+
+```text
+incoming blocks from unresolved local issue -> local dependency
+incoming blocks from unresolved other-team issue -> external dependency
+incoming blocks from completed/canceled issue -> satisfied, no dependency
+related / duplicate / similar -> not a dependency
+unknown/malformed relation -> needs_decision
+```
+
+Local `blocks` edges are derived by reversing the canonical dependency graph rather than reading
+a second independent representation.
+
+Hierarchy remains separate from dependency semantics. Linear's parent pointer is normalized into
+`TaskHierarchy.parent`; local `sub_issues` are derived from those parent pointers. A parent
+relationship never blocks a task implicitly.
+
+Scheduler eligibility is now:
+
+```text
+completed -> DONE
+canceled  -> CANCELLED
+started   -> RUNNING (observational)
+backlog   -> PLANNED
+unstarted + no unresolved blocker -> READY
+unstarted + unresolved blocker    -> BLOCKED
+unknown/ambiguous relationship    -> NEEDS_DECISION
+```
+
+Cross-team open blockers use stable `linear:<UUID>` external dependency identities. An unresolved
+blocker that claims to belong to the configured team but is absent from the team snapshot fails
+closed to `NEEDS_DECISION`.
+
+Dependency and hierarchy cycles are also detected and fail closed.
+
+Linear is still **not execution-ready**: claim, release, decision-block writes and completion
+remain unsupported.
+
+See ADR-022 and `docs/PROJECTCTL_BLUEPRINT.md`.
+
 Next:
 
-- **M3.2b — Linear Relationship & Eligibility Semantics** — normalize blocking/hierarchy
-  relationships and prove when a Linear task may become scheduler-eligible without enabling
-  mutations yet
+- **M3.2c — Linear Claim Ownership & Delivery Feasibility** — determine whether ProjectCTL can
+  reuse/generalize its Git remote lease for Linear task ownership and define delivery/completion
+  semantics before implementing any Linear mutation
