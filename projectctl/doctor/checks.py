@@ -241,30 +241,95 @@ def check_task_store(root: Path) -> HealthCheckResult:
                 project_key=config.task_store.project,
             )
             project = client.project_info()
-            # Prove the enhanced-search contract as well as project readability.
             client.list_all(page_size=1)
+
+            ready_policy = {
+                item.id: item for item in config.task_store.jira_policy.ready_statuses
+            }
+            if ready_policy:
+                status_catalog = {
+                    str(item.get("id") or "").strip(): item
+                    for item in client.statuses()
+                }
+                for status_id, expected in ready_policy.items():
+                    observed = status_catalog.get(status_id)
+                    if observed is None:
+                        raise TaskStoreError(
+                            f"Configured Jira READY status {status_id!r} is not visible."
+                        )
+                    observed_name = str(observed.get("name") or "").strip()
+                    category = observed.get("statusCategory")
+                    category_key = (
+                        str(category.get("key") or "").strip().casefold()
+                        if isinstance(category, dict)
+                        else str(category or "").strip().casefold()
+                    )
+                    if observed_name != expected.name:
+                        raise TaskStoreError(
+                            f"Configured Jira READY status {status_id!r} changed "
+                            f"name from {expected.name!r} to {observed_name!r}."
+                        )
+                    if category_key not in {"new", "to-do", "todo"}:
+                        raise TaskStoreError(
+                            f"Configured Jira READY status {status_id!r} is no "
+                            f"longer in a to-do/new category."
+                        )
+
+            link_policy = {
+                item.type_id: item for item in config.task_store.jira_policy.link_rules
+            }
+            if link_policy:
+                link_catalog = {
+                    str(item.get("id") or "").strip(): item
+                    for item in client.issue_link_types()
+                }
+                for type_id, expected in link_policy.items():
+                    observed = link_catalog.get(type_id)
+                    if observed is None:
+                        raise TaskStoreError(
+                            f"Configured Jira link type {type_id!r} is not visible."
+                        )
+                    actual = (
+                        str(observed.get("name") or "").strip(),
+                        str(observed.get("inward") or "").strip(),
+                        str(observed.get("outward") or "").strip(),
+                    )
+                    pinned = (
+                        expected.name,
+                        expected.inward_label,
+                        expected.outward_label,
+                    )
+                    if actual != pinned:
+                        raise TaskStoreError(
+                            f"Configured Jira link type {type_id!r} metadata changed "
+                            "from the pinned ProjectCTL policy."
+                        )
         except (ProviderUnavailableError, TaskStoreError) as exc:
             return HealthCheckResult(
                 check_id="task_store",
                 status=HealthStatus.ERROR,
-                summary=f"Jira task authority is not readable: {exc}",
+                summary=f"Jira task authority/eligibility policy is not readable: {exc}",
                 remediation=[
                     "Set JIRA_EMAIL and JIRA_API_TOKEN at runtime, verify Browse "
-                    "Projects permission, and confirm task_store.site/project."
+                    "Projects permission, and review task_store.jira_policy."
                 ],
             )
+
+        ready_count = len(config.task_store.jira_policy.ready_statuses)
+        link_count = len(config.task_store.jira_policy.link_rules)
         return HealthCheckResult(
             check_id="task_store",
             status=HealthStatus.WARN,
             summary=(
-                f"Jira Cloud task authority is readable for project "
-                f"{str(project.get('key') or config.task_store.project)}."
+                f"Jira Cloud authority is readable for project "
+                f"{str(project.get('key') or config.task_store.project)} with "
+                f"{ready_count} READY status rule(s) and {link_count} link rule(s)."
             ),
             details=[
-                "M3.3a is read-only.",
-                "Enhanced JQL pagination is enabled.",
-                "Jira to-do/new workflow categories remain PLANNED rather than READY.",
-                "Dependencies and workflow eligibility are deferred to M3.3b.",
+                "M3.3b readiness is based on explicitly pinned Jira status ids.",
+                "Issue-link semantics are pinned by type id/name/inward/outward labels.",
+                "Unknown/custom issue-link semantics fail closed to NEEDS_DECISION.",
+                "Parent/sub-task hierarchy remains separate from dependencies.",
                 "Lifecycle writes and provider-native claim/release remain unsupported.",
                 "Jira credentials are runtime-only and are never persisted by ProjectCTL.",
             ],
