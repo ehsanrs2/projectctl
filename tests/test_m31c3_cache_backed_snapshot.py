@@ -10,7 +10,7 @@ from projectctl.integrations.github.client import GitHubIssuesClient
 from projectctl.integrations.github.task_store import GitHubIssuesTaskStore
 from projectctl.project.loader import load_project_config
 from projectctl.schema_export import PUBLIC_SCHEMAS
-from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3, ProjectConfigV4, ProjectConfigV5
+from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3, ProjectConfigV4, ProjectConfigV5, ProjectConfigV6
 
 
 def issue(number: int):
@@ -227,7 +227,7 @@ def test_successful_issue_mutation_invalidates_repository_cache(tmp_path: Path):
     ]
 
 
-def test_project_config_v2_upgrades_to_v6_with_explicit_cache_policy(tmp_path: Path):
+def test_project_config_v2_upgrades_to_v7_with_explicit_cache_policy(tmp_path: Path):
     ctl = tmp_path / ".projectctl"
     ctl.mkdir()
     (ctl / "config.yaml").write_text(
@@ -248,7 +248,7 @@ def test_project_config_v2_upgrades_to_v6_with_explicit_cache_policy(tmp_path: P
 
     config = load_project_config(tmp_path)
 
-    assert config.schema_version == 6
+    assert config.schema_version == 7
     assert config.task_store.provider == "github"
     assert config.task_store.repository == "acme/widget"
     assert config.task_store.team is None
@@ -276,13 +276,15 @@ def test_project_config_contract_is_additively_versioned():
     assert PUBLIC_SCHEMAS["project-config.v3.schema.json"] is ProjectConfigV3
     assert PUBLIC_SCHEMAS["project-config.v4.schema.json"] is ProjectConfigV4
     assert PUBLIC_SCHEMAS["project-config.v5.schema.json"] is ProjectConfigV5
-    assert PUBLIC_SCHEMAS["project-config.v6.schema.json"] is ProjectConfig
+    assert PUBLIC_SCHEMAS["project-config.v6.schema.json"] is ProjectConfigV6
+    assert PUBLIC_SCHEMAS["project-config.v7.schema.json"] is ProjectConfig
     assert ProjectConfigV1.model_fields["schema_version"].default == 1
     assert ProjectConfigV2.model_fields["schema_version"].default == 2
     assert ProjectConfigV3.model_fields["schema_version"].default == 3
     assert ProjectConfigV4.model_fields["schema_version"].default == 4
     assert ProjectConfigV5.model_fields["schema_version"].default == 5
-    assert ProjectConfig.model_fields["schema_version"].default == 6
+    assert ProjectConfigV6.model_fields["schema_version"].default == 6
+    assert ProjectConfig.model_fields["schema_version"].default == 7
 
 
 def test_capture_task_snapshot_forwards_explicit_freshness_override(
