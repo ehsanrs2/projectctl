@@ -126,6 +126,7 @@ class ReviewReceipt(ProjectCtlModel):
     review_url: str | None = None
     source_ref: str = Field(min_length=1)
     target_ref: str = Field(min_length=1)
+    candidate_commit: str = Field(min_length=7)
     head_commit: str | None = None
     target_commit: str | None = None
     merge_commit: str | None = None
@@ -142,7 +143,11 @@ class ReviewReceipt(ProjectCtlModel):
                 raise ValueError("Completed review delivery must be merged.")
             if not self.review_id or not self.review_url:
                 raise ValueError("Completed review delivery requires review identity.")
-            if not self.head_commit or not self.target_commit:
+            if self.head_commit != self.candidate_commit:
+                raise ValueError(
+                    "Completed review delivery head must equal the verified candidate."
+                )
+            if not self.target_commit:
                 raise ValueError(
                     "Completed review delivery requires head and target commit proof."
                 )
