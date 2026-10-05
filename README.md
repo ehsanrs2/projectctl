@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M3.2c3 — Review-Aware Delivery Adapters**, adding durable GitHub pull-request and GitLab merge-request delivery for protected branches without treating review creation as completion or bypassing human merge authority.
+This repository currently implements **M3.3a — Jira Read Authority**, adding conservative Jira Cloud project-scoped task reads while deliberately keeping Jira workflow eligibility and lifecycle mutation fail-closed.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -1555,6 +1555,77 @@ Public contracts added/versioned in this milestone:
 
 See ADR-025 and `docs/PROJECTCTL_BLUEPRINT.md`.
 
-Next provider work should reuse this same proof sequence. Jira is the leading candidate, but the
-next milestone number is intentionally left unfrozen until its current API/concurrency semantics
-are reviewed.
+### M3.3a — Jira Read Authority
+
+Jira Cloud can now be used as the canonical **read** task authority without introducing a parallel
+tracker.
+
+Persist only credential-free identity:
+
+```yaml
+task_store:
+  provider: jira
+  site: acme.atlassian.net
+  project: ENG
+```
+
+Runtime credentials:
+
+```bash
+export JIRA_EMAIL="bot@example.com"
+export JIRA_API_TOKEN="..."
+```
+
+ProjectCTL uses Jira REST v3 enhanced JQL search with explicit `nextPageToken` pagination and
+validates that every returned issue belongs to the configured project.
+
+Brownfield adoption can configure Jira directly:
+
+```bash
+projectctl adopt . \
+  --task-store jira \
+  --task-store-site acme.atlassian.net \
+  --task-store-project ENG \
+  --code-transport local \
+  --code-delivery local
+```
+
+M3.3a deliberately normalizes Jira workflow conservatively:
+
+```text
+done/completed category + normal resolution -> DONE
+done/completed + cancellation-like resolution -> CANCELLED
+indeterminate/in-flight                  -> RUNNING (observational)
+new/to-do                                -> PLANNED
+unknown                                  -> NEEDS_DECISION
+```
+
+A Jira To Do issue is **not** automatically `READY`. Jira workflow categories are provider
+groupings, not proof that ProjectCTL is allowed to start a task.
+
+Parent/sub-task relations are normalized as hierarchy only. Dependencies, blocker links and custom
+workflow readiness belong to M3.3b.
+
+Jira capability state in M3.3a:
+
+```text
+read                supported
+claim               unsupported
+release             unsupported
+block_for_decision  unsupported
+complete            unsupported
+```
+
+Therefore Jira remains non-executable by design even though snapshots, status views and reporting
+can read it.
+
+ProjectConfig advances to **v7** and adoption plan/manifest contracts to **v6**. Older ProjectConfig
+versions remain readable without rewriting the project file.
+
+See ADR-026 and `docs/PROJECTCTL_BLUEPRINT.md`.
+
+Next:
+
+- **M3.3b — Jira Relationship & Workflow Eligibility** — prove Jira blocker/dependency direction,
+  cross-project dependency identities, cycle behavior and explicit readiness mapping before any
+  lifecycle write is considered

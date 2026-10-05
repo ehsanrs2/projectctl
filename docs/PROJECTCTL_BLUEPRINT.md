@@ -1123,7 +1123,7 @@ ownership is a separate axis.
 
 #### M3.2c3 — Review-Aware Delivery Adapters
 
-**Current milestone / implemented by this change.**
+**Completed.**
 
 Implemented:
 
@@ -1161,10 +1161,60 @@ Safety boundary:
 - the exact execution claim remains held while external review is open
 - unsupported/self-hosted review hosts fail closed before claim
 
-With review-aware delivery proven for GitHub.com and GitLab.com, the next provider expansion should
-reuse the same read/lifecycle/ownership/delivery proof sequence. Jira remains the leading candidate,
-but its milestone identifier is intentionally not frozen until its current API and concurrency
-semantics are reviewed.
+With review-aware delivery proven for GitHub.com and GitLab.com, provider expansion reuses the
+same read/lifecycle/ownership/delivery proof sequence.
+
+#### M3.3a — Jira Read Authority
+
+**Current milestone / implemented by this change.**
+
+Implemented:
+
+- Jira Cloud project-scoped Task Authority for canonical `*.atlassian.net` sites
+- ProjectConfig v7 with explicit `task_store.site` and `task_store.project`
+- ProjectConfig v1-v6 migration in memory without rewriting persisted config
+- runtime-only `JIRA_EMAIL` + `JIRA_API_TOKEN` authentication
+- Jira REST v3 enhanced JQL search with explicit token pagination
+- strict project-scope validation for every returned issue
+- malformed/missing/repeated pagination-token failure handling
+- task normalization for summary, type, priority, assignee, labels and timestamps
+- conservative status-category normalization
+- cancellation-like Jira resolutions -> CANCELLED
+- in-progress categories -> observational RUNNING
+- to-do/new categories -> PLANNED, never inferred READY
+- unknown workflow categories -> NEEDS_DECISION
+- parent/sub-task hierarchy normalization without dependency inference
+- date-only Jira due dates preserved without inventing timezone-aware due timestamps
+- Jira Task Authority capabilities expose read only; all lifecycle writes remain unsupported
+- Doctor validates Jira project readability and enhanced-search access
+- onboarding supports explicit Jira site/project identity
+
+Safety boundary:
+
+- Jira status categories are not treated as ProjectCTL execution policy
+- M3.3a never transitions Jira workflow state
+- M3.3a never mutates labels, assignee or issue properties
+- Jira credentials are never persisted
+- cross-project search leakage fails closed
+- autonomous execution remains blocked because completion/needs-decision semantics are unproven
+
+#### M3.3b — Jira Relationship & Workflow Eligibility
+
+**Next milestone after M3.3a.**
+
+Prove the scheduler-facing semantics Jira read authority still lacks:
+
+- issue-link blocker direction and supported link types
+- cross-project dependency identities
+- dependency resolution based on blocker terminal state
+- parent/sub-task hierarchy kept separate from dependencies
+- dependency/hierarchy cycle detection
+- explicit Jira workflow/status readiness mapping rather than category heuristics
+- read consistency for linked issues and project boundaries
+- fail-closed handling for unknown/custom relationship semantics
+
+Only after Jira relationship and eligibility semantics are proven should a later milestone evaluate
+additive Jira lifecycle markers/properties and completion behavior.
 
 ### Post-M3 directions — not yet milestone-frozen
 

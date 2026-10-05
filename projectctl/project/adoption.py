@@ -18,6 +18,7 @@ from projectctl.core.paths import resolve_inside_repo
 from projectctl.core.time import utc_now
 from projectctl.integrations.github.repository import normalize_github_repository
 from projectctl.integrations.linear.team import normalize_linear_team_id
+from projectctl.integrations.jira.client import normalize_jira_project, normalize_jira_site
 from projectctl.git.remote import normalize_configured_remote_identity
 from projectctl.project.bootstrap import _global_init, _slug, projectctl_home
 from projectctl.project.inspection import inspect_repository
@@ -86,6 +87,8 @@ def plan_adoption(
     task_store_provider: str | None = None,
     task_store_repository: str | None = None,
     task_store_team: str | None = None,
+    task_store_site: str | None = None,
+    task_store_project: str | None = None,
     code_transport_mode: str | None = None,
     code_remote_name: str | None = None,
     code_remote_identity: str | None = None,
@@ -111,6 +114,12 @@ def plan_adoption(
         raise RepositoryContractError(
             "task_store_team is only supported with the Linear task store."
         )
+    if provider != "jira" and (
+        task_store_site is not None or task_store_project is not None
+    ):
+        raise RepositoryContractError(
+            "task_store_site/task_store_project are only supported with the Jira task store."
+        )
 
     repository = None
     if provider == "github":
@@ -128,6 +137,20 @@ def plan_adoption(
             team = normalize_linear_team_id(task_store_team)
         except TaskStoreError as exc:
             raise RepositoryContractError(str(exc)) from exc
+
+    jira_site = None
+    jira_project = None
+    if provider == "jira":
+        if task_store_site is not None:
+            try:
+                jira_site = normalize_jira_site(task_store_site)
+            except TaskStoreError as exc:
+                raise RepositoryContractError(str(exc)) from exc
+        if task_store_project is not None:
+            try:
+                jira_project = normalize_jira_project(task_store_project)
+            except TaskStoreError as exc:
+                raise RepositoryContractError(str(exc)) from exc
 
     transport_mode = code_transport_mode
     if transport_mode is None:
@@ -184,6 +207,10 @@ def plan_adoption(
         unresolved.append("task_store_repository")
     if provider == "linear" and not team:
         unresolved.append("task_store_team")
+    if provider == "jira" and not jira_site:
+        unresolved.append("task_store_site")
+    if provider == "jira" and not jira_project:
+        unresolved.append("task_store_project")
     if transport_mode == "git_remote" and not remote_identity:
         unresolved.append("code_transport_remote_identity")
 
@@ -221,6 +248,8 @@ def plan_adoption(
         task_store_provider=provider,
         task_store_repository=repository,
         task_store_team=team,
+        task_store_site=jira_site,
+        task_store_project=jira_project,
         code_transport_mode=transport_mode,
         code_remote_name=remote_name,
         code_remote_identity=remote_identity,
@@ -310,6 +339,8 @@ def apply_adoption(plan: AdoptionPlan, *, allow_dirty: bool = False) -> Adoption
                     provider=provider,
                     repository=plan.task_store_repository,
                     team=plan.task_store_team,
+                    site=plan.task_store_site,
+                    project=plan.task_store_project,
                 ),
                 code_transport=code_transport,
                 code_delivery=code_delivery,
@@ -340,6 +371,8 @@ def apply_adoption(plan: AdoptionPlan, *, allow_dirty: bool = False) -> Adoption
                 task_store_provider=plan.task_store_provider,
                 task_store_repository=plan.task_store_repository,
                 task_store_team=plan.task_store_team,
+                task_store_site=plan.task_store_site,
+                task_store_project=plan.task_store_project,
                 code_transport_mode=plan.code_transport_mode,
                 code_remote_name=plan.code_remote_name,
                 code_remote_identity=plan.code_remote_identity,

@@ -4,7 +4,7 @@ from pathlib import Path
 from projectctl.schemas.artifact import ArtifactMetadata
 from projectctl.schemas.auto import AutoRunPolicy, AutoRunReport
 from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDecision
-from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3, ProjectConfigV4, ProjectConfigV5
+from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3, ProjectConfigV4, ProjectConfigV5, ProjectConfigV6
 from projectctl.schemas.ownership import ExecutionOwnershipPolicy
 from projectctl.schemas.delivery import (
     CodeDeliveryPolicy,
@@ -30,11 +30,13 @@ from projectctl.schemas.onboarding import (
     AdoptionManifestV2,
     AdoptionManifestV3,
     AdoptionManifestV4,
+    AdoptionManifestV5,
     AdoptionPlan,
     AdoptionPlanV1,
     AdoptionPlanV2,
     AdoptionPlanV3,
     AdoptionPlanV4,
+    AdoptionPlanV5,
     ProjectInspection,
     ProjectInspectionV1,
     ProjectInspectionV2,
@@ -55,7 +57,8 @@ PUBLIC_SCHEMAS = {
     "project-config.v3.schema.json": ProjectConfigV3,
     "project-config.v4.schema.json": ProjectConfigV4,
     "project-config.v5.schema.json": ProjectConfigV5,
-    "project-config.v6.schema.json": ProjectConfig,
+    "project-config.v6.schema.json": ProjectConfigV6,
+    "project-config.v7.schema.json": ProjectConfig,
     "worker-capabilities.v1.schema.json": WorkerCapabilities,
     "worker-strategy-decision.v1.schema.json": WorkerStrategyDecision,
     "quota-snapshot.v1.schema.json": QuotaSnapshotV1,
@@ -110,12 +113,14 @@ PUBLIC_SCHEMAS = {
     "adoption-plan.v2.schema.json": AdoptionPlanV2,
     "adoption-plan.v3.schema.json": AdoptionPlanV3,
     "adoption-plan.v4.schema.json": AdoptionPlanV4,
-    "adoption-plan.v5.schema.json": AdoptionPlan,
+    "adoption-plan.v5.schema.json": AdoptionPlanV5,
+    "adoption-plan.v6.schema.json": AdoptionPlan,
     "adoption-manifest.v1.schema.json": AdoptionManifestV1,
     "adoption-manifest.v2.schema.json": AdoptionManifestV2,
     "adoption-manifest.v3.schema.json": AdoptionManifestV3,
     "adoption-manifest.v4.schema.json": AdoptionManifestV4,
-    "adoption-manifest.v5.schema.json": AdoptionManifest,
+    "adoption-manifest.v5.schema.json": AdoptionManifestV5,
+    "adoption-manifest.v6.schema.json": AdoptionManifest,
 }
 
 

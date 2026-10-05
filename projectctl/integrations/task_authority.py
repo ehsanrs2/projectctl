@@ -15,6 +15,8 @@ from projectctl.integrations.github.client import GitHubIssuesClient
 from projectctl.integrations.github.completion import GitHubTaskCompletionWriter
 from projectctl.integrations.github.task_store import GitHubIssuesTaskStore
 from projectctl.integrations.linear.client import LinearIssuesClient
+from projectctl.integrations.jira.client import JiraCloudClient
+from projectctl.integrations.jira.task_store import JiraIssuesTaskStore
 from projectctl.integrations.linear.completion import LinearTaskCompletionWriter
 from projectctl.integrations.linear.task_store import LinearIssuesTaskStore
 from projectctl.ports.publication import TaskPublisher
@@ -137,6 +139,20 @@ def task_authority_capabilities_for_provider(
                 "Provider-native claim/release remain unsupported; execution ownership is resolved independently.",
             ],
         )
+    if provider == "jira":
+        return TaskAuthorityCapabilities(
+            provider="jira",
+            read=CapabilityState.SUPPORTED,
+            claim=CapabilityState.UNSUPPORTED,
+            release=CapabilityState.UNSUPPORTED,
+            block_for_decision=CapabilityState.UNSUPPORTED,
+            complete=CapabilityState.UNSUPPORTED,
+            notes=[
+                "M3.3a provides Jira Cloud project-scoped read authority only.",
+                "Workflow readiness, dependency semantics, lifecycle writes, and provider-native ownership remain unproven.",
+                "Autonomous execution therefore remains fail-closed for Jira tasks.",
+            ],
+        )
     raise ConfigurationError(
         f"Task authority provider {provider!r} is not implemented."
     )
@@ -162,6 +178,14 @@ def task_delivery_policy_for_provider(provider: str) -> TaskDeliveryPolicy:
     if provider == "linear":
         return TaskDeliveryPolicy(
             provider="linear",
+            publication_required=False,
+            remote_name=None,
+            release_claim_after_completion=False,
+            release_claim_after_decision_block=False,
+        )
+    if provider == "jira":
+        return TaskDeliveryPolicy(
+            provider="jira",
             publication_required=False,
             remote_name=None,
             release_claim_after_completion=False,
@@ -283,6 +307,29 @@ def resolve_task_authority(
             completion_writer=LinearTaskCompletionWriter(
                 root,
                 team_id=team_id,
+                client=client,
+            ),
+        )
+
+    if provider == "jira":
+        site = config.task_store.site
+        project_key = config.task_store.project
+        if not site or not project_key:
+            raise ConfigurationError(
+                "Jira task authority requires task_store.site and task_store.project."
+            )
+        client = JiraCloudClient(
+            root,
+            site=site,
+            project_key=project_key,
+        )
+        return TaskAuthority(
+            capabilities=capabilities,
+            delivery_policy=delivery_policy,
+            reader=JiraIssuesTaskStore(
+                root,
+                site=site,
+                project_key=project_key,
                 client=client,
             ),
         )
