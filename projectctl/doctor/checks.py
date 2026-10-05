@@ -9,6 +9,7 @@ from projectctl.git.remote import normalize_git_remote_identity
 from projectctl.integrations.github import GitHubIssuesClient
 from projectctl.integrations.github.repository import parse_github_repository
 from projectctl.integrations.linear.client import LinearIssuesClient
+from projectctl.integrations.jira.client import JiraCloudClient
 from projectctl.integrations.linear.lifecycle import COMPLETED_LABEL, NEEDS_DECISION_LABEL
 from projectctl.integrations.delivery import code_delivery_policy, resolve_code_delivery
 from projectctl.integrations.execution_ownership import resolve_execution_ownership
@@ -218,6 +219,54 @@ def check_task_store(root: Path) -> HealthCheckResult:
                 "Provider-native claim/release remain separate from ProjectCTL execution ownership.",
                 "Linear label write permission is proven only by an actual lifecycle mutation.",
                 "ProjectCTL does not persist Linear credentials.",
+            ],
+        )
+
+    if provider == "jira":
+        config = load_project_config(root)
+        if not config.task_store.site or not config.task_store.project:
+            return HealthCheckResult(
+                check_id="task_store",
+                status=HealthStatus.ERROR,
+                summary="Jira task authority is missing site/project identity.",
+                remediation=[
+                    "Set task_store.site to <tenant>.atlassian.net and "
+                    "task_store.project to the Jira project key."
+                ],
+            )
+        try:
+            client = JiraCloudClient(
+                root,
+                site=config.task_store.site,
+                project_key=config.task_store.project,
+            )
+            project = client.project_info()
+            # Prove the enhanced-search contract as well as project readability.
+            client.list_all(page_size=1)
+        except (ProviderUnavailableError, TaskStoreError) as exc:
+            return HealthCheckResult(
+                check_id="task_store",
+                status=HealthStatus.ERROR,
+                summary=f"Jira task authority is not readable: {exc}",
+                remediation=[
+                    "Set JIRA_EMAIL and JIRA_API_TOKEN at runtime, verify Browse "
+                    "Projects permission, and confirm task_store.site/project."
+                ],
+            )
+        return HealthCheckResult(
+            check_id="task_store",
+            status=HealthStatus.WARN,
+            summary=(
+                f"Jira Cloud task authority is readable for project "
+                f"{str(project.get('key') or config.task_store.project)}."
+            ),
+            details=[
+                "M3.3a is read-only.",
+                "Enhanced JQL pagination is enabled.",
+                "Jira to-do/new workflow categories remain PLANNED rather than READY.",
+                "Dependencies and workflow eligibility are deferred to M3.3b.",
+                "Lifecycle writes and provider-native claim/release remain unsupported.",
+                "Jira credentials are runtime-only and are never persisted by ProjectCTL.",
             ],
         )
 
