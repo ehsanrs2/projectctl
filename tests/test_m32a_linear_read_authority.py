@@ -188,27 +188,28 @@ class StoreClient:
             ),
         ]
 
+    def list_inverse_relations(self, _issue_id):
+        return []
+
     def version(self):
         return "linear-graphql-test"
 
 
-def test_linear_task_store_is_readable_but_withholds_ready_eligibility(tmp_path: Path):
+def test_linear_task_store_preserves_m32a_normalization_under_m32b(tmp_path: Path):
     client = StoreClient()
     store = LinearIssuesTaskStore(tmp_path, team_id=TEAM_ID, client=client)
 
     tasks = {task.id: task for task in store.list_all()}
 
-    assert tasks["lin-ENG-1"].status == TaskStatus.PLANNED
+    assert tasks["lin-ENG-1"].status == TaskStatus.READY
     assert tasks["lin-ENG-1"].priority == 10
     assert tasks["lin-ENG-1"].source.external_id == "11111111-1111-1111-1111-111111111111"
     assert tasks["lin-ENG-1"].team.assignees == ["Alice"]
-    assert any("read-only" in note for note in tasks["lin-ENG-1"].normalization_notes)
-
     assert tasks["lin-ENG-2"].status == TaskStatus.RUNNING
     assert tasks["lin-ENG-3"].status == TaskStatus.DONE
     assert tasks["lin-ENG-4"].status == TaskStatus.CANCELLED
 
-    assert store.list_ready() == []
+    assert [task.id for task in store.list_ready()] == ["lin-ENG-1"]
 
 
 def test_linear_assignee_change_does_not_change_semantic_source_revision(tmp_path: Path):
