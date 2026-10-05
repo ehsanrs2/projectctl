@@ -54,7 +54,7 @@ def issue(
         "priority": {"id": "3", "name": priority},
         "issuetype": {"id": "10001", "name": issue_type},
         "assignee": {"accountId": "a1", "displayName": "Ada"},
-        "parent": {"id": "900", "key": parent} if parent else None,
+        "parent": {"key": parent} if parent else None,
         "created": NOW,
         "updated": NOW,
         "duedate": None,
