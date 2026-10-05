@@ -540,3 +540,205 @@ def test_review_receipt_rejects_false_completed_head():
             merged_at=NOW,
             observed_at=NOW,
         )
+
+
+def test_review_source_branch_collision_fails_closed(tmp_path: Path):
+    request = review_request("github")
+
+    class CollisionTransport(ReviewGitTransport):
+        def __init__(self, root: Path):
+            self.project_root = root
+            self.remote_name = "origin"
+            self.remote_identity = "github.com/acme/widget"
+            self.timeout_seconds = 1
+            self.pushed = False
+
+        def _assert_remote_identity(self):
+            return None
+
+        def observe(self, branch):
+            assert branch == request.source_ref
+            return "c" * 40
+
+        def _git(self, *args, check=True):
+            if args[:2] == ("cat-file", "-e"):
+                return subprocess.CompletedProcess(args, 0, "", "")
+            if args[:2] == ("merge-base", "--is-ancestor"):
+                return subprocess.CompletedProcess(args, 0, "", "")
+            if args and args[0] == "push":
+                self.pushed = True
+                return subprocess.CompletedProcess(args, 0, "", "")
+            raise AssertionError(args)
+
+    transport = CollisionTransport(tmp_path)
+
+    with pytest.raises(IntegrationError, match="already points"):
+        transport.ensure_source(request)
+
+    assert transport.pushed is False
+
+
+def test_github_review_create_error_reconciles_remote_success(tmp_path: Path):
+    request = review_request("github")
+    raw = {
+        "number": 21,
+        "html_url": "https://github.com/acme/widget/pull/21",
+        "state": "open",
+        "merged_at": None,
+        "merge_commit_sha": None,
+        "head": {"ref": request.source_ref, "sha": request.candidate_commit},
+        "base": {"ref": request.target_ref},
+    }
+
+    class CrashWindowAdapter(GitHubReviewDeliveryAdapter):
+        def __init__(self, root: Path):
+            self.project_root = root
+            self.remote_name = "origin"
+            self.remote_identity = "github.com/acme/widget"
+            self.repository = "acme/widget"
+            self.owner = "acme"
+            self.executable = "gh-test"
+            self.timeout_seconds = 1
+            self.calls = []
+            self.created = False
+            self.transport = SimpleNamespace(ensure_source=lambda _request: None)
+
+        def _api(self, method, endpoint, payload=None):
+            self.calls.append((method, endpoint, payload))
+            if method == "GET":
+                return [raw] if self.created else []
+            if method == "POST":
+                self.created = True
+                raise IntegrationError(
+                    "simulated local observation failure after remote create"
+                )
+            raise AssertionError(method)
+
+    adapter = CrashWindowAdapter(tmp_path)
+    receipt = adapter.request_review(request)
+
+    assert receipt.state == "open"
+    assert receipt.review_id == "21"
+    assert sum(1 for method, _, _ in adapter.calls if method == "POST") == 1
+    assert sum(1 for method, _, _ in adapter.calls if method == "GET") == 2
+
+
+def test_review_delivery_closed_without_merge_marks_decision_and_releases_claim(
+    tmp_path: Path,
+    monkeypatch,
+):
+    repo, run_id, _, _ = setup_review_run(tmp_path, monkeypatch)
+    reviewer = FakeReviewer()
+    reviewer.state = "closed"
+    claimer = FakeClaimer()
+    decisions = []
+
+    class DecisionWriter(FakeCompletionWriter):
+        def mark_needs_decision(self, task_id, *, reason):
+            decisions.append((task_id, reason))
+
+    writer = DecisionWriter()
+    policy = code_delivery_policy(repo)
+
+    monkeypatch.setattr(
+        "projectctl.application.integration.resolve_code_delivery",
+        lambda root: SimpleNamespace(policy=policy, publisher=None, reviewer=reviewer),
+    )
+    monkeypatch.setattr(
+        "projectctl.application.integration.resolve_task_authority",
+        lambda root: SimpleNamespace(provider="linear"),
+    )
+    monkeypatch.setattr(
+        "projectctl.application.integration.resolve_execution_ownership",
+        lambda root, task_authority=None: SimpleNamespace(claimer=claimer),
+    )
+    monkeypatch.setattr(
+        "projectctl.application.integration.execution_ownership_policy",
+        lambda root: SimpleNamespace(strategy="git_ref_lease"),
+    )
+    monkeypatch.setattr(
+        "projectctl.application.task_lifecycle.execution_ownership_policy",
+        lambda root: SimpleNamespace(strategy="git_ref_lease"),
+    )
+    monkeypatch.setattr(
+        "projectctl.application.integration._completion_writer",
+        lambda root: writer,
+    )
+    monkeypatch.setattr(
+        "projectctl.application.task_lifecycle.block_task_for_decision",
+        lambda root, task_id, reason: writer.mark_needs_decision(
+            task_id, reason=reason
+        ),
+    )
+    monkeypatch.setattr(
+        "projectctl.application.task_lifecycle.release_task_for_retry",
+        lambda root, store, run_id, actor: claimer.release(
+            SimpleNamespace(task_id="lin-ENG-1")
+        ),
+    )
+
+    with pytest.raises(IntegrationError, match="closed"):
+        integrate_run(repo, run_id)
+
+    record = RunStore(repo).get(run_id)
+    assert record.status == RunStatus.NEEDS_DECISION
+    assert decisions
+    assert claimer.released == ["lin-ENG-1"]
+
+
+def test_merged_review_with_transformed_merge_commit_fails_closed(tmp_path: Path):
+    request = review_request("github")
+    transformed = "d" * 40
+    fetched = "e" * 40
+
+    receipt = ReviewReceipt(
+        run_id=request.run_id,
+        task_id=request.task_id,
+        review_provider="github",
+        request_digest=digest(request),
+        review_id="31",
+        review_url="https://github.com/acme/widget/pull/31",
+        source_ref=request.source_ref,
+        target_ref=request.target_ref,
+        candidate_commit=request.candidate_commit,
+        head_commit=request.candidate_commit,
+        merge_commit=transformed,
+        state="merged",
+        merged_at=NOW,
+        observed_at=NOW,
+    )
+
+    class TransformedTransport(ReviewGitTransport):
+        def __init__(self, root: Path):
+            self.project_root = root
+            self.remote_name = "origin"
+            self.remote_identity = request.remote_identity
+            self.timeout_seconds = 1
+
+        def _assert_remote_identity(self):
+            return None
+
+        def observe(self, branch):
+            assert branch == request.target_ref
+            return fetched
+
+        def _git(self, *args, check=True):
+            if args[:3] == ("fetch", "--no-tags", "origin"):
+                return subprocess.CompletedProcess(args, 0, "", "")
+            if args == ("rev-parse", "FETCH_HEAD"):
+                return subprocess.CompletedProcess(args, 0, fetched + "\n", "")
+            if args[:2] == ("cat-file", "-e"):
+                return subprocess.CompletedProcess(args, 0, "", "")
+            if args[:3] == ("rev-list", "--parents", "-n"):
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    f"{transformed} {'f' * 40} {request.candidate_commit}\n",
+                    "",
+                )
+            raise AssertionError(args)
+
+    transport = TransformedTransport(tmp_path)
+
+    with pytest.raises(IntegrationError, match="transformed"):
+        transport.sync_merged_target(request, receipt)
