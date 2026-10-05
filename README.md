@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M3.3a — Jira Read Authority**, adding conservative Jira Cloud project-scoped task reads while deliberately keeping Jira workflow eligibility and lifecycle mutation fail-closed.
+This repository currently implements **M3.3b — Jira Relationship & Workflow Eligibility**, adding explicit Jira READY-status and issue-link dependency policy while keeping Jira lifecycle mutation fail-closed.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -1624,8 +1624,87 @@ versions remain readable without rewriting the project file.
 
 See ADR-026 and `docs/PROJECTCTL_BLUEPRINT.md`.
 
-Next:
+### M3.3b — Jira Relationship & Workflow Eligibility
 
-- **M3.3b — Jira Relationship & Workflow Eligibility** — prove Jira blocker/dependency direction,
-  cross-project dependency identities, cycle behavior and explicit readiness mapping before any
-  lifecycle write is considered
+Jira scheduler semantics are now explicit human policy rather than provider-name heuristics.
+
+Example:
+
+```yaml
+task_store:
+  provider: jira
+  site: acme.atlassian.net
+  project: ENG
+  jira_policy:
+    ready_statuses:
+      - id: "10000"
+        name: Ready
+    link_rules:
+      - type_id: "10001"
+        name: Blocks
+        inward_label: is blocked by
+        outward_label: blocks
+        inward: dependency
+        outward: blocks
+```
+
+Use the provider metadata command before authoring the policy:
+
+```bash
+projectctl jira-metadata --json
+```
+
+This exposes current Jira status IDs/names/categories and issue-link type IDs plus their
+inward/outward labels.
+
+A Jira to-do/new issue becomes `READY` only when its stable status id **and** name are explicitly
+pinned. Unconfigured to-do statuses stay `PLANNED`. If a pinned status is renamed or moved to
+another status category, ProjectCTL fails closed to `NEEDS_DECISION`.
+
+Jira issue links are also explicit. For every configured link type, each visible side must be
+declared as one of:
+
+```text
+dependency -> linked issue blocks the current task
+blocks     -> current task blocks the linked issue
+ignore     -> this side has no scheduling meaning
+```
+
+ProjectCTL pins type id, name and both provider labels. Unknown link types and metadata drift are
+not guessed.
+
+For local project issues, either valid side of a Jira link is enough to reconstruct both canonical
+edges. This prevents a partial Jira read from leaving the blocked task falsely READY.
+
+Cross-project blockers are represented by stable identities:
+
+```text
+jira:<site>:<stable-issue-id>
+```
+
+and are independently re-read before eligibility is decided. An embedded stale status in
+`issuelinks` cannot silently unblock work.
+
+Parent/sub-task remains hierarchy only. Dependency cycles and hierarchy cycles are checked
+separately and participants move to `NEEDS_DECISION`.
+
+ProjectConfig advances to **v8**. Older config versions continue to load in memory without
+rewriting persisted files.
+
+Jira lifecycle capabilities are still intentionally unsupported:
+
+```text
+read                supported
+claim               unsupported
+release             unsupported
+block_for_decision  unsupported
+complete            unsupported
+```
+
+So M3.3b improves scheduler truth without yet making Jira autonomously executable.
+
+See ADR-027 and `docs/PROJECTCTL_BLUEPRINT.md`.
+
+Next Jira lifecycle work is intentionally not numbered yet. We first need to review current Jira
+issue-property and workflow-transition concurrency semantics before deciding whether additive,
+crash-safe completion markers can be proven.
