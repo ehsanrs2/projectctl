@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "projectctl"
-version = "0.25.0"
+version = "0.26.0"
 description = "Local-first deterministic control plane for AI-assisted software engineering"
 readme = "README.md"
 requires-python = ">=3.12"
