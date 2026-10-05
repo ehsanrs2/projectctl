@@ -273,7 +273,14 @@ class LinearIssuesTaskStore:
         for issue_uuid, task in task_by_uuid.items():
             for relation in self.client.list_inverse_relations(issue_uuid):
                 relation_type = str(relation.get("type") or "").strip().casefold()
+                if relation_type in {"related", "duplicate", "similar"}:
+                    continue
                 if relation_type != "blocks":
+                    self._mark_needs_decision(
+                        task,
+                        "Linear relation has an unknown or missing type; "
+                        "dependency semantics are ambiguous.",
+                    )
                     continue
 
                 target = relation.get("relatedIssue")
@@ -286,11 +293,17 @@ class LinearIssuesTaskStore:
                     continue
 
                 target_uuid = str(target.get("id") or "").strip()
-                if target_uuid != issue_uuid:
+                target_team = target.get("team")
+                target_team_id = (
+                    str(target_team.get("id") or "").strip()
+                    if isinstance(target_team, dict)
+                    else ""
+                )
+                if target_uuid != issue_uuid or target_team_id != self.team_id:
                     self._mark_needs_decision(
                         task,
-                        "Linear inverse blocks relation target does not match the "
-                        "requested issue; relation direction is ambiguous.",
+                        "Linear inverse blocks relation target/team does not match "
+                        "the requested authority issue; relation direction is ambiguous.",
                     )
                     continue
 
@@ -320,17 +333,29 @@ class LinearIssuesTaskStore:
                 if blocker_state_type in _TERMINAL_STATE_TYPES:
                     continue
 
+                blocker_team = blocker.get("team")
+                blocker_team_id = (
+                    str(blocker_team.get("id") or "").strip()
+                    if isinstance(blocker_team, dict)
+                    else ""
+                )
+
                 if blocker_uuid in task_by_uuid:
                     dependency = task_by_uuid[blocker_uuid].id
+                    if blocker_team_id != self.team_id:
+                        self._mark_needs_decision(
+                            task,
+                            "Linear blocker UUID is present in the configured team "
+                            "snapshot but relation team identity disagrees.",
+                        )
                 else:
                     dependency = self._external_identity(blocker_uuid)
-                    blocker_team = blocker.get("team")
-                    blocker_team_id = (
-                        str(blocker_team.get("id") or "").strip()
-                        if isinstance(blocker_team, dict)
-                        else ""
-                    )
-                    if blocker_team_id == self.team_id:
+                    if not blocker_team_id:
+                        self._mark_needs_decision(
+                            task,
+                            "Unresolved Linear blocker is missing team identity.",
+                        )
+                    elif blocker_team_id == self.team_id:
                         self._mark_needs_decision(
                             task,
                             "Unresolved Linear blocker belongs to the configured "
