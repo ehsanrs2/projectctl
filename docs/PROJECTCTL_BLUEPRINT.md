@@ -107,6 +107,7 @@ Exactly one authority should exist for each mutable concern.
 | Architecture decisions | `docs/decisions/ADR-*.md` | Newer accepted ADR wins on conflict |
 | Task execution state / dependencies | Configured task authority | Beads/GitHub execution adapters and Linear read adapter implemented; exactly one provider per project |
 | Code transport intent | `.projectctl/config.yaml -> code_transport` | Local Git or one explicitly pinned generic network Git remote; independent from task authority |
+| Code delivery intent | `.projectctl/config.yaml -> code_delivery` | Local-only, explicitly authorized direct Git publication, or review-required delivery |
 | Execution ownership | Resolved ownership strategy | Task-native, project-local exact claim, or generic remote Git ref lease |
 | Source code and integration history | Git | Git state is never inferred from worker narration |
 | Verification policy | `projectctl.verification.yaml` | Human-managed |
@@ -281,9 +282,10 @@ flowchart TD
     Telemetry -. observes .-> Worker
 ```
 
-The `Publish` stage is explicit because for a remote task authority such as GitHub,
-**local Git integration is not the same thing as team-visible delivery**. M3.0c implements this
-stage for GitHub with exact-base publication and durable remote observation.
+The `Publish` stage is selected by Code Delivery policy, not Task Authority. Local delivery can
+complete from verified local integration; `direct_git` requires exact-base remote publication and
+durable observation; `review_required` is modeled but remains fail-closed until a PR/MR adapter
+can produce durable review-delivery evidence.
 
 ---
 
@@ -396,19 +398,23 @@ Current local integration:
 - serialized shared-target mutation
 - no worker Git mutation
 
-Current remote-delivery behavior:
+Current delivery behavior:
 
-- task-authority delivery policy distinguishes local-only from publication-required delivery
-- GitHub publication is exact-base and fast-forward-only to the configured target on `origin`
-- PublicationRequest/PublicationManifest form a durable evidence chain
-- remote target observation gates canonical completion
-- GitHub completion is additive via `projectctl:completed`, preserving native human close reasons
-- exact GitHub task claim is held through publication/completion and released afterward
-- repositories whose rules reject direct target publication fail closed; M3.0c does not bypass
-  rulesets or silently switch to pull-request delivery
+- `code_delivery` is independent from Task Authority and Code Transport
+- `local` completes from passing EvidenceManifest after exact local integration
+- `direct_git` publishes the exact verified candidate to the pinned generic Git remote
+- PublicationRequest/PublicationManifest form the durable direct-publication evidence chain
+- generic Git publication is exact-base and fast-forward-only using force-with-lease semantics
+- remote identity is validated independently from task-provider identity
+- `review_required` is explicit but not execution-ready until a PR/MR adapter exists
+- ProjectCTL never falls back from review-required delivery to direct push
+- ownership release is selected by Execution Ownership rather than provider delivery flags
+- GitHub completion remains additive via `projectctl:completed`
+- Linear completion is additive through reserved team-scoped ProjectCTL lifecycle labels and never
+  overwrites native workflow state or human labels
 
-For local-only task authorities such as Beads, local integration is sufficient under the current
-delivery policy.
+Repositories whose rules reject direct target publication fail closed. The user must explicitly
+select a supported review-delivery adapter once that capability exists.
 
 ### 6.9 Runtime/recovery layer
 
@@ -435,7 +441,7 @@ system and must not be described as one.
 
 ## 7. Runtime lifecycle today
 
-The implemented lifecycle through M3.0c is:
+The implemented lifecycle through M3.2c2 is:
 
 ```text
 fresh state
@@ -464,9 +470,9 @@ Codex turn
          ↓
  ff-only local integration
          ↓
- publication required?
-   ├─ no  → canonical task completion
-   └─ yes → durable PublicationRequest
+ delivery mode?
+   ├─ local → canonical task completion from EvidenceManifest
+   ├─ direct_git → durable PublicationRequest
                ↓
             exact-base remote publication
                ↓
@@ -476,16 +482,16 @@ Codex turn
                ↓
             canonical task completion
                ↓
-            exact claim release
+            exact independent claim release
+   └─ review_required → STOP before claim (adapter unsupported)
          ↓
  PASSED
 ```
 
-Beads uses the local-only delivery path.
-
-GitHub uses the distributed claim protocol from M3.0b2 and the publication-gated delivery path from
-M3.0c. GitHub is execution-capable under this direct-publication policy, but repositories whose
-rules require a pull request or reject direct target publication remain fail-closed.
+Beads, GitHub Issues, and Linear may use local or direct-Git delivery where their lifecycle and
+ownership semantics are supported. GitHub completion remains direct-publication-gated today.
+Linear can execute with local or direct-Git delivery using independent ownership and crash-safe
+additive lifecycle markers. Review-required repositories remain fail-closed.
 
 ---
 
@@ -1029,7 +1035,7 @@ Implemented:
 
 #### M3.2c1 — Execution Transport & Ownership Boundary
 
-**Current milestone / implemented by this change.**
+**Completed.**
 
 The earlier "Linear claim" framing was too narrow because task authority and code host are
 independent.
@@ -1063,29 +1069,63 @@ Safety boundary:
 - generic Git ownership does not imply permission to publish verified code
 - remote publication and task completion remain separate contracts
 
-#### M3.2c2 — Generic Delivery & Linear Completion Feasibility
+#### M3.2c2 — Generic Delivery & Linear Lifecycle
 
-**Next milestone after M3.2c1.**
+**Current milestone / implemented by this change.**
 
-Decouple remote publication from task-provider identity.
+Implemented:
 
-Required work:
+- ProjectConfig v6 adds explicit `code_delivery`: `local`, `direct_git`, or
+  `review_required`
+- legacy GitHub direct-publication behavior migrates in memory without rewriting older config
+- all other legacy remotes remain local-delivery unless the user explicitly authorizes publication
+- CodeDeliveryPolicy v1 makes the effective delivery contract inspectable
+- generic exact-base Git publisher validates credential-free remote identity and is independent
+  from task-provider identity
+- application integration resolves delivery separately from Task Authority
+- local completion evidence uses EvidenceManifest
+- direct-Git completion evidence uses PublicationManifest
+- review-required delivery is modeled but fails closed before claim because no PR/MR adapter exists
+- Linear reserves team-scoped `projectctl:completed` and `projectctl:needs-decision` labels
+- Linear lifecycle writes use additive label mutations only
+- native Linear completed/canceled state remains authoritative
+- conflicting ProjectCTL Linear lifecycle markers normalize to NEEDS_DECISION
+- Linear completion uses a fail-closed two-phase marker protocol: decision guard, completed marker,
+  provider revalidation, then guard removal
+- task state and incoming blockers are revalidated after completion staging
+- ownership release follows the independent ownership strategy rather than historical delivery flags
+- Doctor reports Task Authority, Execution Ownership, and Code Delivery independently
 
-- model local integration, direct Git publication, and externally reviewed/MR delivery as distinct
-  policies
-- make the Git publisher hosting-vendor-neutral
-- preserve exact-base publication/reconciliation semantics where direct push is allowed
-- fail closed when GitLab/GitHub branch policy requires review instead of direct push
-- define safe Linear needs-decision/completion mutation semantics
-- revalidate concurrent Linear state immediately before mutation
-- bind task UUID, run, claim, candidate, evidence and delivery proof
-- define recovery when delivery succeeds but task mutation fails
+Safety boundary:
 
-Only after M3.2c2 proves both delivery and canonical task mutation may Linear become
-execution-ready.
+- ProjectCTL never infers publish permission from the existence of a Git remote
+- ProjectCTL never overwrites Linear native workflow state to express completion
+- ProjectCTL never replaces the full Linear label set
+- a crash during Linear completion cannot leave a ProjectCTL-only DONE marker without the
+  needs-decision guard
+- direct Git publication that is rejected by branch/rules policy fails closed
+- review-required repositories do not silently degrade to direct push
 
-Later M3.2 work should evaluate Jira through the same proof sequence. Do not add provider-specific
-branches back into application services.
+Linear is execution-ready when its configured ownership and delivery modes are themselves
+execution-ready. Provider-native Linear claim/release remain unsupported because ProjectCTL
+ownership is a separate axis.
+
+#### M3.2c3 — Review-Aware Delivery Adapters
+
+**Next milestone after M3.2c2.**
+
+Close the remaining delivery gap for repositories that require code review:
+
+- define durable review request/receipt contracts
+- bind exact candidate/evidence to GitHub pull requests and GitLab merge requests
+- make request creation/reconciliation crash-safe and idempotent
+- preserve branch/rules protections rather than bypassing them
+- define what review/merge state is sufficient for canonical task completion
+- recover safely when review request creation succeeds but local persistence fails
+- keep host-specific APIs behind delivery adapters rather than Task Authority
+
+After the review-delivery boundary is proven, later M3.2 work should evaluate Jira through the same
+task/read/lifecycle/ownership/delivery proof sequence.
 
 ### Post-M3 directions — not yet milestone-frozen
 
