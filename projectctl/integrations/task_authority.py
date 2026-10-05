@@ -131,8 +131,8 @@ def task_authority_capabilities_for_provider(
             block_for_decision=CapabilityState.UNSUPPORTED,
             complete=CapabilityState.UNSUPPORTED,
             notes=[
-                "M3.2a is read-only and deliberately not execution-ready.",
-                "Linear dependency, claim ownership, and completion semantics are deferred.",
+                "M3.2b supports read-only blocker/hierarchy semantics and scheduler eligibility.",
+                "Linear claim ownership, lifecycle writes, and completion semantics remain unsupported.",
             ],
         )
     raise ConfigurationError(
