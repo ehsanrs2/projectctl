@@ -188,8 +188,9 @@ def test_doctor_reports_github_claim_transport_without_claiming(tmp_path: Path, 
     monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ.get("PATH", ""))
 
     class FakeLease:
-        def __init__(self, root):
+        def __init__(self, root, *, remote_name="origin"):
             self.root = root
+            self.remote_name = remote_name
 
         def remote_url(self):
             return "git@github.com:acme/widget.git"
