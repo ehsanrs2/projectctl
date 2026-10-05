@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M3.2c1 — Execution Transport & Ownership Boundary**, separating task authority from code transport and execution ownership so local-only projects and generic Git remotes such as GitLab are modeled explicitly rather than through GitHub assumptions.
+This repository currently implements **M3.2c2 — Generic Delivery & Linear Lifecycle**, separating code delivery from task authority and adding crash-safe additive Linear completion without overwriting native human workflow state.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -1376,8 +1376,118 @@ a completely non-Git workspace is not supported by the current worktree/candidat
 
 See ADR-023 and `docs/PROJECTCTL_BLUEPRINT.md`.
 
+### M3.2c2 — Generic Delivery & Linear Lifecycle
+
+M3.2c2 separates **delivery authorization** from both Task Authority and Code Transport.
+
+ProjectConfig is additively versioned to **v6**:
+
+```yaml
+task_store:
+  provider: linear
+  team: <TEAM_UUID>
+
+code_transport:
+  mode: git_remote
+  remote_name: origin
+  remote_identity: gitlab.com/group/repo
+
+code_delivery:
+  mode: direct_git
+```
+
+Supported delivery policies are:
+
+```text
+local           -> verified local integration is sufficient
+direct_git      -> exact verified candidate must be published to the pinned Git remote
+review_required -> explicitly modeled, but fail-closed until a PR/MR adapter exists
+```
+
+A discovered remote never grants publication permission. For Linear + GitLab, adoption therefore
+defaults to local delivery unless `--code-delivery direct-git` is explicitly selected.
+
+Inspect delivery separately:
+
+```bash
+projectctl code-delivery --json
+```
+
+The direct Git publisher is now hosting-vendor-neutral. It validates the configured
+credential-free remote identity and keeps exact-base/force-with-lease publication semantics.
+
+Linear lifecycle writes are also enabled without changing native Linear workflow state. ProjectCTL
+owns only two team-scoped labels:
+
+```text
+projectctl:completed
+projectctl:needs-decision
+```
+
+Completion uses a fail-closed two-phase protocol:
+
+```text
+verify evidence + current blockers
+        ↓
+add needs-decision guard
+        ↓
+add completed marker
+        ↓
+re-read current Linear state + blockers
+        ↓
+safe? remove guard
+        ↓
+DONE
+```
+
+If the process crashes or provider state changes before the final guard removal, the issue retains
+the decision guard (or both ProjectCTL markers), which normalizes to `NEEDS_DECISION` rather than
+a false `DONE`.
+
+Native Linear `completed`/`canceled` states remain authoritative. ProjectCTL does not replace
+human labels, state, assignee, or title.
+
+Examples:
+
+Local-only Linear:
+
+```bash
+projectctl adopt . \
+  --task-store linear \
+  --task-store-team <TEAM_UUID> \
+  --code-transport local \
+  --code-delivery local
+```
+
+Linear + GitLab with explicitly authorized direct publication:
+
+```bash
+projectctl adopt . \
+  --task-store linear \
+  --task-store-team <TEAM_UUID> \
+  --code-transport git-remote \
+  --git-remote-name origin \
+  --git-remote-identity gitlab.com/group/repo \
+  --code-delivery direct-git
+```
+
+Repository requiring review:
+
+```bash
+projectctl adopt . \
+  --task-store linear \
+  --task-store-team <TEAM_UUID> \
+  --code-transport git-remote \
+  --git-remote-identity gitlab.com/group/repo \
+  --code-delivery review-required
+```
+
+The last mode is intentionally not autonomous yet; ProjectCTL will not silently bypass review
+policy with a direct push.
+
+See ADR-024 and `docs/PROJECTCTL_BLUEPRINT.md`.
+
 Next:
 
-- **M3.2c2 — Generic Delivery & Linear Completion Feasibility** — separate publication from task
-  provider, model local/direct-remote/external-review delivery, and define safe non-destructive
-  Linear completion semantics without assuming GitHub or direct-push policy
+- **M3.2c3 — Review-Aware Delivery Adapters** — define durable review request/receipt contracts and
+  safe GitHub PR / GitLab MR delivery without weakening branch protections

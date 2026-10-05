@@ -112,12 +112,13 @@ def test_inspection_and_adoption_pin_github_repository(tmp_path: Path, monkeypat
     config = load_project_config(repo)
     assert config.task_store.provider == "github"
     assert config.task_store.repository == "acme/widget"
-    assert config.schema_version == 5
+    assert config.schema_version == 6
     assert config.task_store.team is None
     assert config.task_store.cache_max_age_seconds == 30
     assert config.code_transport.mode == "git_remote"
     assert config.code_transport.remote_name == "origin"
     assert config.code_transport.remote_identity == "github.com/acme/widget"
+    assert config.code_delivery.mode == "direct_git"
 
 
 def test_github_provider_without_repository_identity_requires_decision(tmp_path: Path):

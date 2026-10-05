@@ -20,6 +20,7 @@ def build_adoption_plan(
     code_transport_mode: str | None = None,
     code_remote_name: str | None = None,
     code_remote_identity: str | None = None,
+    code_delivery_mode: str | None = None,
 ):
     inspection = inspect_repository(path)
     return plan_adoption(
@@ -30,6 +31,7 @@ def build_adoption_plan(
         code_transport_mode=code_transport_mode,
         code_remote_name=code_remote_name,
         code_remote_identity=code_remote_identity,
+        code_delivery_mode=code_delivery_mode,
     )
 
 
@@ -42,6 +44,7 @@ def adopt_project(
     code_transport_mode: str | None = None,
     code_remote_name: str | None = None,
     code_remote_identity: str | None = None,
+    code_delivery_mode: str | None = None,
     allow_dirty: bool = False,
 ):
     plan = build_adoption_plan(
@@ -52,6 +55,7 @@ def adopt_project(
         code_transport_mode=code_transport_mode,
         code_remote_name=code_remote_name,
         code_remote_identity=code_remote_identity,
+        code_delivery_mode=code_delivery_mode,
     )
     return apply_adoption(plan, allow_dirty=allow_dirty)
 

@@ -77,7 +77,7 @@ def test_beads_and_github_are_execution_ready_after_m30c(tmp_path: Path):
 
 
 
-def test_linear_is_readable_but_deliberately_not_execution_ready(tmp_path: Path):
+def test_linear_lifecycle_writes_are_supported_but_provider_claim_is_not(tmp_path: Path):
     team = "9cfb482a-81e3-4154-b5b9-2c805e70a02d"
     write_config(tmp_path, "linear", team=team)
 
@@ -86,10 +86,11 @@ def test_linear_is_readable_but_deliberately_not_execution_ready(tmp_path: Path)
     assert capabilities.read == CapabilityState.SUPPORTED
     assert capabilities.claim == CapabilityState.UNSUPPORTED
     assert capabilities.release == CapabilityState.UNSUPPORTED
-    assert capabilities.block_for_decision == CapabilityState.UNSUPPORTED
-    assert capabilities.complete == CapabilityState.UNSUPPORTED
+    assert capabilities.block_for_decision == CapabilityState.SUPPORTED
+    assert capabilities.complete == CapabilityState.SUPPORTED
 
-    with pytest.raises(ConfigurationError, match="Unsupported lifecycle operations"):
+    # Legacy provider-native execution readiness still requires claim/release.
+    with pytest.raises(ConfigurationError, match="claim, release"):
         require_task_authority_execution_ready(tmp_path)
 
 
@@ -105,6 +106,12 @@ def test_linear_resolves_through_provider_neutral_authority(tmp_path: Path, monk
         def list_all(self):
             return []
 
+        def team_label_ids(self, _names):
+            return {}
+
+        def list_inverse_relations(self, _issue_id):
+            return []
+
         def version(self):
             return "linear-test"
 
@@ -118,7 +125,7 @@ def test_linear_resolves_through_provider_neutral_authority(tmp_path: Path, monk
     assert authority.provider == "linear"
     assert authority.reader.snapshot().provider == "linear"
     assert authority.claimer is None
-    assert authority.completion_writer is None
+    assert authority.completion_writer is not None
     assert authority.publisher is None
 
 def test_task_authority_cli_is_machine_readable_without_provider_probe(tmp_path: Path):

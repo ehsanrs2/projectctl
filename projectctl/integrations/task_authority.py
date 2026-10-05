@@ -15,6 +15,7 @@ from projectctl.integrations.github.client import GitHubIssuesClient
 from projectctl.integrations.github.completion import GitHubTaskCompletionWriter
 from projectctl.integrations.github.task_store import GitHubIssuesTaskStore
 from projectctl.integrations.linear.client import LinearIssuesClient
+from projectctl.integrations.linear.completion import LinearTaskCompletionWriter
 from projectctl.integrations.linear.task_store import LinearIssuesTaskStore
 from projectctl.ports.publication import TaskPublisher
 from projectctl.ports.task_store import (
@@ -128,11 +129,12 @@ def task_authority_capabilities_for_provider(
             read=CapabilityState.SUPPORTED,
             claim=CapabilityState.UNSUPPORTED,
             release=CapabilityState.UNSUPPORTED,
-            block_for_decision=CapabilityState.UNSUPPORTED,
-            complete=CapabilityState.UNSUPPORTED,
+            block_for_decision=CapabilityState.SUPPORTED,
+            complete=CapabilityState.SUPPORTED,
             notes=[
-                "M3.2b supports read-only blocker/hierarchy semantics and scheduler eligibility.",
-                "Linear claim ownership, lifecycle writes, and completion semantics remain unsupported.",
+                "M3.2b supports blocker/hierarchy semantics and scheduler eligibility.",
+                "M3.2c2 adds additive team-scoped ProjectCTL lifecycle labels.",
+                "Provider-native claim/release remain unsupported; execution ownership is resolved independently.",
             ],
         )
     raise ConfigurationError(
@@ -274,6 +276,11 @@ def resolve_task_authority(
             capabilities=capabilities,
             delivery_policy=delivery_policy,
             reader=LinearIssuesTaskStore(
+                root,
+                team_id=team_id,
+                client=client,
+            ),
+            completion_writer=LinearTaskCompletionWriter(
                 root,
                 team_id=team_id,
                 client=client,

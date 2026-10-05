@@ -191,6 +191,9 @@ class StoreClient:
     def list_inverse_relations(self, _issue_id):
         return []
 
+    def team_label_ids(self, _names):
+        return {}
+
     def version(self):
         return "linear-graphql-test"
 
@@ -274,7 +277,7 @@ def test_linear_team_is_not_accepted_for_other_provider(tmp_path: Path):
         )
 
 
-def test_project_config_v3_upgrades_to_v5_without_rewrite(tmp_path: Path):
+def test_project_config_v3_upgrades_to_v6_without_rewrite(tmp_path: Path):
     ctl = tmp_path / ".projectctl"
     ctl.mkdir()
     path = ctl / "config.yaml"
@@ -297,10 +300,11 @@ def test_project_config_v3_upgrades_to_v5_without_rewrite(tmp_path: Path):
 
     config = load_project_config(tmp_path)
 
-    assert config.schema_version == 5
+    assert config.schema_version == 6
     assert config.task_store.repository == "acme/widget"
     assert config.task_store.team is None
     assert config.task_store.cache_max_age_seconds == 17
     assert config.code_transport.mode == "git_remote"
     assert config.code_transport.remote_identity == "github.com/acme/widget"
+    assert config.code_delivery.mode == "direct_git"
     assert yaml.safe_load(path.read_text(encoding="utf-8"))["schema_version"] == 3

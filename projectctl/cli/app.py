@@ -15,6 +15,7 @@ from projectctl.core.errors import (
 )
 from projectctl.doctor.service import run_doctor
 from projectctl.integrations.speckit import SpecKitBeadsImporter
+from projectctl.integrations.delivery import code_delivery_policy
 from projectctl.integrations.execution_ownership import resolve_execution_ownership
 from projectctl.integrations.task_authority import task_authority_capabilities
 from projectctl.project.adoption import apply_adoption
@@ -81,6 +82,7 @@ def _show_plan(plan) -> None:
     typer.echo(f"Code transport: {getattr(plan, 'code_transport_mode', 'local')}")
     if getattr(plan, "code_remote_name", None):
         typer.echo(f"Code remote: {plan.code_remote_name} -> {plan.code_remote_identity}")
+    typer.echo(f"Code delivery: {getattr(plan, 'code_delivery_mode', 'local')}")
     if plan.unresolved_decisions:
         typer.echo("\nNEEDS DECISION")
         for item in plan.unresolved_decisions:
@@ -92,7 +94,7 @@ def _prompt_task_store(inspection) -> str:
     typer.echo("-" * 56)
     if "github" in inspection.detected_task_systems:
         typer.echo("  [1] Use existing GitHub Issues task system")
-        typer.echo("  [2] Use Linear (read-only in M3.2a)")
+        typer.echo("  [2] Use Linear")
         typer.echo("  [3] Introduce local Beads")
         typer.echo("  [4] Configure later")
         choice = typer.prompt("Choose", default="1")
@@ -103,7 +105,7 @@ def _prompt_task_store(inspection) -> str:
             "4": "unresolved",
         }.get(choice, "github")
     typer.echo("  [1] Use local Beads")
-    typer.echo("  [2] Use Linear (read-only in M3.2a)")
+    typer.echo("  [2] Use Linear")
     typer.echo("  [3] Configure later")
     choice = typer.prompt("Choose", default="1")
     return {"1": "beads", "2": "linear", "3": "unresolved"}.get(choice, "beads")
@@ -127,6 +129,17 @@ def _validate_code_transport_choice(value: str | None) -> str | None:
     if normalized not in {"local", "git_remote"}:
         raise RepositoryContractError(
             "Unsupported code transport. Choose 'local' or 'git-remote'."
+        )
+    return normalized
+
+
+def _validate_code_delivery_choice(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip().replace("-", "_")
+    if normalized not in {"local", "direct_git", "review_required"}:
+        raise RepositoryContractError(
+            "Unsupported code delivery. Choose 'local', 'direct-git', or 'review-required'."
         )
     return normalized
 
@@ -201,6 +214,11 @@ def init_command(
         "--git-remote-identity",
         help="Credential-free remote identity, e.g. gitlab.com/group/repo.",
     ),
+    code_delivery: str | None = typer.Option(
+        None,
+        "--code-delivery",
+        help="Delivery policy: local, direct-git, or review-required.",
+    ),
     allow_dirty: bool = typer.Option(False, "--allow-dirty", help="Allow adoption with uncommitted changes."),
 ) -> None:
     try:
@@ -250,6 +268,7 @@ def init_command(
 
         selected_store = _validate_task_store_choice(task_store)
         selected_transport = _validate_code_transport_choice(code_transport)
+        selected_delivery = _validate_code_delivery_choice(code_delivery)
         if selected_store is None and len(inspection.detected_task_systems) == 1:
             selected_store = inspection.detected_task_systems[0]
         if selected_store is None and interactive:
@@ -268,6 +287,7 @@ def init_command(
             code_transport_mode=selected_transport,
             code_remote_name=git_remote_name,
             code_remote_identity=git_remote_identity,
+            code_delivery_mode=selected_delivery,
         )
 
         if json_output or non_interactive:
@@ -345,6 +365,11 @@ def adopt_command(
         "--git-remote-identity",
         help="Credential-free remote identity, e.g. gitlab.com/group/repo.",
     ),
+    code_delivery: str | None = typer.Option(
+        None,
+        "--code-delivery",
+        help="Delivery policy: local, direct-git, or review-required.",
+    ),
     allow_dirty: bool = typer.Option(False, "--allow-dirty"),
 ) -> None:
     try:
@@ -352,6 +377,7 @@ def adopt_command(
         interactive = not non_interactive and not json_output
         selected_store = _validate_task_store_choice(task_store)
         selected_transport = _validate_code_transport_choice(code_transport)
+        selected_delivery = _validate_code_delivery_choice(code_delivery)
         if selected_store is None and len(inspection.detected_task_systems) == 1:
             selected_store = inspection.detected_task_systems[0]
         if selected_store is None and interactive and not dry_run:
@@ -369,6 +395,7 @@ def adopt_command(
             code_transport_mode=selected_transport,
             code_remote_name=git_remote_name,
             code_remote_identity=git_remote_identity,
+            code_delivery_mode=selected_delivery,
         )
 
         if dry_run:
@@ -395,6 +422,7 @@ def adopt_command(
                 code_transport_mode=selected_transport,
                 code_remote_name=git_remote_name,
                 code_remote_identity=git_remote_identity,
+                code_delivery_mode=selected_delivery,
             )
 
         if (json_output or non_interactive) and (not yes or (plan.dirty and not allow_dirty)):
@@ -525,6 +553,46 @@ def execution_ownership_command(
     typer.echo("=" * 56)
     typer.echo(f"task_provider        {policy.task_provider}")
     typer.echo(f"scope                {policy.scope}")
+    typer.echo(f"transport_mode       {policy.transport_mode}")
+    if policy.remote_name:
+        typer.echo(f"remote_name          {policy.remote_name}")
+    if policy.remote_identity:
+        typer.echo(f"remote_identity      {policy.remote_identity}")
+    for note in policy.notes:
+        typer.echo(f"note: {note}")
+
+
+@app.command("code-delivery")
+def code_delivery_command(
+    project: Path = typer.Option(
+        Path("."),
+        "--project",
+        exists=True,
+        file_okay=False,
+        resolve_path=True,
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit CodeDeliveryPolicy JSON.",
+    ),
+) -> None:
+    try:
+        root = _project_root(project)
+        policy = code_delivery_policy(root)
+    except ProjectCtlError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(EXIT_REPOSITORY)
+
+    if json_output:
+        typer.echo(_json(policy))
+        return
+
+    typer.echo(f"Code delivery: {policy.mode}")
+    typer.echo("=" * 56)
+    typer.echo(f"supported            {str(policy.supported).lower()}")
+    typer.echo(f"publication_required {str(policy.publication_required).lower()}")
+    typer.echo(f"completion_evidence  {policy.completion_evidence}")
     typer.echo(f"transport_mode       {policy.transport_mode}")
     if policy.remote_name:
         typer.echo(f"remote_name          {policy.remote_name}")

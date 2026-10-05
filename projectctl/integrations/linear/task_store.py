@@ -6,6 +6,7 @@ from projectctl.core.digest import digest
 from projectctl.core.enums import ResourceClass, RiskLevel, TaskStatus, TaskType
 from projectctl.core.time import utc_now
 from projectctl.integrations.linear.client import LinearIssuesClient
+from projectctl.integrations.linear.lifecycle import COMPLETED_LABEL, NEEDS_DECISION_LABEL
 from projectctl.schemas.task import (
     NormalizedTask,
     TaskHierarchy,
@@ -62,7 +63,9 @@ class LinearIssuesTaskStore:
 
     Incoming Linear `blocks` relations are canonical blocked-by edges.
     Parent/sub-issue hierarchy remains separate and never blocks implicitly.
-    Lifecycle mutations and claim ownership remain unsupported.
+    ProjectCTL lifecycle labels are additive authority markers. Native Linear
+    terminal workflow state remains authoritative; conflicting ProjectCTL
+    markers fail closed to NEEDS_DECISION.
     """
 
     def __init__(
@@ -80,7 +83,11 @@ class LinearIssuesTaskStore:
         self.team_id = self.client.team_id
 
     @staticmethod
-    def _state(raw: dict[str, Any]) -> tuple[TaskStatus, bool, list[str]]:
+    def _state(
+        raw: dict[str, Any],
+        *,
+        lifecycle_label_ids: dict[str, str],
+    ) -> tuple[TaskStatus, bool, list[str], list[str]]:
         notes: list[str] = []
         state = raw.get("state")
         if not isinstance(state, dict):
@@ -88,40 +95,83 @@ class LinearIssuesTaskStore:
                 TaskStatus.NEEDS_DECISION,
                 True,
                 ["Linear issue is missing workflow state metadata."],
+                [],
             )
 
         state_type = str(state.get("type") or "").strip().casefold()
         state_name = str(state.get("name") or "").strip() or "unknown"
 
+        label_ids_raw = raw.get("labelIds")
+        if label_ids_raw is None:
+            label_ids: set[str] = set()
+        elif isinstance(label_ids_raw, list):
+            label_ids = {str(value) for value in label_ids_raw if str(value).strip()}
+        else:
+            notes.append("Linear labelIds metadata is not a list.")
+            return TaskStatus.NEEDS_DECISION, True, notes, []
+
+        completed_id = lifecycle_label_ids.get(COMPLETED_LABEL)
+        decision_id = lifecycle_label_ids.get(NEEDS_DECISION_LABEL)
+        has_completed = bool(completed_id and completed_id in label_ids)
+        has_decision = bool(decision_id and decision_id in label_ids)
+        lifecycle_tags: list[str] = []
+        if has_completed:
+            lifecycle_tags.append(COMPLETED_LABEL)
+        if has_decision:
+            lifecycle_tags.append(NEEDS_DECISION_LABEL)
+
         if state_type == "completed":
-            return TaskStatus.DONE, False, notes
+            return TaskStatus.DONE, False, notes, lifecycle_tags
         if state_type == "canceled":
-            return TaskStatus.CANCELLED, False, notes
+            return TaskStatus.CANCELLED, False, notes, lifecycle_tags
+
+        if has_completed and has_decision:
+            notes.append(
+                "Conflicting ProjectCTL Linear lifecycle labels; explicit human "
+                "decision is required."
+            )
+            return TaskStatus.NEEDS_DECISION, True, notes, lifecycle_tags
+        if has_decision:
+            notes.append(
+                "ProjectCTL marked this Linear task as needing explicit human review."
+            )
+            return TaskStatus.NEEDS_DECISION, True, notes, lifecycle_tags
+        if has_completed:
+            notes.append(
+                "ProjectCTL completion marker is present; native Linear workflow "
+                "state is preserved."
+            )
+            return TaskStatus.DONE, False, notes, lifecycle_tags
         if state_type == "started":
             notes.append(
                 f"Linear workflow state {state_name!r} is already started; "
                 "ProjectCTL observes it as running but does not own it."
             )
-            return TaskStatus.RUNNING, False, notes
+            return TaskStatus.RUNNING, False, notes, lifecycle_tags
         if state_type == "backlog":
             notes.append(
                 "Linear backlog state is planning intent, not scheduler readiness."
             )
-            return TaskStatus.PLANNED, False, notes
+            return TaskStatus.PLANNED, False, notes, lifecycle_tags
         if state_type == "unstarted":
-            return TaskStatus.READY, False, notes
+            return TaskStatus.READY, False, notes, lifecycle_tags
 
         notes.append(
             f"Unknown Linear workflow state type {state_type or 'missing'!r}; "
             "human normalization is required."
         )
-        return TaskStatus.NEEDS_DECISION, True, notes
+        return TaskStatus.NEEDS_DECISION, True, notes, lifecycle_tags
 
     @staticmethod
     def _task_id(identifier: str) -> str:
         return f"lin-{identifier}"
 
-    def _normalize(self, raw: dict[str, Any]) -> NormalizedTask:
+    def _normalize(
+        self,
+        raw: dict[str, Any],
+        *,
+        lifecycle_label_ids: dict[str, str],
+    ) -> NormalizedTask:
         external_id = str(raw.get("id") or "").strip()
         identifier = str(raw.get("identifier") or "").strip()
         title = str(raw.get("title") or "").strip()
@@ -133,7 +183,10 @@ class LinearIssuesTaskStore:
         if not title:
             title = identifier
 
-        status, human_decision, notes = self._state(raw)
+        status, human_decision, notes, lifecycle_tags = self._state(
+            raw,
+            lifecycle_label_ids=lifecycle_label_ids,
+        )
 
         priority_raw = raw.get("priority")
         priority = _PRIORITY.get(priority_raw, 5) if isinstance(priority_raw, int) else 5
@@ -196,7 +249,10 @@ class LinearIssuesTaskStore:
             resource_class=ResourceClass.UNKNOWN,
             information_gain=0,
             human_decision_required=human_decision,
-            tags=([f"linear-state:{state_name}"] if state_name else []),
+            tags=(
+                ([f"linear-state:{state_name}"] if state_name else [])
+                + lifecycle_tags
+            ),
             normalization_notes=notes,
         )
 
@@ -213,6 +269,9 @@ class LinearIssuesTaskStore:
         return f"linear:{issue_uuid}"
 
     def _build_tasks(self) -> list[NormalizedTask]:
+        lifecycle_label_ids = self.client.team_label_ids(
+            [COMPLETED_LABEL, NEEDS_DECISION_LABEL]
+        )
         raw_all = self.client.list_all()
         tasks: list[NormalizedTask] = []
         raw_by_uuid: dict[str, dict[str, Any]] = {}
@@ -228,7 +287,10 @@ class LinearIssuesTaskStore:
                 )
             if issue_uuid in raw_by_uuid:
                 raise ValueError(f"Linear issue UUID appears more than once: {issue_uuid}.")
-            task = self._normalize(raw)
+            task = self._normalize(
+                raw,
+                lifecycle_label_ids=lifecycle_label_ids,
+            )
             if task.id in task_by_id:
                 raise ValueError(
                     f"Linear issue identifier appears more than once: {identifier}."

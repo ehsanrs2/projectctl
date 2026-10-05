@@ -162,8 +162,8 @@ def test_blocked_run_unassigns_and_blocks_task(monkeypatch, tmp_path: Path):
     )
     monkeypatch.setattr(
         task_lifecycle,
-        "task_delivery_policy",
-        lambda root: SimpleNamespace(release_claim_after_decision_block=False),
+        "execution_ownership_policy",
+        lambda root: SimpleNamespace(strategy="task_native"),
     )
 
     result = task_lifecycle.reconcile_terminal_task(

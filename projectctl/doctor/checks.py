@@ -9,6 +9,8 @@ from projectctl.git.remote import normalize_git_remote_identity
 from projectctl.integrations.github import GitHubIssuesClient
 from projectctl.integrations.github.repository import parse_github_repository
 from projectctl.integrations.linear.client import LinearIssuesClient
+from projectctl.integrations.linear.lifecycle import COMPLETED_LABEL, NEEDS_DECISION_LABEL
+from projectctl.integrations.delivery import code_delivery_policy
 from projectctl.integrations.execution_ownership import resolve_execution_ownership
 from projectctl.project.bootstrap import projectctl_home
 from projectctl.project.loader import load_project_config
@@ -189,6 +191,7 @@ def check_task_store(root: Path) -> HealthCheckResult:
                 team_id=config.task_store.team,
             )
             team = client.team_info()
+            client.team_label_ids([COMPLETED_LABEL, NEEDS_DECISION_LABEL])
         except (ProviderUnavailableError, TaskStoreError) as exc:
             return HealthCheckResult(
                 check_id="task_store",
@@ -203,14 +206,17 @@ def check_task_store(root: Path) -> HealthCheckResult:
             check_id="task_store",
             status=HealthStatus.WARN,
             summary=(
-                f"Linear task authority is readable for team "
-                f"{str(team.get('name') or config.task_store.team)}; M3.2b remains read-only."
+                f"Linear task authority and lifecycle label namespace are readable for team "
+                f"{str(team.get('name') or config.task_store.team)}."
             ),
             details=[
                 "Scheduling/status reads include blocker and parent/sub-issue semantics.",
                 "Unstarted issues may become READY only when no unresolved blocker is present.",
                 "Backlog issues remain PLANNED; started issues are observational RUNNING.",
-                "Claim/release, decision-block writes and completion writes remain unsupported.",
+                "ProjectCTL lifecycle completion/decision markers are additive team-scoped labels.",
+                "Native Linear workflow state and human labels are not overwritten.",
+                "Provider-native claim/release remain separate from ProjectCTL execution ownership.",
+                "Linear label write permission is proven only by an actual lifecycle mutation.",
                 "ProjectCTL does not persist Linear credentials.",
             ],
         )
@@ -306,6 +312,82 @@ def check_execution_ownership(root: Path) -> HealthCheckResult:
             "Claim acquisition uses exact remote Git ref leases.",
             "Git hosting vendor is not part of the ownership contract.",
             "Remote write/rules policy is proven only during a real claim.",
+        ],
+    )
+
+
+
+def check_code_delivery(root: Path) -> HealthCheckResult:
+    try:
+        policy = code_delivery_policy(root)
+    except ConfigurationError as exc:
+        return HealthCheckResult(
+            check_id="code_delivery",
+            status=HealthStatus.ERROR,
+            summary=f"Code delivery configuration is invalid: {exc}",
+        )
+
+    if policy.mode == "local":
+        return HealthCheckResult(
+            check_id="code_delivery",
+            status=HealthStatus.PASS,
+            summary="Code delivery is local-only; no network publication is required.",
+            details=[
+                f"completion_evidence={policy.completion_evidence}",
+            ],
+        )
+
+    assert policy.remote_name is not None
+    assert policy.remote_identity is not None
+    try:
+        lease = RemoteRefLease(root, remote_name=policy.remote_name)
+        observed_identity = normalize_git_remote_identity(lease.remote_url())
+        if observed_identity != policy.remote_identity:
+            return HealthCheckResult(
+                check_id="code_delivery",
+                status=HealthStatus.ERROR,
+                summary="Configured delivery remote identity does not match the actual Git remote.",
+                details=[
+                    f"configured={policy.remote_identity}",
+                    f"observed={observed_identity or 'unknown'}",
+                ],
+            )
+        lease.probe_readable()
+    except TaskStoreError as exc:
+        return HealthCheckResult(
+            check_id="code_delivery",
+            status=HealthStatus.WARN,
+            summary=f"Configured delivery remote is not readable: {exc}",
+            remediation=[
+                "Verify the configured Git remote and authentication. "
+                "ProjectCTL will not infer a different delivery path."
+            ],
+        )
+
+    if policy.mode == "review_required":
+        return HealthCheckResult(
+            check_id="code_delivery",
+            status=HealthStatus.WARN,
+            summary=(
+                "Review-required delivery is configured but no PR/MR delivery adapter "
+                "is implemented yet; autonomous execution remains fail-closed."
+            ),
+            details=[
+                f"remote={policy.remote_name} -> {policy.remote_identity}",
+                "ProjectCTL will not silently fall back to direct push.",
+            ],
+        )
+
+    return HealthCheckResult(
+        check_id="code_delivery",
+        status=HealthStatus.WARN,
+        summary=(
+            f"Direct Git delivery remote is readable: "
+            f"{policy.remote_name} -> {policy.remote_identity}."
+        ),
+        details=[
+            "Publication uses exact-base force-with-lease semantics.",
+            "Remote write permission and branch/rules policy are proven only by the real publication attempt.",
         ],
     )
 

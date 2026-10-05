@@ -96,6 +96,10 @@ class CodeTransportConfig(ProjectCtlModel):
         return self
 
 
+class CodeDeliveryConfig(ProjectCtlModel):
+    mode: Literal["local", "direct_git", "review_required"] = "local"
+
+
 class ProjectPaths(ProjectCtlModel):
     project: RepoRelativePath = "docs/PROJECT.md"
     roadmap: RepoRelativePath = "docs/ROADMAP.md"
@@ -259,7 +263,7 @@ class ProjectConfigV4(ProjectCtlModel):
     model_profiles: dict[ModelProfile, ModelProfileConfig] = Field(default_factory=default_model_profiles)
 
 
-class ProjectConfig(ProjectCtlModel):
+class ProjectConfigV5(ProjectCtlModel):
     schema_kind: Literal["projectctl.project_config"] = "projectctl.project_config"
     schema_version: Literal[5] = 5
     project: ProjectIdentity
@@ -271,3 +275,30 @@ class ProjectConfig(ProjectCtlModel):
     quota: QuotaPolicy = Field(default_factory=QuotaPolicy)
     features: FeatureFlags = Field(default_factory=FeatureFlags)
     model_profiles: dict[ModelProfile, ModelProfileConfig] = Field(default_factory=default_model_profiles)
+
+
+class ProjectConfig(ProjectCtlModel):
+    schema_kind: Literal["projectctl.project_config"] = "projectctl.project_config"
+    schema_version: Literal[6] = 6
+    project: ProjectIdentity
+    task_store: TaskStoreConfig = Field(default_factory=TaskStoreConfig)
+    code_transport: CodeTransportConfig = Field(default_factory=CodeTransportConfig)
+    code_delivery: CodeDeliveryConfig = Field(default_factory=CodeDeliveryConfig)
+    paths: ProjectPaths = Field(default_factory=ProjectPaths)
+    knowledge: KnowledgeConfig = Field(default_factory=KnowledgeConfig)
+    scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
+    quota: QuotaPolicy = Field(default_factory=QuotaPolicy)
+    features: FeatureFlags = Field(default_factory=FeatureFlags)
+    model_profiles: dict[ModelProfile, ModelProfileConfig] = Field(default_factory=default_model_profiles)
+
+    @model_validator(mode="after")
+    def validate_delivery_transport(self):
+        if (
+            self.code_delivery.mode in {"direct_git", "review_required"}
+            and self.code_transport.mode != "git_remote"
+        ):
+            raise ValueError(
+                f"{self.code_delivery.mode} code delivery requires "
+                "code_transport.mode='git_remote'."
+            )
+        return self
