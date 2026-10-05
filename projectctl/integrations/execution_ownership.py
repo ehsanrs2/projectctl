@@ -6,8 +6,6 @@ from pathlib import Path
 from projectctl.core.enums import CapabilityState
 from projectctl.core.errors import ConfigurationError
 from projectctl.git.task_claim import GitRemoteTaskClaimer
-from projectctl.integrations.beads.claim import BeadsTaskClaimer
-from projectctl.integrations.beads.client import BeadsClient
 from projectctl.integrations.github.claim import GitHubTaskClaimer
 from projectctl.integrations.local_claim import LocalTaskClaimer
 from projectctl.integrations.task_authority import (
@@ -25,7 +23,11 @@ class ExecutionOwnership:
     claimer: TaskClaimer
 
 
-def resolve_execution_ownership(project_root: Path) -> ExecutionOwnership:
+def resolve_execution_ownership(
+    project_root: Path,
+    *,
+    task_authority=None,
+) -> ExecutionOwnership:
     root = project_root.resolve()
     config = load_project_config(root)
     provider = config.task_store.provider
@@ -34,7 +36,7 @@ def resolve_execution_ownership(project_root: Path) -> ExecutionOwnership:
     # Beads has a task-native local claim protocol. Code publication transport
     # does not replace that canonical task ownership primitive.
     if provider == "beads":
-        client = BeadsClient(root)
+        authority = task_authority or resolve_task_authority(root)
         return ExecutionOwnership(
             policy=ExecutionOwnershipPolicy(
                 task_provider=provider,
@@ -47,7 +49,7 @@ def resolve_execution_ownership(project_root: Path) -> ExecutionOwnership:
                     "Beads task ownership remains task-native and local.",
                 ],
             ),
-            claimer=BeadsTaskClaimer(root, client=client),
+            claimer=authority.require_claimer(),
         )
 
     if transport.mode == "local":
@@ -80,11 +82,8 @@ def resolve_execution_ownership(project_root: Path) -> ExecutionOwnership:
         and config.task_store.repository
         and remote_identity == f"github.com/{config.task_store.repository}"
     ):
-        claimer: TaskClaimer = GitHubTaskClaimer(
-            root,
-            repository=config.task_store.repository,
-            remote_name=remote_name,
-        )
+        authority = task_authority or resolve_task_authority(root)
+        claimer: TaskClaimer = authority.require_claimer()
         note = "Historical GitHub claim namespace retained for compatibility."
     else:
         claimer = GitRemoteTaskClaimer(
