@@ -175,7 +175,12 @@ class JiraCloudClient:
             raise TaskStoreError("Jira project response is missing a stable id.")
         return raw
 
-    def _validate_issue(self, raw: Any) -> dict[str, Any]:
+    def _validate_issue(
+        self,
+        raw: Any,
+        *,
+        require_project_scope: bool = True,
+    ) -> dict[str, Any]:
         if not isinstance(raw, dict):
             raise TaskStoreError("Jira search returned a non-object issue.")
         issue_id = str(raw.get("id") or "").strip()
@@ -191,10 +196,14 @@ class JiraCloudClient:
             if isinstance(project, dict)
             else ""
         )
-        if observed_project != self.project_key:
+        if not observed_project:
+            raise TaskStoreError(
+                f"Jira issue {key!r} is missing project identity metadata."
+            )
+        if require_project_scope and observed_project != self.project_key:
             raise TaskStoreError(
                 f"Jira search leaked issue {key!r} from project "
-                f"{observed_project or 'unknown'!r}; expected {self.project_key!r}."
+                f"{observed_project!r}; expected {self.project_key!r}."
             )
         return raw
 
@@ -259,6 +268,23 @@ class JiraCloudClient:
             query={"fields": ",".join(_FIELDS)},
         )
         return self._validate_issue(raw)
+
+    def show_linked(self, issue_key: str) -> dict[str, Any]:
+        """Read a linked issue on the same Jira site without project scoping.
+
+        Cross-project dependencies are allowed only after this independent read
+        proves stable issue id/key/project/status metadata. Credentials still
+        control whether the linked issue is visible.
+        """
+        key = str(issue_key).strip().upper()
+        if not key:
+            raise ValueError("Jira linked issue key must be non-empty.")
+        raw = self._api(
+            "GET",
+            f"/rest/api/3/issue/{quote(key, safe='')}",
+            query={"fields": ",".join(_FIELDS)},
+        )
+        return self._validate_issue(raw, require_project_scope=False)
 
     def issue_link_types(self) -> list[dict[str, Any]]:
         raw = self._api("GET", "/rest/api/3/issueLinkType")
