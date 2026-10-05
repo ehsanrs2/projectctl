@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M3.1d — Schema Export Authority & Drift Policy**, removing a stale checked-in schema mirror and making the deterministic public schema exporter the single implementation authority enforced by CI.
+This repository currently implements **M3.2a — Linear Read Authority**, adding authenticated Linear team snapshots through the provider-neutral Task Authority boundary while deliberately withholding execution eligibility and mutations until Linear dependency and ownership semantics are proven.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -1192,6 +1192,63 @@ drift and review noise.
 
 See ADR-020 and `docs/PROJECTCTL_BLUEPRINT.md`.
 
+### M3.2a — Linear Read Authority
+
+M3.2a adds Linear as the first post-GitHub remote task authority without assuming that GitHub's
+claim or completion semantics transfer to another provider.
+
+Configure a Linear team in **ProjectConfig v4**:
+
+```yaml
+task_store:
+  provider: linear
+  team: 9cfb482a-81e3-4154-b5b9-2c805e70a02d
+```
+
+Credentials are not stored by ProjectCTL. The read adapter accepts exactly one runtime credential:
+
+```text
+LINEAR_API_KEY       # personal API key
+LINEAR_ACCESS_TOKEN  # OAuth access token
+```
+
+The Linear GraphQL adapter:
+
+- uses the official `https://api.linear.app/graphql` endpoint
+- scopes reads to one configured team UUID
+- paginates issues with Relay-style `pageInfo.endCursor`
+- rejects GraphQL `errors` even when HTTP 200 contains partial `data`
+- validates that every returned page belongs to the configured team
+- never persists the API key or OAuth token
+
+Workflow-state normalization is intentionally conservative:
+
+```text
+completed -> done
+canceled  -> cancelled
+started   -> running (observational)
+backlog/unstarted -> planned
+unknown   -> needs_decision
+```
+
+No non-terminal Linear issue is exposed as `READY` in M3.2a. Linear supports issue
+blocking/blocked relations, but those relationships are not yet normalized into ProjectCTL's
+dependency graph. Claim/release, needs-decision mutation and completion are likewise reported as
+unsupported capabilities.
+
+This means `projectctl tasks`, status snapshots and provider inspection can read Linear, while
+the execution gate remains fail-closed.
+
+Brownfield onboarding supports:
+
+```bash
+projectctl adopt . --task-store linear --task-store-team <TEAM_UUID>
+```
+
+See ADR-021 and `docs/PROJECTCTL_BLUEPRINT.md`.
+
 Next:
 
-- **M3.2** — Additional task authorities on the shared Task Authority abstraction
+- **M3.2b — Linear Relationship & Eligibility Semantics** — normalize blocking/hierarchy
+  relationships and prove when a Linear task may become scheduler-eligible without enabling
+  mutations yet

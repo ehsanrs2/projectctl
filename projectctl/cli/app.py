@@ -75,6 +75,8 @@ def _show_plan(plan) -> None:
     typer.echo(f"\nTask store: {plan.task_store_provider or 'unresolved'}")
     if plan.task_store_repository:
         typer.echo(f"Task repository: {plan.task_store_repository}")
+    if getattr(plan, "task_store_team", None):
+        typer.echo(f"Task team: {plan.task_store_team}")
     if plan.unresolved_decisions:
         typer.echo("\nNEEDS DECISION")
         for item in plan.unresolved_decisions:
@@ -86,25 +88,38 @@ def _prompt_task_store(inspection) -> str:
     typer.echo("-" * 56)
     if "github" in inspection.detected_task_systems:
         typer.echo("  [1] Use existing GitHub Issues task system")
-        typer.echo("  [2] Introduce local Beads")
-        typer.echo("  [3] Configure later")
+        typer.echo("  [2] Use Linear (read-only in M3.2a)")
+        typer.echo("  [3] Introduce local Beads")
+        typer.echo("  [4] Configure later")
         choice = typer.prompt("Choose", default="1")
-        return {"1": "github", "2": "beads", "3": "unresolved"}.get(choice, "github")
+        return {
+            "1": "github",
+            "2": "linear",
+            "3": "beads",
+            "4": "unresolved",
+        }.get(choice, "github")
     typer.echo("  [1] Use local Beads")
-    typer.echo("  [2] Configure later")
+    typer.echo("  [2] Use Linear (read-only in M3.2a)")
+    typer.echo("  [3] Configure later")
     choice = typer.prompt("Choose", default="1")
-    return {"1": "beads", "2": "unresolved"}.get(choice, "beads")
+    return {"1": "beads", "2": "linear", "3": "unresolved"}.get(choice, "beads")
 
 
 def _validate_task_store_choice(value: str | None) -> str | None:
     if value is None:
         return None
-    allowed = {"beads", "github", "unresolved"}
+    allowed = {"beads", "github", "linear", "unresolved"}
     if value not in allowed:
         raise RepositoryContractError(
             f"Unsupported onboarding task store `{value}`. Choose one of: {', '.join(sorted(allowed))}."
         )
     return value
+
+
+def _prompt_task_store_team(provider: str | None, current: str | None) -> str | None:
+    if provider != "linear" or current is not None:
+        return current
+    return typer.prompt("Linear team UUID").strip()
 
 
 def _interaction_payload(status: str, *, inspection=None, plan=None, reason: str | None = None) -> dict:
@@ -150,6 +165,11 @@ def init_command(
         None,
         "--task-store-repository",
         help="Provider repository identity, e.g. owner/repo for GitHub Issues.",
+    ),
+    task_store_team: str | None = typer.Option(
+        None,
+        "--task-store-team",
+        help="Provider team identity, currently the Linear team UUID.",
     ),
     allow_dirty: bool = typer.Option(False, "--allow-dirty", help="Allow adoption with uncommitted changes."),
 ) -> None:
@@ -203,11 +223,17 @@ def init_command(
             selected_store = inspection.detected_task_systems[0]
         if selected_store is None and interactive:
             selected_store = _prompt_task_store(inspection)
+        if interactive:
+            task_store_team = _prompt_task_store_team(
+                selected_store,
+                task_store_team,
+            )
 
         plan = build_adoption_plan(
             path,
             task_store_provider=selected_store,
             task_store_repository=task_store_repository,
+            task_store_team=task_store_team,
         )
 
         if json_output or non_interactive:
@@ -265,6 +291,11 @@ def adopt_command(
         "--task-store-repository",
         help="Provider repository identity, e.g. owner/repo for GitHub Issues.",
     ),
+    task_store_team: str | None = typer.Option(
+        None,
+        "--task-store-team",
+        help="Provider team identity, currently the Linear team UUID.",
+    ),
     allow_dirty: bool = typer.Option(False, "--allow-dirty"),
 ) -> None:
     try:
@@ -275,10 +306,16 @@ def adopt_command(
             selected_store = inspection.detected_task_systems[0]
         if selected_store is None and interactive and not dry_run:
             selected_store = _prompt_task_store(inspection)
+        if interactive and not dry_run:
+            task_store_team = _prompt_task_store_team(
+                selected_store,
+                task_store_team,
+            )
         plan = build_adoption_plan(
             path,
             task_store_provider=selected_store,
             task_store_repository=task_store_repository,
+            task_store_team=task_store_team,
         )
 
         if dry_run:
@@ -293,10 +330,15 @@ def adopt_command(
                 typer.echo(_json(_interaction_payload("interaction_required", inspection=inspection, plan=plan, reason="unresolved decisions")))
                 raise typer.Exit(EXIT_INTERACTION_REQUIRED)
             selected_store = _prompt_task_store(inspection)
+            task_store_team = _prompt_task_store_team(
+                selected_store,
+                task_store_team,
+            )
             plan = build_adoption_plan(
                 path,
                 task_store_provider=selected_store,
                 task_store_repository=task_store_repository,
+                task_store_team=task_store_team,
             )
 
         if (json_output or non_interactive) and (not yes or (plan.dirty and not allow_dirty)):

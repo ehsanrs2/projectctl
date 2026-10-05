@@ -14,6 +14,8 @@ from projectctl.git.publication import GitRemotePublisher
 from projectctl.integrations.github.client import GitHubIssuesClient
 from projectctl.integrations.github.completion import GitHubTaskCompletionWriter
 from projectctl.integrations.github.task_store import GitHubIssuesTaskStore
+from projectctl.integrations.linear.client import LinearIssuesClient
+from projectctl.integrations.linear.task_store import LinearIssuesTaskStore
 from projectctl.ports.publication import TaskPublisher
 from projectctl.ports.task_store import (
     TaskClaimer,
@@ -120,6 +122,19 @@ def task_authority_capabilities_for_provider(
                 "Completion is gated on verified remote publication.",
             ],
         )
+    if provider == "linear":
+        return TaskAuthorityCapabilities(
+            provider="linear",
+            read=CapabilityState.SUPPORTED,
+            claim=CapabilityState.UNSUPPORTED,
+            release=CapabilityState.UNSUPPORTED,
+            block_for_decision=CapabilityState.UNSUPPORTED,
+            complete=CapabilityState.UNSUPPORTED,
+            notes=[
+                "M3.2a is read-only and deliberately not execution-ready.",
+                "Linear dependency, claim ownership, and completion semantics are deferred.",
+            ],
+        )
     raise ConfigurationError(
         f"Task authority provider {provider!r} is not implemented."
     )
@@ -141,6 +156,14 @@ def task_delivery_policy_for_provider(provider: str) -> TaskDeliveryPolicy:
             remote_name="origin",
             release_claim_after_completion=True,
             release_claim_after_decision_block=True,
+        )
+    if provider == "linear":
+        return TaskDeliveryPolicy(
+            provider="linear",
+            publication_required=False,
+            remote_name=None,
+            release_claim_after_completion=False,
+            release_claim_after_decision_block=False,
         )
     raise ConfigurationError(
         f"Task authority provider {provider!r} is not implemented."
@@ -234,6 +257,26 @@ def resolve_task_authority(
                 root,
                 repository=repository,
                 remote_name=delivery_policy.remote_name or "origin",
+            ),
+        )
+
+    if provider == "linear":
+        team_id = config.task_store.team
+        if team_id is None:
+            raise ConfigurationError(
+                "Linear task authority requires task_store.team."
+            )
+        client = LinearIssuesClient(
+            root,
+            team_id=team_id,
+        )
+        return TaskAuthority(
+            capabilities=capabilities,
+            delivery_policy=delivery_policy,
+            reader=LinearIssuesTaskStore(
+                root,
+                team_id=team_id,
+                client=client,
             ),
         )
 

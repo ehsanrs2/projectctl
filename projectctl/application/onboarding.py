@@ -16,12 +16,14 @@ def build_adoption_plan(
     *,
     task_store_provider: str | None = None,
     task_store_repository: str | None = None,
+    task_store_team: str | None = None,
 ):
     inspection = inspect_repository(path)
     return plan_adoption(
         inspection,
         task_store_provider=task_store_provider,
         task_store_repository=task_store_repository,
+        task_store_team=task_store_team,
     )
 
 
@@ -30,12 +32,14 @@ def adopt_project(
     *,
     task_store_provider: str | None = None,
     task_store_repository: str | None = None,
+    task_store_team: str | None = None,
     allow_dirty: bool = False,
 ):
     plan = build_adoption_plan(
         path,
         task_store_provider=task_store_provider,
         task_store_repository=task_store_repository,
+        task_store_team=task_store_team,
     )
     return apply_adoption(plan, allow_dirty=allow_dirty)
 

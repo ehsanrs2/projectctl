@@ -7,6 +7,7 @@ from projectctl.core.paths import resolve_inside_repo
 from projectctl.git.ref_lease import RemoteRefLease
 from projectctl.integrations.github import GitHubIssuesClient
 from projectctl.integrations.github.repository import parse_github_repository
+from projectctl.integrations.linear.client import LinearIssuesClient
 from projectctl.project.bootstrap import projectctl_home
 from projectctl.project.loader import load_project_config
 from projectctl.project.state import PROJECT_STATE_PATH, load_project_state
@@ -195,6 +196,46 @@ def check_task_store(root: Path) -> HealthCheckResult:
                 "M3.0c gates completion on exact-base remote publication.",
                 "Completion/needs-decision mutations are additive ProjectCTL labels and do not overwrite native issue close reasons.",
                 "Git write permission and repository rules are proven only by actual claim/publication attempts.",
+            ],
+        )
+
+    if provider == "linear":
+        config = load_project_config(root)
+        if not config.task_store.team:
+            return HealthCheckResult(
+                check_id="task_store",
+                status=HealthStatus.ERROR,
+                summary="Linear task authority is configured without task_store.team.",
+                remediation=["Set task_store.team to the Linear team UUID."],
+            )
+        try:
+            client = LinearIssuesClient(
+                root,
+                team_id=config.task_store.team,
+            )
+            team = client.team_info()
+        except (ProviderUnavailableError, TaskStoreError) as exc:
+            return HealthCheckResult(
+                check_id="task_store",
+                status=HealthStatus.ERROR,
+                summary=f"Linear task authority is not readable: {exc}",
+                remediation=[
+                    "Set exactly one of LINEAR_API_KEY or LINEAR_ACCESS_TOKEN, "
+                    "verify the configured team UUID, and confirm read access."
+                ],
+            )
+        return HealthCheckResult(
+            check_id="task_store",
+            status=HealthStatus.WARN,
+            summary=(
+                f"Linear task authority is readable for team "
+                f"{str(team.get('name') or config.task_store.team)} but M3.2a is read-only."
+            ),
+            details=[
+                "Scheduling/status snapshot reads are available.",
+                "Non-terminal Linear issues are not auto-eligible.",
+                "Claim/release, dependency semantics, decision blocking and completion writes are unsupported.",
+                "ProjectCTL does not persist Linear credentials.",
             ],
         )
 
