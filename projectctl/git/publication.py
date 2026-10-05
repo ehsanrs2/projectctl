@@ -7,7 +7,10 @@ from pathlib import Path
 from projectctl.core.digest import digest
 from projectctl.core.errors import IntegrationError
 from projectctl.core.time import utc_now
-from projectctl.integrations.github.repository import parse_github_repository
+from projectctl.git.remote import (
+    normalize_configured_remote_identity,
+    normalize_git_remote_identity,
+)
 from projectctl.schemas.delivery import PublicationManifest, PublicationRequest
 
 
@@ -18,11 +21,35 @@ class GitRemotePublisher:
         self,
         project_root: Path,
         *,
-        repository: str,
+        remote_identity: str | None = None,
+        repository: str | None = None,
         remote_name: str = "origin",
         timeout_seconds: int = 60,
     ):
         self.project_root = project_root.resolve()
+        if remote_identity is None:
+            if not repository:
+                raise IntegrationError(
+                    "Git publisher requires a credential-free remote identity."
+                )
+            remote_identity = (
+                repository
+                if repository.startswith("github.com/")
+                else f"github.com/{repository}"
+            )
+        try:
+            normalized_identity = normalize_configured_remote_identity(
+                remote_identity
+            )
+        except Exception as exc:
+            raise IntegrationError(
+                f"Invalid publication remote identity: {exc}"
+            ) from exc
+        if normalized_identity is None:
+            raise IntegrationError("Git publisher remote identity is empty.")
+        self.remote_identity = normalized_identity
+        # Historical compatibility for callers/tests that still inspect this
+        # attribute. New delivery code uses remote_identity.
         self.repository = repository
         self.remote_name = remote_name
         self.timeout_seconds = timeout_seconds
@@ -72,11 +99,16 @@ class GitRemotePublisher:
 
     def _assert_remote_identity(self) -> None:
         url = self._git("remote", "get-url", self.remote_name).stdout.strip()
-        observed = parse_github_repository(url)
-        if observed != self.repository:
+        try:
+            observed = normalize_git_remote_identity(url)
+        except Exception as exc:
             raise IntegrationError(
-                "Publication remote identity does not match task authority repository: "
-                f"remote={observed or 'non-github/unknown'}, configured={self.repository}."
+                f"Publication remote URL is not a supported network Git remote: {exc}"
+            ) from exc
+        if observed != self.remote_identity:
+            raise IntegrationError(
+                "Publication remote identity does not match code delivery config: "
+                f"remote={observed or 'unknown'}, configured={self.remote_identity}."
             )
 
     def observe(self, target_ref: str) -> str | None:
@@ -102,13 +134,15 @@ class GitRemotePublisher:
         return sha
 
     def _validate_request(self, request: PublicationRequest) -> str:
-        if request.provider != "github":
-            raise IntegrationError(
-                f"Git publisher cannot publish provider {request.provider!r}."
+        acceptable_identities = {self.remote_identity}
+        if self.remote_identity.startswith("github.com/"):
+            acceptable_identities.add(
+                self.remote_identity[len("github.com/") :]
             )
-        if request.repository != self.repository:
+        if request.repository not in acceptable_identities:
             raise IntegrationError(
-                "Publication request repository differs from configured GitHub authority."
+                "Publication request repository/remote identity differs from "
+                "configured code delivery remote."
             )
         if request.remote_name != self.remote_name:
             raise IntegrationError(
