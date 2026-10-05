@@ -422,6 +422,7 @@ def adopt_command(
                 code_transport_mode=selected_transport,
                 code_remote_name=git_remote_name,
                 code_remote_identity=git_remote_identity,
+                code_delivery_mode=selected_delivery,
             )
 
         if (json_output or non_interactive) and (not yes or (plan.dirty and not allow_dirty)):
