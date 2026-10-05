@@ -597,6 +597,8 @@ class JiraIssuesTaskStore:
                 if semantic == "dependency":
                     if linked_identity not in task.dependencies:
                         task.dependencies.append(linked_identity)
+                    if local is not None and task.id not in local.blocks:
+                        local.blocks.append(task.id)
                     if local is None:
                         task.normalization_notes.append(
                             f"Open external Jira blocker {linked_identity} blocks this task."
@@ -604,6 +606,10 @@ class JiraIssuesTaskStore:
                 elif semantic == "blocks":
                     if linked_identity not in task.blocks:
                         task.blocks.append(linked_identity)
+                    if local is not None and task.id not in local.dependencies:
+                        local.dependencies.append(task.id)
+                        if local.status == TaskStatus.READY:
+                            local.status = TaskStatus.BLOCKED
                 else:
                     self._mark_needs_decision(
                         task,
@@ -612,6 +618,13 @@ class JiraIssuesTaskStore:
 
             task.dependencies.sort()
             task.blocks.sort()
+            overlap = sorted(set(task.dependencies) & set(task.blocks))
+            if overlap:
+                self._mark_needs_decision(
+                    task,
+                    "Jira relationship policy produced the same issue as both a "
+                    f"dependency and a blocked target: {', '.join(overlap)}.",
+                )
             if task.status == TaskStatus.READY and task.dependencies:
                 task.status = TaskStatus.BLOCKED
 
