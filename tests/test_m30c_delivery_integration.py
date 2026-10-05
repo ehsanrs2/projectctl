@@ -167,6 +167,7 @@ def setup_ready_run(tmp_path: Path, monkeypatch):
         "remote_name": "origin",
         "remote_identity": "github.com/acme/widget",
     }
+    raw["code_delivery"] = {"mode": "direct_git"}
     config_path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
 
     (repo / ".gitignore").write_text(".projectctl/\n", encoding="utf-8")
