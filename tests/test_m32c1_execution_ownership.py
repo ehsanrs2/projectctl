@@ -14,8 +14,12 @@ from projectctl.integrations.execution_ownership import (
     resolve_execution_ownership,
 )
 from projectctl.integrations.local_claim import LocalTaskClaimer
+from projectctl.project.adoption import plan_adoption
 from projectctl.project.loader import load_project_config
+from projectctl.schema_export import PUBLIC_SCHEMAS
 from projectctl.schemas.config import CodeTransportConfig, ProjectConfig, ProjectIdentity, TaskStoreConfig
+from projectctl.schemas.onboarding import ProjectInspection
+from projectctl.schemas.ownership import ExecutionOwnershipPolicy
 from projectctl.schemas.task_claim import TaskClaimRequest
 
 
@@ -300,3 +304,59 @@ def test_project_config_v4_linear_migrates_to_local_transport(tmp_path: Path):
 
     assert config.schema_version == 5
     assert config.code_transport.mode == "local"
+
+
+def test_execution_ownership_policy_schema_is_public():
+    assert (
+        PUBLIC_SCHEMAS["execution-ownership-policy.v1.schema.json"]
+        is ExecutionOwnershipPolicy
+    )
+
+
+def test_gitlab_remote_adoption_is_independent_from_task_authority(tmp_path: Path):
+    inspection = ProjectInspection(
+        project_root=str(tmp_path),
+        classification="existing_unmanaged",
+        confidence="high",
+        repository_fingerprint="fingerprint",
+        git_remote_name="origin",
+        git_remote_identity="gitlab.com/acme/widget",
+        detected_task_systems=[],
+    )
+
+    plan = plan_adoption(
+        inspection,
+        task_store_provider="linear",
+        task_store_team=TEAM_ID,
+        code_transport_mode="git_remote",
+    )
+
+    assert plan.task_store_provider == "linear"
+    assert plan.task_store_team == TEAM_ID
+    assert plan.code_transport_mode == "git_remote"
+    assert plan.code_remote_name == "origin"
+    assert plan.code_remote_identity == "gitlab.com/acme/widget"
+    assert "code_transport_remote_identity" not in plan.unresolved_decisions
+
+
+def test_local_adoption_ignores_available_remote_when_explicit(tmp_path: Path):
+    inspection = ProjectInspection(
+        project_root=str(tmp_path),
+        classification="existing_unmanaged",
+        confidence="high",
+        repository_fingerprint="fingerprint",
+        git_remote_name="origin",
+        git_remote_identity="gitlab.com/acme/widget",
+        detected_task_systems=[],
+    )
+
+    plan = plan_adoption(
+        inspection,
+        task_store_provider="linear",
+        task_store_team=TEAM_ID,
+        code_transport_mode="local",
+    )
+
+    assert plan.code_transport_mode == "local"
+    assert plan.code_remote_name is None
+    assert plan.code_remote_identity is None
