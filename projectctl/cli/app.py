@@ -15,6 +15,7 @@ from projectctl.core.errors import (
 )
 from projectctl.doctor.service import run_doctor
 from projectctl.integrations.speckit import SpecKitBeadsImporter
+from projectctl.integrations.execution_ownership import resolve_execution_ownership
 from projectctl.integrations.task_authority import task_authority_capabilities
 from projectctl.project.adoption import apply_adoption
 from projectctl.project.bootstrap import initialize_project
@@ -436,6 +437,45 @@ def task_authority_command(
     ]:
         typer.echo(f"{name:20} {getattr(capabilities, name).value}")
     for note in capabilities.notes:
+        typer.echo(f"note: {note}")
+
+
+@app.command("execution-ownership")
+def execution_ownership_command(
+    project: Path = typer.Option(
+        Path("."),
+        "--project",
+        exists=True,
+        file_okay=False,
+        resolve_path=True,
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit ExecutionOwnershipPolicy JSON.",
+    ),
+) -> None:
+    try:
+        root = _project_root(project)
+        policy = resolve_execution_ownership(root).policy
+    except ProjectCtlError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(EXIT_TASK_STORE)
+
+    if json_output:
+        typer.echo(_json(policy))
+        return
+
+    typer.echo(f"Execution ownership: {policy.strategy}")
+    typer.echo("=" * 56)
+    typer.echo(f"task_provider        {policy.task_provider}")
+    typer.echo(f"scope                {policy.scope}")
+    typer.echo(f"transport_mode       {policy.transport_mode}")
+    if policy.remote_name:
+        typer.echo(f"remote_name          {policy.remote_name}")
+    if policy.remote_identity:
+        typer.echo(f"remote_identity      {policy.remote_identity}")
+    for note in policy.notes:
         typer.echo(f"note: {note}")
 
 
