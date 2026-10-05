@@ -108,7 +108,7 @@ class LinearIssuesTaskStore:
             label_ids = {str(value) for value in label_ids_raw if str(value).strip()}
         else:
             notes.append("Linear labelIds metadata is not a list.")
-            return TaskStatus.NEEDS_DECISION, True, notes, lifecycle_tags, []
+            return TaskStatus.NEEDS_DECISION, True, notes, []
 
         completed_id = lifecycle_label_ids.get(COMPLETED_LABEL)
         decision_id = lifecycle_label_ids.get(NEEDS_DECISION_LABEL)
@@ -160,7 +160,7 @@ class LinearIssuesTaskStore:
             f"Unknown Linear workflow state type {state_type or 'missing'!r}; "
             "human normalization is required."
         )
-        return TaskStatus.NEEDS_DECISION, True, notes
+        return TaskStatus.NEEDS_DECISION, True, notes, lifecycle_tags
 
     @staticmethod
     def _task_id(identifier: str) -> str:
