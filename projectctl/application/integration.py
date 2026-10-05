@@ -40,6 +40,7 @@ from projectctl.integrations.execution_ownership import (
     resolve_execution_ownership,
 )
 from projectctl.integrations.task_authority import resolve_task_authority
+from projectctl.project.loader import load_project_config
 from projectctl.project.locking import project_lock
 from projectctl.schemas.delivery import PublicationManifest, PublicationRequest
 from projectctl.schemas.evidence import EvidenceManifest
@@ -447,7 +448,7 @@ def _finalize_delivery(
     actor: str,
 ) -> IntegratedRun:
     policy = code_delivery_policy(root)
-    task_provider = resolve_task_authority(root).provider
+    task_provider = load_project_config(root).task_store.provider
     run_dir = root / ".projectctl" / "runs" / record.run_id
     target_after = resolve_commit(root, plan.integration_target_ref)
     if target_after != record.candidate_commit:
