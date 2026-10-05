@@ -21,7 +21,7 @@ from projectctl.core.enums import (
 )
 from projectctl.core.errors import IntegrationError
 from projectctl.git import WorktreeManager
-from projectctl.git.review import review_source_branch
+from projectctl.git.review import ReviewGitTransport, review_source_branch
 from projectctl.integrations.delivery import code_delivery_policy
 from projectctl.integrations.review.github import GitHubReviewDeliveryAdapter
 from projectctl.integrations.review.gitlab import GitLabReviewDeliveryAdapter
@@ -242,7 +242,13 @@ class FakeReviewer:
             state=self.state,
             merged_at=NOW if merged else None,
             observed_at=NOW,
-            reason=None if merged else "waiting",
+            reason=(
+                None
+                if merged
+                else "review closed without merge"
+                if self.state == "closed"
+                else "waiting"
+            ),
         )
 
     def reconcile(self, request):
