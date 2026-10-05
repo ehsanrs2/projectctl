@@ -207,47 +207,59 @@ class LinearTaskCompletionWriter:
         self._validate_evidence(evidence)
         self._assert_completion_safe(issue)
 
+        issue_id = str(issue.get("id") or "").strip()
+        decision = self._decision_label()
+        decision_id = str(decision.get("id") or "").strip()
         completed = self._completed_label()
         completed_id = str(completed.get("id") or "").strip()
-        if not completed_id:
-            raise TaskStoreError("Linear completion label has no stable id.")
+        if not decision_id or not completed_id:
+            raise TaskStoreError("Linear lifecycle labels are missing stable ids.")
 
-        issue_id = str(issue.get("id") or "").strip()
-        updated = self.client.add_issue_label(issue_id, completed_id)
-
-        # A previous needs-decision marker is ProjectCTL-owned and can be
-        # removed after verified completion without touching human labels.
-        known = self.client.team_label_ids([NEEDS_DECISION_LABEL])
-        decision_id = known.get(NEEDS_DECISION_LABEL)
-        if decision_id and decision_id in self._label_ids(updated):
-            updated = self.client.remove_issue_label(issue_id, decision_id)
+        # Fail-closed two-phase marker protocol:
+        # 1. add needs-decision guard;
+        # 2. add completed marker;
+        # 3. revalidate current provider state/relations;
+        # 4. remove guard only after success.
+        #
+        # Any crash before step 4 leaves either needs-decision alone or both
+        # ProjectCTL markers. Both shapes normalize to NEEDS_DECISION.
+        guarded = self.client.add_issue_label(issue_id, decision_id)
+        if decision_id not in self._label_ids(guarded):
+            raise TaskStoreError(
+                f"Linear task {task_id} does not contain the completion guard."
+            )
 
         try:
-            self._assert_completion_safe(updated)
-            # Re-read relations after the mutation to catch a blocker that was
-            # introduced while completion was in flight.
-            self._assert_completion_safe(self.client.show(issue_id))
-        except TaskStoreError:
-            # Fail closed remotely: add the decision marker first. If cleanup
-            # of the completion marker then fails, both lifecycle labels remain
-            # and normalization resolves the conflict to NEEDS_DECISION.
-            decision = self._decision_label()
-            decision_id = str(decision.get("id") or "").strip()
-            if decision_id:
-                self.client.add_issue_label(issue_id, decision_id)
-            if completed_id in self._label_ids(self.client.show(issue_id)):
-                self.client.remove_issue_label(issue_id, completed_id)
-            raise
+            staged = self.client.add_issue_label(issue_id, completed_id)
+            staged_ids = self._label_ids(staged)
+            if completed_id not in staged_ids or decision_id not in staged_ids:
+                raise TaskStoreError(
+                    "Linear completion staging did not preserve both ProjectCTL markers."
+                )
 
-        final = self.client.show(issue_id)
-        if completed_id not in self._label_ids(final):
-            raise TaskStoreError(
-                f"Linear task {task_id} does not contain the completion marker after mutation."
-            )
-        if self._state_type(final) == "canceled":
-            raise TaskStoreError(
-                f"Linear task {task_id} was canceled during completion."
-            )
+            current = self.client.show(issue_id)
+            current_ids = self._label_ids(current)
+            if completed_id not in current_ids or decision_id not in current_ids:
+                raise TaskStoreError(
+                    "Linear lifecycle markers changed concurrently during completion."
+                )
+            self._assert_completion_safe(current)
+
+            final = self.client.remove_issue_label(issue_id, decision_id)
+            final_ids = self._label_ids(final)
+            if completed_id not in final_ids or decision_id in final_ids:
+                raise TaskStoreError(
+                    "Linear completion could not prove the final marker state."
+                )
+            if self._state_type(final) == "canceled":
+                raise TaskStoreError(
+                    f"Linear task {task_id} was canceled during completion."
+                )
+        except Exception:
+            # Do not remove the needs-decision guard on any failure. If the
+            # completed label was already added, both markers intentionally
+            # remain and normalize to NEEDS_DECISION for deterministic recovery.
+            raise
 
     def mark_needs_decision(self, task_id: str, *, reason: str) -> None:
         del reason
