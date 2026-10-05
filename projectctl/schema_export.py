@@ -4,7 +4,7 @@ from pathlib import Path
 from projectctl.schemas.artifact import ArtifactMetadata
 from projectctl.schemas.auto import AutoRunPolicy, AutoRunReport
 from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDecision
-from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3
+from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3, ProjectConfigV4
 from projectctl.schemas.delivery import PublicationManifest, PublicationRequest, TaskDeliveryPolicy
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
 from projectctl.schemas.github_cache import GitHubCacheEntry, GitHubCacheRequest
@@ -34,7 +34,8 @@ PUBLIC_SCHEMAS = {
     "project-config.v1.schema.json": ProjectConfigV1,
     "project-config.v2.schema.json": ProjectConfigV2,
     "project-config.v3.schema.json": ProjectConfigV3,
-    "project-config.v4.schema.json": ProjectConfig,
+    "project-config.v4.schema.json": ProjectConfigV4,
+    "project-config.v5.schema.json": ProjectConfig,
     "worker-capabilities.v1.schema.json": WorkerCapabilities,
     "worker-strategy-decision.v1.schema.json": WorkerStrategyDecision,
     "quota-snapshot.v1.schema.json": QuotaSnapshotV1,
