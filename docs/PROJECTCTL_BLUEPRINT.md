@@ -285,8 +285,8 @@ flowchart TD
 
 The `Publish` stage is selected by Code Delivery policy, not Task Authority. Local delivery can
 complete from verified local integration; `direct_git` requires exact-base remote publication and
-durable observation; `review_required` is modeled but remains fail-closed until a PR/MR adapter
-can produce durable review-delivery evidence.
+durable observation; `review_required` uses supported GitHub PR / GitLab MR adapters and completes
+only after external merge plus independent exact-candidate/ancestry proof.
 
 ---
 
@@ -483,15 +483,29 @@ execution-readiness gate
          │    ↓
          │  canonical task completion from EvidenceManifest
          │
-         └─ direct_git
+         ├─ direct_git
+         │    ↓
+         │  durable PublicationRequest
+         │    ↓
+         │  exact-base remote publication
+         │    ↓
+         │  remote candidate observation
+         │    ↓
+         │  durable PublicationManifest
+         │    ↓
+         │  canonical task completion
+         │
+         └─ review_required
               ↓
-            durable PublicationRequest
+            durable ReviewRequest
               ↓
-            exact-base remote publication
+            PR/MR open → AWAITING_REVIEW
               ↓
-            remote candidate observation
+            external merge
               ↓
-            durable PublicationManifest
+            exact candidate + ancestry proof
+              ↓
+            durable ReviewReceipt
               ↓
             canonical task completion
              ↓
@@ -503,10 +517,11 @@ execution-readiness gate
 `review_required` uses durable ReviewRequest/ReviewReceipt artifacts and waits in AWAITING_REVIEW
 until an external GitHub/GitLab review merge can be independently proven.
 
-Beads, GitHub Issues, and Linear may use local or direct-Git delivery where their lifecycle and
-ownership semantics are supported. GitHub completion remains direct-publication-gated today.
-Linear can execute with local or direct-Git delivery using independent ownership and crash-safe
-additive lifecycle markers. Review-required repositories remain fail-closed.
+Beads, GitHub Issues, Linear and Jira may execute when their configured ownership and delivery
+modes are supported. GitHub completion requires remote-visible delivery evidence. Linear uses
+crash-safe additive lifecycle labels; Jira uses crash-safe filtered-CAS lifecycle properties.
+Review-required GitHub.com/GitLab.com repositories wait for external review/merge and remain
+fail-closed on unsupported hosts or unprovable merge transformations.
 
 ---
 
