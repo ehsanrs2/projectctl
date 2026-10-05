@@ -79,6 +79,9 @@ class RelationshipClient:
     def list_inverse_relations(self, issue_id):
         return list(self._inverse.get(issue_id, []))
 
+    def team_label_ids(self, _names):
+        return {}
+
     def version(self):
         return "linear-graphql-v2-test"
 
