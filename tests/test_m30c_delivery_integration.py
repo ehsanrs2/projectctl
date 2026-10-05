@@ -1,5 +1,6 @@
 import json
 import subprocess
+from types import SimpleNamespace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -327,8 +328,17 @@ def test_github_delivery_completes_only_after_publication_and_releases_claim(
         lambda root: authority,
     )
     monkeypatch.setattr(
-        "projectctl.application.integration.task_delivery_policy",
-        lambda root: authority.delivery_policy,
+        "projectctl.application.integration.resolve_code_delivery",
+        lambda root: SimpleNamespace(
+            policy=SimpleNamespace(
+                publication_required=True,
+                supported=True,
+                mode="direct_git",
+                remote_name="origin",
+                remote_identity="github.com/acme/widget",
+            ),
+            publisher=publisher,
+        ),
     )
     monkeypatch.setattr(
         "projectctl.application.integration._completion_writer",
@@ -366,8 +376,17 @@ def test_post_completion_claim_conflict_does_not_rewrite_task_semantics(
         lambda root: authority,
     )
     monkeypatch.setattr(
-        "projectctl.application.integration.task_delivery_policy",
-        lambda root: authority.delivery_policy,
+        "projectctl.application.integration.resolve_code_delivery",
+        lambda root: SimpleNamespace(
+            policy=SimpleNamespace(
+                publication_required=True,
+                supported=True,
+                mode="direct_git",
+                remote_name="origin",
+                remote_identity="github.com/acme/widget",
+            ),
+            publisher=publisher,
+        ),
     )
     monkeypatch.setattr(
         "projectctl.application.integration._completion_writer",
