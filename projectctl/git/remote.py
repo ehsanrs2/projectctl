@@ -50,3 +50,29 @@ def normalize_git_remote_identity(value: str | None) -> str | None:
     if not host or not path or ".." in path.split("/"):
         raise TaskStoreError(f"Invalid Git remote identity: {value!r}.")
     return f"{host}/{path}"
+
+
+def normalize_configured_remote_identity(value: str | None) -> str | None:
+    """Normalize an already credential-free host/path remote identity."""
+    if value is None:
+        return None
+    raw = str(value).strip().rstrip("/")
+    if not raw:
+        return None
+    if "://" in raw or "@" in raw or ":" in raw.split("/", 1)[0]:
+        raise TaskStoreError(
+            "Configured Git remote identity must use host/path without scheme or credentials."
+        )
+    if "/" not in raw:
+        raise TaskStoreError(
+            "Configured Git remote identity must use host/path."
+        )
+    host, path = raw.split("/", 1)
+    host = host.strip().casefold()
+    path = path.strip().lstrip("/")
+    if path.endswith(".git"):
+        path = path[:-4]
+    path = "/".join(part for part in path.split("/") if part)
+    if not host or not path or ".." in path.split("/"):
+        raise TaskStoreError(f"Invalid configured Git remote identity: {value!r}.")
+    return f"{host}/{path}"
