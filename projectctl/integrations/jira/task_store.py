@@ -386,6 +386,7 @@ class JiraIssuesTaskStore:
     def _build_tasks(self) -> list[NormalizedTask]:
         raw_all = self.client.list_all()
         tasks: list[NormalizedTask] = []
+        external_issue_cache: dict[str, dict[str, Any]] = {}
         by_key: dict[str, NormalizedTask] = {}
         by_external_id: dict[str, NormalizedTask] = {}
         raw_by_key: dict[str, dict[str, Any]] = {}
@@ -546,15 +547,47 @@ class JiraIssuesTaskStore:
                         )
                         continue
                 else:
+                    try:
+                        current_external = external_issue_cache.get(linked_id)
+                        if current_external is None:
+                            current_external = self.client.show_linked(linked_key)
+                            external_issue_cache[linked_id] = current_external
+                    except Exception as exc:
+                        self._mark_needs_decision(
+                            task,
+                            f"Jira external linked issue {linked_key} could not be "
+                            f"revalidated safely: {exc}",
+                        )
+                        continue
+
+                    current_id = str(current_external.get("id") or "").strip()
+                    current_key = str(current_external.get("key") or "").strip().upper()
+                    if current_id != linked_id or current_key != linked_key:
+                        self._mark_needs_decision(
+                            task,
+                            f"Jira external linked issue {linked_key} changed stable "
+                            "id/key during revalidation.",
+                        )
+                        continue
+
                     embedded_terminal = self._linked_terminal(linked)
-                    if embedded_terminal is None:
+                    current_terminal = self._linked_terminal(current_external)
+                    if current_terminal is None:
                         self._mark_needs_decision(
                             task,
                             f"Jira external linked issue {linked_key} has no "
-                            "trustworthy status category.",
+                            "trustworthy current status category.",
                         )
                         continue
-                    is_terminal = embedded_terminal
+                    if (
+                        embedded_terminal is not None
+                        and embedded_terminal != current_terminal
+                    ):
+                        task.normalization_notes.append(
+                            f"Jira external linked issue {linked_key} embedded status "
+                            "was stale; current linked-issue read is authoritative."
+                        )
+                    is_terminal = current_terminal
                     linked_identity = self._external_identity(linked_id)
 
                 if is_terminal:
