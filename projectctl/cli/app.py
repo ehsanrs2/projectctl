@@ -17,6 +17,7 @@ from projectctl.doctor.service import run_doctor
 from projectctl.integrations.speckit import SpecKitBeadsImporter
 from projectctl.integrations.delivery import code_delivery_policy
 from projectctl.integrations.execution_ownership import resolve_execution_ownership
+from projectctl.integrations.jira.client import JiraCloudClient
 from projectctl.integrations.task_authority import task_authority_capabilities
 from projectctl.project.adoption import apply_adoption
 from projectctl.project.bootstrap import initialize_project
@@ -586,6 +587,75 @@ def task_authority_command(
         typer.echo(f"{name:20} {getattr(capabilities, name).value}")
     for note in capabilities.notes:
         typer.echo(f"note: {note}")
+
+
+@app.command("jira-metadata")
+def jira_metadata_command(
+    project: Path = typer.Option(
+        Path("."),
+        "--project",
+        exists=True,
+        file_okay=False,
+        resolve_path=True,
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit Jira status/link metadata as JSON.",
+    ),
+) -> None:
+    try:
+        root = _project_root(project)
+        config = load_project_config(root)
+        if config.task_store.provider != "jira":
+            raise TaskStoreError(
+                "jira-metadata requires task_store.provider='jira'."
+            )
+        if not config.task_store.site or not config.task_store.project:
+            raise TaskStoreError(
+                "Jira task authority requires task_store.site and task_store.project."
+            )
+        client = JiraCloudClient(
+            root,
+            site=config.task_store.site,
+            project_key=config.task_store.project,
+        )
+        statuses = client.statuses()
+        link_types = client.issue_link_types()
+        payload = {
+            "site": client.site,
+            "project": client.project_key,
+            "statuses": statuses,
+            "issue_link_types": link_types,
+        }
+    except ProjectCtlError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(EXIT_TASK_STORE)
+
+    if json_output:
+        typer.echo(_json(payload))
+        return
+
+    typer.echo(f"Jira metadata — {payload['site']} / {payload['project']}")
+    typer.echo("=" * 72)
+    typer.echo("Statuses")
+    for item in statuses:
+        category = item.get("statusCategory")
+        if isinstance(category, dict):
+            category = category.get("key") or category.get("name")
+        typer.echo(
+            f"  {str(item.get('id') or ''):12} "
+            f"{str(item.get('name') or ''):24} "
+            f"category={str(category or 'unknown')}"
+        )
+    typer.echo("\nIssue link types")
+    for item in link_types:
+        typer.echo(
+            f"  {str(item.get('id') or ''):12} "
+            f"{str(item.get('name') or ''):18} "
+            f"inward={str(item.get('inward') or '')!r} "
+            f"outward={str(item.get('outward') or '')!r}"
+        )
 
 
 @app.command("execution-ownership")
