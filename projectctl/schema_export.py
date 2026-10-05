@@ -4,7 +4,7 @@ from pathlib import Path
 from projectctl.schemas.artifact import ArtifactMetadata
 from projectctl.schemas.auto import AutoRunPolicy, AutoRunReport
 from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDecision
-from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3, ProjectConfigV4, ProjectConfigV5, ProjectConfigV6
+from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3, ProjectConfigV4, ProjectConfigV5, ProjectConfigV6, ProjectConfigV7
 from projectctl.schemas.ownership import ExecutionOwnershipPolicy
 from projectctl.schemas.delivery import (
     CodeDeliveryPolicy,
@@ -58,7 +58,8 @@ PUBLIC_SCHEMAS = {
     "project-config.v4.schema.json": ProjectConfigV4,
     "project-config.v5.schema.json": ProjectConfigV5,
     "project-config.v6.schema.json": ProjectConfigV6,
-    "project-config.v7.schema.json": ProjectConfig,
+    "project-config.v7.schema.json": ProjectConfigV7,
+    "project-config.v8.schema.json": ProjectConfig,
     "worker-capabilities.v1.schema.json": WorkerCapabilities,
     "worker-strategy-decision.v1.schema.json": WorkerStrategyDecision,
     "quota-snapshot.v1.schema.json": QuotaSnapshotV1,

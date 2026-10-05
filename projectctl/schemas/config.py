@@ -104,9 +104,42 @@ def _validate_jira_project(value: str) -> str:
 JiraProjectKey = Annotated[str, AfterValidator(_validate_jira_project)]
 
 
-class TaskStoreConfig(TaskStoreConfigV4):
+class TaskStoreConfigV5(TaskStoreConfigV4):
     site: JiraSite | None = None
     project: JiraProjectKey | None = None
+
+
+class JiraReadyStatus(ProjectCtlModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+
+
+class JiraLinkRule(ProjectCtlModel):
+    type_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    inward_label: str = Field(min_length=1)
+    outward_label: str = Field(min_length=1)
+    inward: Literal["dependency", "blocks", "ignore"]
+    outward: Literal["dependency", "blocks", "ignore"]
+
+
+class JiraWorkflowPolicy(ProjectCtlModel):
+    ready_statuses: list[JiraReadyStatus] = Field(default_factory=list)
+    link_rules: list[JiraLinkRule] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_unique_ids(self):
+        status_ids = [value.id for value in self.ready_statuses]
+        if len(status_ids) != len(set(status_ids)):
+            raise ValueError("Jira ready status ids must be unique.")
+        link_ids = [value.type_id for value in self.link_rules]
+        if len(link_ids) != len(set(link_ids)):
+            raise ValueError("Jira link rule type_ids must be unique.")
+        return self
+
+
+class TaskStoreConfig(TaskStoreConfigV5):
+    jira_policy: JiraWorkflowPolicy = Field(default_factory=JiraWorkflowPolicy)
 
 
 class CodeTransportConfig(ProjectCtlModel):
@@ -338,9 +371,41 @@ class ProjectConfigV6(ProjectCtlModel):
         return self
 
 
-class ProjectConfig(ProjectCtlModel):
+class ProjectConfigV7(ProjectCtlModel):
     schema_kind: Literal["projectctl.project_config"] = "projectctl.project_config"
     schema_version: Literal[7] = 7
+    project: ProjectIdentity
+    task_store: TaskStoreConfigV5 = Field(default_factory=TaskStoreConfigV5)
+    code_transport: CodeTransportConfig = Field(default_factory=CodeTransportConfig)
+    code_delivery: CodeDeliveryConfig = Field(default_factory=CodeDeliveryConfig)
+    paths: ProjectPaths = Field(default_factory=ProjectPaths)
+    knowledge: KnowledgeConfig = Field(default_factory=KnowledgeConfig)
+    scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
+    quota: QuotaPolicy = Field(default_factory=QuotaPolicy)
+    features: FeatureFlags = Field(default_factory=FeatureFlags)
+    model_profiles: dict[ModelProfile, ModelProfileConfig] = Field(default_factory=default_model_profiles)
+
+    @model_validator(mode="after")
+    def validate_project_config(self):
+        if (
+            self.code_delivery.mode in {"direct_git", "review_required"}
+            and self.code_transport.mode != "git_remote"
+        ):
+            raise ValueError(
+                f"{self.code_delivery.mode} code delivery requires "
+                "code_transport.mode='git_remote'."
+            )
+        if self.task_store.provider == "jira":
+            if not self.task_store.site or not self.task_store.project:
+                raise ValueError(
+                    "Jira task authority requires task_store.site and task_store.project."
+                )
+        return self
+
+
+class ProjectConfig(ProjectCtlModel):
+    schema_kind: Literal["projectctl.project_config"] = "projectctl.project_config"
+    schema_version: Literal[8] = 8
     project: ProjectIdentity
     task_store: TaskStoreConfig = Field(default_factory=TaskStoreConfig)
     code_transport: CodeTransportConfig = Field(default_factory=CodeTransportConfig)
@@ -367,4 +432,11 @@ class ProjectConfig(ProjectCtlModel):
                 raise ValueError(
                     "Jira task authority requires task_store.site and task_store.project."
                 )
+        elif (
+            self.task_store.jira_policy.ready_statuses
+            or self.task_store.jira_policy.link_rules
+        ):
+            raise ValueError(
+                "task_store.jira_policy is only valid with provider='jira'."
+            )
         return self

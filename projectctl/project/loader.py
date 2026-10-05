@@ -4,7 +4,7 @@ import yaml
 from pydantic import ValidationError
 
 from projectctl.core.errors import ConfigurationError
-from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3, ProjectConfigV4, ProjectConfigV5, ProjectConfigV6
+from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3, ProjectConfigV4, ProjectConfigV5, ProjectConfigV6, ProjectConfigV7
 
 
 def _delivery_for_legacy(provider: str, repository: str | None, code_transport: dict) -> dict:
@@ -28,17 +28,22 @@ def load_project_config(project_root: Path) -> ProjectConfig:
             raise ConfigurationError("Project config must be a YAML mapping.")
 
         version = raw.get("schema_version", 1)
-        if version == 7:
+        if version == 8:
             return ProjectConfig.model_validate(raw)
+        if version == 7:
+            legacy = ProjectConfigV7.model_validate(raw)
+            upgraded = legacy.model_dump(mode="python")
+            upgraded["schema_version"] = 8
+            return ProjectConfig.model_validate(upgraded)
         if version == 6:
             legacy = ProjectConfigV6.model_validate(raw)
             upgraded = legacy.model_dump(mode="python")
-            upgraded["schema_version"] = 7
+            upgraded["schema_version"] = 8
             return ProjectConfig.model_validate(upgraded)
         if version == 5:
             legacy = ProjectConfigV5.model_validate(raw)
             upgraded = legacy.model_dump(mode="python")
-            upgraded["schema_version"] = 7
+            upgraded["schema_version"] = 8
             upgraded["code_delivery"] = _delivery_for_legacy(
                 legacy.task_store.provider,
                 legacy.task_store.repository,
@@ -48,7 +53,7 @@ def load_project_config(project_root: Path) -> ProjectConfig:
         if version == 4:
             legacy = ProjectConfigV4.model_validate(raw)
             upgraded = legacy.model_dump(mode="python")
-            upgraded["schema_version"] = 7
+            upgraded["schema_version"] = 8
             if legacy.task_store.provider == "github" and legacy.task_store.repository:
                 upgraded["code_transport"] = {
                     "mode": "git_remote",
@@ -66,7 +71,7 @@ def load_project_config(project_root: Path) -> ProjectConfig:
         if version == 3:
             legacy = ProjectConfigV3.model_validate(raw)
             upgraded = legacy.model_dump(mode="python")
-            upgraded["schema_version"] = 7
+            upgraded["schema_version"] = 8
             upgraded["task_store"] = {
                 "provider": legacy.task_store.provider,
                 "repository": legacy.task_store.repository,
@@ -90,7 +95,7 @@ def load_project_config(project_root: Path) -> ProjectConfig:
         if version == 2:
             legacy = ProjectConfigV2.model_validate(raw)
             upgraded = legacy.model_dump(mode="python")
-            upgraded["schema_version"] = 7
+            upgraded["schema_version"] = 8
             upgraded["task_store"] = {
                 "provider": legacy.task_store.provider,
                 "repository": legacy.task_store.repository,
@@ -114,7 +119,7 @@ def load_project_config(project_root: Path) -> ProjectConfig:
         if version == 1:
             legacy = ProjectConfigV1.model_validate(raw)
             upgraded = legacy.model_dump(mode="python")
-            upgraded["schema_version"] = 7
+            upgraded["schema_version"] = 8
             upgraded["task_store"] = {
                 "provider": legacy.task_store.provider,
                 "repository": None,

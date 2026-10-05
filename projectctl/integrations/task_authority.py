@@ -148,9 +148,9 @@ def task_authority_capabilities_for_provider(
             block_for_decision=CapabilityState.UNSUPPORTED,
             complete=CapabilityState.UNSUPPORTED,
             notes=[
-                "M3.3a provides Jira Cloud project-scoped read authority only.",
-                "Workflow readiness, dependency semantics, lifecycle writes, and provider-native ownership remain unproven.",
-                "Autonomous execution therefore remains fail-closed for Jira tasks.",
+                "M3.3a provides Jira Cloud project-scoped read authority.",
+                "M3.3b adds explicit status-id readiness and pinned issue-link dependency semantics.",
+                "Lifecycle writes and provider-native ownership remain unsupported, so autonomous execution is still fail-closed.",
             ],
         )
     raise ConfigurationError(
@@ -330,6 +330,7 @@ def resolve_task_authority(
                 root,
                 site=site,
                 project_key=project_key,
+                policy=config.task_store.jira_policy,
                 client=client,
             ),
         )
