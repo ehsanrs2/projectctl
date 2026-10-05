@@ -189,7 +189,8 @@ class JiraIssuesTaskStore:
             if ready is None:
                 notes.append(
                     f"Jira status {status_name!r} is not explicitly configured as "
-                    "scheduler-ready."
+                    "scheduler-ready; ProjectCTL does not infer scheduler readiness "
+                    "from Jira workflow categories."
                 )
                 return TaskStatus.PLANNED, False, notes
             if ready.name != status_name:
