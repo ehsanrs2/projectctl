@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from projectctl.core.digest import digest
@@ -60,13 +61,15 @@ class LocalTaskClaimer:
         with project_lock(self.project_root, "local-task-claim-op"):
             current = self._read(path)
             if current is None:
-                payload = json.dumps(expected, sort_keys=True, separators=(",", ":")) + "\n"
-                fd = path.open("x", encoding="utf-8")
+                payload = (
+                    json.dumps(expected, sort_keys=True, separators=(",", ":")) + "\n"
+                ).encode("utf-8")
+                fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
                 try:
-                    fd.write(payload)
-                    fd.flush()
+                    os.write(fd, payload)
+                    os.fsync(fd)
                 finally:
-                    fd.close()
+                    os.close(fd)
                 acquired = True
                 reason = None
             elif digest(current) == expected_digest:
