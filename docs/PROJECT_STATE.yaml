@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Make Jira execution-capable without overwriting native workflow state by using filtered compare-and-set lifecycle properties bound to durable ProjectCTL evidence.
+current_goal: Establish account-global execution admission so independent projects sharing one quota account cannot concurrently over-admit quota-consuming worker turns.
 active_milestone:
-  id: M3.3c
-  title: Jira CAS Lifecycle
+  id: M4.0a
+  title: Account-Global Execution Admission
   aliases:
-    - Jira Additive Completion
-    - Jira Issue Property CAS
-    - Jira Crash-Safe Lifecycle
+    - Global Quota Admission Lease
+    - Cross-Project Execution Gate
+    - Account Worker-Turn Admission
 updated_at: null
