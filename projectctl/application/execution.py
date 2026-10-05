@@ -42,9 +42,9 @@ from projectctl.core.errors import (
 )
 from projectctl.core.time import utc_now
 from projectctl.git import WorktreeInfo, WorktreeManager, current_branch, resolve_commit
-from projectctl.integrations.task_authority import (
-    require_task_authority_execution_ready,
-    resolve_task_authority,
+from projectctl.integrations.execution_ownership import (
+    require_project_execution_ready,
+    resolve_execution_ownership,
 )
 from projectctl.project.loader import load_project_config
 from projectctl.project.locking import project_lock
@@ -286,11 +286,11 @@ def _validate_plan_inputs(project_root: Path, plan: ExecutionPlan) -> RunTermina
 
 
 def _claimer(project_root: Path):
-    return resolve_task_authority(project_root).require_claimer()
+    return resolve_execution_ownership(project_root).claimer
 
 
 def _assert_task_store_execution_capable(project_root: Path) -> None:
-    require_task_authority_execution_ready(project_root)
+    require_project_execution_ready(project_root)
 
 
 def prepare_next_run(
