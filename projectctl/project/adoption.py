@@ -22,6 +22,7 @@ from projectctl.project.bootstrap import _global_init, _slug, projectctl_home
 from projectctl.project.inspection import inspect_repository
 from projectctl.project.state import PROJECT_STATE_PATH, initial_project_state, write_project_state
 from projectctl.schemas.config import (
+    CodeTransportConfig,
     KnowledgeConfig,
     KnowledgeRoleBinding,
     ProjectConfig,
@@ -233,13 +234,24 @@ def apply_adoption(plan: AdoptionPlan, *, allow_dirty: bool = False) -> Adoption
             for name in ["runs", "cache", "locks"]:
                 (staged_ctl / name).mkdir()
 
+            provider = plan.task_store_provider or "unresolved"
+            if provider == "github" and plan.task_store_repository:
+                code_transport = CodeTransportConfig(
+                    mode="git_remote",
+                    remote_name="origin",
+                    remote_identity=f"github.com/{plan.task_store_repository}",
+                )
+            else:
+                code_transport = CodeTransportConfig(mode="local")
+
             config = ProjectConfig(
                 project=ProjectIdentity(id=_slug(root.name), name=root.name),
                 task_store=TaskStoreConfig(
-                    provider=plan.task_store_provider or "unresolved",
+                    provider=provider,
                     repository=plan.task_store_repository,
                     team=plan.task_store_team,
                 ),
+                code_transport=code_transport,
                 knowledge=_knowledge_from_plan(plan),
             )
             (staged_ctl / "config.yaml").write_text(
