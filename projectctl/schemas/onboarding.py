@@ -139,7 +139,7 @@ class AdoptionPlanV3(ProjectCtlModel):
     conflicts: list[str] = Field(default_factory=list)
 
 
-class AdoptionPlan(ProjectCtlModel):
+class AdoptionPlanV4(ProjectCtlModel):
     schema_kind: Literal["projectctl.adoption_plan"] = "projectctl.adoption_plan"
     schema_version: Literal[4] = 4
 
@@ -158,6 +158,30 @@ class AdoptionPlan(ProjectCtlModel):
     code_transport_mode: Literal["local", "git_remote"] = "local"
     code_remote_name: str | None = None
     code_remote_identity: str | None = None
+    unresolved_decisions: list[str] = Field(default_factory=list)
+    conflicts: list[str] = Field(default_factory=list)
+
+
+class AdoptionPlan(ProjectCtlModel):
+    schema_kind: Literal["projectctl.adoption_plan"] = "projectctl.adoption_plan"
+    schema_version: Literal[5] = 5
+
+    project_root: str
+    created_at: AwareDatetime
+    baseline_commit: str | None = None
+    repository_fingerprint: str
+    dirty: bool = False
+
+    preserve: list[RepoRelativePath] = Field(default_factory=list)
+    create: list[RepoRelativePath] = Field(default_factory=list)
+    knowledge_bindings: list[KnowledgeBinding] = Field(default_factory=list)
+    task_store_provider: str | None = None
+    task_store_repository: str | None = None
+    task_store_team: str | None = None
+    code_transport_mode: Literal["local", "git_remote"] = "local"
+    code_remote_name: str | None = None
+    code_remote_identity: str | None = None
+    code_delivery_mode: Literal["local", "direct_git", "review_required"] = "local"
     unresolved_decisions: list[str] = Field(default_factory=list)
     conflicts: list[str] = Field(default_factory=list)
 
@@ -213,7 +237,7 @@ class AdoptionManifestV3(ProjectCtlModel):
     unresolved_decisions: list[str] = Field(default_factory=list)
 
 
-class AdoptionManifest(ProjectCtlModel):
+class AdoptionManifestV4(ProjectCtlModel):
     schema_kind: Literal["projectctl.adoption_manifest"] = "projectctl.adoption_manifest"
     schema_version: Literal[4] = 4
 
@@ -231,5 +255,27 @@ class AdoptionManifest(ProjectCtlModel):
     code_transport_mode: Literal["local", "git_remote"] = "local"
     code_remote_name: str | None = None
     code_remote_identity: str | None = None
+    unresolved_decisions: list[str] = Field(default_factory=list)
+
+
+class AdoptionManifest(ProjectCtlModel):
+    schema_kind: Literal["projectctl.adoption_manifest"] = "projectctl.adoption_manifest"
+    schema_version: Literal[5] = 5
+
+    mode: Literal["brownfield"] = "brownfield"
+    adopted_at: AwareDatetime
+    baseline_commit: str | None = None
+    repository_fingerprint: str
+
+    preserved: list[RepoRelativePath] = Field(default_factory=list)
+    created: list[RepoRelativePath] = Field(default_factory=list)
+    knowledge_bindings: list[KnowledgeBinding] = Field(default_factory=list)
+    task_store_provider: str | None = None
+    task_store_repository: str | None = None
+    task_store_team: str | None = None
+    code_transport_mode: Literal["local", "git_remote"] = "local"
+    code_remote_name: str | None = None
+    code_remote_identity: str | None = None
+    code_delivery_mode: Literal["local", "direct_git", "review_required"] = "local"
     unresolved_decisions: list[str] = Field(default_factory=list)
 
