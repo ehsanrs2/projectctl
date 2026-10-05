@@ -31,11 +31,15 @@ from projectctl.core.errors import (
 )
 from projectctl.core.time import utc_now
 from projectctl.git import WorktreeManager, current_branch, resolve_commit
-from projectctl.integrations.execution_ownership import resolve_execution_ownership
-from projectctl.integrations.task_authority import (
-    resolve_task_authority,
-    task_delivery_policy,
+from projectctl.integrations.delivery import (
+    code_delivery_policy,
+    resolve_code_delivery,
 )
+from projectctl.integrations.execution_ownership import (
+    execution_ownership_policy,
+    resolve_execution_ownership,
+)
+from projectctl.integrations.task_authority import resolve_task_authority
 from projectctl.project.locking import project_lock
 from projectctl.schemas.delivery import PublicationManifest, PublicationRequest
 from projectctl.schemas.evidence import EvidenceManifest
@@ -186,8 +190,8 @@ def _mark_stale_target(
             record.task_id,
             reason=reason,
         )
-        policy = task_delivery_policy(store.project_root)
-        if policy.release_claim_after_decision_block:
+        ownership = execution_ownership_policy(store.project_root)
+        if ownership.strategy != "task_native":
             release_task_for_retry(
                 store.project_root,
                 store=store,
@@ -319,9 +323,14 @@ def _ensure_publication(
     evidence: EvidenceManifest,
     actor: str,
 ):
-    policy = task_delivery_policy(root)
+    delivery = resolve_code_delivery(root)
+    policy = delivery.policy
     if not policy.publication_required:
         return None
+    if not policy.supported or delivery.publisher is None:
+        raise IntegrationError(
+            f"Code delivery mode {policy.mode!r} has no supported publication adapter."
+        )
     authority = resolve_task_authority(root)
 
     durable_claim = load_durable_claim(
@@ -372,7 +381,7 @@ def _ensure_publication(
         remote_name=remote_name,
         repository=claim.repository,
     )
-    publisher = authority.require_publisher()
+    publisher = delivery.publisher
 
     durable_publication = load_publication_manifest(
         root,
@@ -437,7 +446,8 @@ def _finalize_delivery(
     target_before: str,
     actor: str,
 ) -> IntegratedRun:
-    policy = task_delivery_policy(root)
+    policy = code_delivery_policy(root)
+    task_provider = resolve_task_authority(root).provider
     run_dir = root / ".projectctl" / "runs" / record.run_id
     target_after = resolve_commit(root, plan.integration_target_ref)
     if target_after != record.candidate_commit:
@@ -482,12 +492,13 @@ def _finalize_delivery(
             {
                 "evidence_path": completion_evidence.path,
                 "evidence_digest": completion_evidence.digest,
-                "provider": policy.provider,
+                "provider": task_provider,
             },
         )
 
     claim_released = False
-    if policy.release_claim_after_completion:
+    ownership_policy = execution_ownership_policy(root)
+    if ownership_policy.strategy != "task_native":
         authority = resolve_task_authority(root)
         durable_claim = load_durable_claim(
             root,
