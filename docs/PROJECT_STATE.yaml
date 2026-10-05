@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Make Jira scheduler eligibility explicit and fail-closed by pinning READY statuses and issue-link direction semantics, including safe cross-project blocker revalidation.
+current_goal: Make Jira execution-capable without overwriting native workflow state by using filtered compare-and-set lifecycle properties bound to durable ProjectCTL evidence.
 active_milestone:
-  id: M3.3b
-  title: Jira Relationship & Workflow Eligibility
+  id: M3.3c
+  title: Jira CAS Lifecycle
   aliases:
-    - Jira Dependency Semantics
-    - Jira READY Policy
-    - Cross-Project Jira Blockers
+    - Jira Additive Completion
+    - Jira Issue Property CAS
+    - Jira Crash-Safe Lifecycle
 updated_at: null
