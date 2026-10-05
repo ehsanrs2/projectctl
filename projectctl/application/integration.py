@@ -331,7 +331,10 @@ def _ensure_publication(
     )
     assert durable_claim is not None
     _, claim = durable_claim
-    claimer = resolve_execution_ownership(root).claimer
+    claimer = resolve_execution_ownership(
+        root,
+        task_authority=authority,
+    ).claimer
 
     completion_already_recorded = any(
         event.event_type == "task.completion.observed"
@@ -494,7 +497,10 @@ def _finalize_delivery(
         assert durable_claim is not None
         _, claim = durable_claim
         try:
-            resolve_execution_ownership(root).claimer.release(claim)
+            resolve_execution_ownership(
+                root,
+                task_authority=resolve_task_authority(root),
+            ).claimer.release(claim)
             record_claim_release(store, claim)
             claim_released = True
         except ClaimConflictError as exc:
