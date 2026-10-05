@@ -13,7 +13,7 @@ from projectctl.integrations.linear.lifecycle import (
     NEEDS_DECISION_COLOR,
     NEEDS_DECISION_LABEL,
 )
-from projectctl.schemas.delivery import PublicationManifest
+from projectctl.schemas.delivery import PublicationManifest, ReviewReceipt
 from projectctl.schemas.evidence import EvidenceManifest
 from projectctl.schemas.execution import EvidenceReference
 
@@ -103,6 +103,16 @@ class LinearTaskCompletionWriter:
                     raise TaskStoreError(
                         "Linear completion requires proof that the exact candidate "
                         "is visible on the configured publication target."
+                    )
+            elif schema_kind == "projectctl.review_receipt":
+                manifest = ReviewReceipt.model_validate(payload)
+                if (
+                    not manifest.delivery_complete
+                    or manifest.state != "merged"
+                    or manifest.head_commit != manifest.candidate_commit
+                ):
+                    raise TaskStoreError(
+                        "Linear completion requires a merged review bound to the exact candidate."
                     )
             else:
                 raise TaskStoreError(
