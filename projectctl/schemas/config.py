@@ -9,6 +9,28 @@ from projectctl.schemas.base import ProjectCtlModel, Ratio
 RepoRelativePath = Annotated[str, AfterValidator(validate_repo_path)]
 
 
+def _validate_remote_identity(value: str) -> str:
+    raw = str(value).strip().rstrip("/")
+    if "://" in raw or "@" in raw:
+        raise ValueError(
+            "remote_identity must be credential-free host/path, not a Git URL."
+        )
+    if "/" not in raw:
+        raise ValueError("remote_identity must use host/path.")
+    host, path = raw.split("/", 1)
+    host = host.strip().casefold()
+    path = path.strip().lstrip("/")
+    if path.endswith(".git"):
+        path = path[:-4]
+    path = "/".join(part for part in path.split("/") if part)
+    if not host or not path or ".." in path.split("/"):
+        raise ValueError("remote_identity is invalid.")
+    return f"{host}/{path}"
+
+
+CodeRemoteIdentity = Annotated[str, AfterValidator(_validate_remote_identity)]
+
+
 class ProjectIdentity(ProjectCtlModel):
     id: str = Field(min_length=1, pattern=r"^[a-z0-9][a-z0-9._-]*$")
     name: str | None = None
@@ -56,7 +78,7 @@ class TaskStoreConfig(ProjectCtlModel):
 class CodeTransportConfig(ProjectCtlModel):
     mode: Literal["local", "git_remote"] = "local"
     remote_name: str | None = None
-    remote_identity: str | None = None
+    remote_identity: CodeRemoteIdentity | None = None
 
     @model_validator(mode="after")
     def validate_transport(self):
