@@ -111,23 +111,36 @@ class FakeClient:
     site = SITE
     project_key = PROJECT
 
-    def __init__(self, rows):
+    def __init__(self, rows, linked=None):
         self.rows = list(rows)
+        self.linked = {
+            str(item["key"]).upper(): item
+            for item in (linked or [])
+        }
 
     def list_all(self):
         return list(self.rows)
+
+    def show_linked(self, key):
+        normalized = str(key).upper()
+        if normalized in self.linked:
+            return self.linked[normalized]
+        for row in self.rows:
+            if str(row["key"]).upper() == normalized:
+                return row
+        raise AssertionError(normalized)
 
     def version(self):
         return "jira-m33b-test"
 
 
-def store(tmp_path: Path, rows, policy=None):
+def store(tmp_path: Path, rows, policy=None, linked=None):
     return JiraIssuesTaskStore(
         tmp_path,
         site=SITE,
         project_key=PROJECT,
         policy=policy or JiraWorkflowPolicy(),
-        client=FakeClient(rows),
+        client=FakeClient(rows, linked=linked),
     )
 
 
@@ -213,7 +226,12 @@ def test_external_open_blocker_uses_stable_external_identity(tmp_path: Path):
         links=[link(side="inward", target=external)],
     )
 
-    task = store(tmp_path, [target], blocks_policy()).list_all()[0]
+    task = store(
+        tmp_path,
+        [target],
+        blocks_policy(),
+        linked=[external],
+    ).list_all()[0]
 
     assert task.status == TaskStatus.BLOCKED
     assert task.dependencies == [f"jira:{SITE}:901"]
@@ -403,3 +421,87 @@ def test_jira_policy_is_rejected_for_non_jira_provider():
                 jira_policy=blocks_policy(),
             ),
         )
+
+
+def test_outward_only_local_link_still_blocks_target(tmp_path: Path):
+    blocker = issue("ENG-2", "102")
+    target = issue("ENG-1", "101")
+    blocker["fields"]["issuelinks"] = [
+        link(side="outward", target=target)
+    ]
+
+    tasks = {
+        task.id: task
+        for task in store(
+            tmp_path,
+            [target, blocker],
+            blocks_policy(),
+        ).list_all()
+    }
+
+    assert tasks["jira-ENG-1"].status == TaskStatus.BLOCKED
+    assert tasks["jira-ENG-1"].dependencies == ["jira-ENG-2"]
+    assert tasks["jira-ENG-2"].blocks == ["jira-ENG-1"]
+
+
+def test_external_blocker_revalidation_overrides_stale_embedded_terminal_state(
+    tmp_path: Path,
+):
+    external_embedded = issue(
+        "OPS-9",
+        "901",
+        status_id="20000",
+        status_name="Done",
+        category="done",
+    )
+    external_embedded["fields"]["project"]["key"] = "OPS"
+
+    external_current = issue(
+        "OPS-9",
+        "901",
+        status_id="10000",
+        status_name="Ready",
+        category="new",
+    )
+    external_current["fields"]["project"]["key"] = "OPS"
+
+    target = issue(
+        "ENG-1",
+        "101",
+        links=[link(side="inward", target=external_embedded)],
+    )
+
+    task = store(
+        tmp_path,
+        [target],
+        blocks_policy(),
+        linked=[external_current],
+    ).list_all()[0]
+
+    assert task.status == TaskStatus.BLOCKED
+    assert task.dependencies == [f"jira:{SITE}:901"]
+    assert "embedded status was stale" in " ".join(task.normalization_notes)
+
+
+def test_external_blocker_identity_mismatch_fails_closed(tmp_path: Path):
+    external = issue("OPS-9", "901")
+    external["fields"]["project"]["key"] = "OPS"
+
+    current = issue("OPS-9", "999")
+    current["fields"]["project"]["key"] = "OPS"
+
+    target = issue(
+        "ENG-1",
+        "101",
+        links=[link(side="inward", target=external)],
+    )
+
+    task = store(
+        tmp_path,
+        [target],
+        blocks_policy(),
+        linked=[current],
+    ).list_all()[0]
+
+    assert task.status == TaskStatus.NEEDS_DECISION
+    assert "changed stable id/key" in " ".join(task.normalization_notes)
