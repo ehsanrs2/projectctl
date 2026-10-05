@@ -16,6 +16,14 @@ from projectctl.application.publication import (
     persist_publication_request,
     publication_manifest_ref,
 )
+from projectctl.application.review_delivery import (
+    load_review_receipt,
+    load_review_request,
+    persist_review_receipt,
+    persist_review_request,
+    review_receipt_ref,
+    review_request_ref,
+)
 from projectctl.application.task_lifecycle import (
     reconcile_terminal_task,
     release_task_for_retry,
@@ -31,6 +39,7 @@ from projectctl.core.errors import (
 )
 from projectctl.core.time import utc_now
 from projectctl.git import WorktreeManager, current_branch, resolve_commit
+from projectctl.git.review import ReviewGitTransport, review_source_branch
 from projectctl.integrations.delivery import (
     code_delivery_policy,
     resolve_code_delivery,
@@ -42,7 +51,12 @@ from projectctl.integrations.execution_ownership import (
 from projectctl.integrations.task_authority import resolve_task_authority
 from projectctl.project.loader import load_project_config
 from projectctl.project.locking import project_lock
-from projectctl.schemas.delivery import PublicationManifest, PublicationRequest
+from projectctl.schemas.delivery import (
+    PublicationManifest,
+    PublicationRequest,
+    ReviewReceipt,
+    ReviewRequest,
+)
 from projectctl.schemas.evidence import EvidenceManifest
 from projectctl.schemas.execution import EvidenceReference, ExecutionPlan, WorkerResult
 from projectctl.schemas.integration import IntegrationManifest
@@ -313,6 +327,224 @@ def _publication_request(
     )
     persist_publication_request(root, store=store, request=request)
     return request
+
+
+def _review_request(
+    root: Path,
+    *,
+    store: RunStore,
+    record: RunRecord,
+    plan: ExecutionPlan,
+    evidence: EvidenceManifest,
+    task_provider: str,
+    review_provider: str,
+    remote_name: str,
+    remote_identity: str,
+) -> ReviewRequest:
+    existing = load_review_request(
+        root,
+        store=store,
+        run_id=record.run_id,
+        allow_missing=True,
+    )
+    evidence_path = f".projectctl/runs/{record.run_id}/evidence-manifest.json"
+    evidence_digest = digest(evidence)
+    source_ref = review_source_branch(record.run_id, record.candidate_commit)
+    title = f"ProjectCTL: {record.task_id}"
+    body = (
+        "ProjectCTL verified candidate awaiting repository review.\n\n"
+        f"- Task: {record.task_id}\n"
+        f"- Run: {record.run_id}\n"
+        f"- Candidate: {record.candidate_commit}\n"
+        f"- Evidence digest: {evidence_digest}\n\n"
+        "ProjectCTL will not merge this review automatically."
+    )
+
+    if existing is not None:
+        expected = {
+            "task_id": record.task_id,
+            "task_provider": task_provider,
+            "review_provider": review_provider,
+            "remote_name": remote_name,
+            "remote_identity": remote_identity,
+            "source_ref": source_ref,
+            "target_ref": plan.integration_target_ref,
+            "base_commit": plan.base_commit,
+            "candidate_commit": record.candidate_commit,
+            "evidence_manifest": evidence_path,
+            "evidence_digest": evidence_digest,
+            "title": title,
+            "body": body,
+        }
+        for field, value in expected.items():
+            if getattr(existing, field) != value:
+                raise IntegrationError(
+                    f"Durable review request field {field!r} changed after creation."
+                )
+        return existing
+
+    request = ReviewRequest(
+        run_id=record.run_id,
+        task_id=record.task_id,
+        task_provider=task_provider,
+        review_provider=review_provider,
+        remote_name=remote_name,
+        remote_identity=remote_identity,
+        source_ref=source_ref,
+        target_ref=plan.integration_target_ref,
+        base_commit=plan.base_commit,
+        candidate_commit=record.candidate_commit,
+        evidence_manifest=evidence_path,
+        evidence_digest=evidence_digest,
+        title=title,
+        body=body,
+        requested_at=utc_now(),
+    )
+    persist_review_request(root, store=store, request=request)
+    return request
+
+
+def _ensure_review_delivery(
+    root: Path,
+    *,
+    store: RunStore,
+    record: RunRecord,
+    plan: ExecutionPlan,
+    evidence: EvidenceManifest,
+    actor: str,
+) -> tuple[ReviewRequest, ReviewReceipt]:
+    delivery = resolve_code_delivery(root)
+    policy = delivery.policy
+    if (
+        policy.mode != "review_required"
+        or not policy.supported
+        or policy.review_provider is None
+        or delivery.reviewer is None
+    ):
+        raise IntegrationError(
+            "Review-required delivery has no supported runtime review adapter."
+        )
+    if not policy.remote_name or not policy.remote_identity:
+        raise IntegrationError(
+            "Review-required delivery has no pinned Git remote."
+        )
+
+    authority = resolve_task_authority(root)
+    durable_claim = load_durable_claim(
+        root,
+        store=store,
+        run_id=record.run_id,
+    )
+    assert durable_claim is not None
+    _, claim = durable_claim
+    claimer = resolve_execution_ownership(
+        root,
+        task_authority=authority,
+    ).claimer
+
+    completion_already_recorded = any(
+        event.event_type == "task.completion.observed"
+        for event in store.events(record.run_id)
+    )
+    if not completion_already_recorded and not claimer.validate(claim):
+        final = store.transition(
+            record.run_id,
+            expected={record.status},
+            status=RunStatus.NEEDS_DECISION,
+            terminal_reason=RunTerminalReason.CLAIM_LOST,
+        )
+        reconcile_terminal_task(
+            root,
+            store=store,
+            run_id=final.run_id,
+            actor=actor,
+        )
+        raise IntegrationError(
+            "Task claim ownership was lost before review delivery completed."
+        )
+
+    request = _review_request(
+        root,
+        store=store,
+        record=record,
+        plan=plan,
+        evidence=evidence,
+        task_provider=authority.provider,
+        review_provider=policy.review_provider,
+        remote_name=policy.remote_name,
+        remote_identity=policy.remote_identity,
+    )
+    reviewer = delivery.reviewer
+    observed = reviewer.reconcile(request)
+    if observed.state == "missing":
+        observed = reviewer.request_review(request)
+    persist_review_receipt(
+        root,
+        store=store,
+        request=request,
+        receipt=observed,
+    )
+
+    if observed.state == "closed":
+        final = store.transition(
+            record.run_id,
+            expected={record.status},
+            status=RunStatus.NEEDS_DECISION,
+            terminal_reason=RunTerminalReason.POLICY_BLOCKED,
+        )
+        reconcile_terminal_task(
+            root,
+            store=store,
+            run_id=final.run_id,
+            actor=actor,
+        )
+        raise IntegrationError(
+            observed.reason or "Review was closed without merge."
+        )
+
+    if observed.state != "merged":
+        return request, observed
+
+    transport = ReviewGitTransport(
+        root,
+        remote_name=policy.remote_name,
+        remote_identity=policy.remote_identity,
+    )
+    try:
+        target_commit = transport.sync_merged_target(request, observed)
+    except IntegrationError as exc:
+        final = store.transition(
+            record.run_id,
+            expected={record.status},
+            status=RunStatus.NEEDS_DECISION,
+            terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
+        )
+        reconcile_terminal_task(
+            root,
+            store=store,
+            run_id=final.run_id,
+            actor=actor,
+        )
+        raise IntegrationError(
+            "Merged review cannot be proven as an exact-base ancestry-preserving "
+            f"delivery: {exc}"
+        ) from exc
+
+    completed = observed.model_copy(
+        update={
+            "target_commit": target_commit,
+            "delivery_complete": True,
+            "observed_at": utc_now(),
+            "reason": None,
+        }
+    )
+    persist_review_receipt(
+        root,
+        store=store,
+        request=request,
+        receipt=completed,
+    )
+    return request, completed
 
 
 def _ensure_publication(
