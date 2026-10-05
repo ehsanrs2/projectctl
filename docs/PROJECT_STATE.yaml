@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Support protected-branch delivery through durable, idempotent GitHub pull requests and GitLab merge requests while preserving exact verified-candidate evidence and human merge authority.
+current_goal: Add Jira Cloud as a conservative project-scoped read authority without inferring execution readiness or lifecycle mutation semantics that Jira has not proven safe.
 active_milestone:
-  id: M3.2c3
-  title: Review-Aware Delivery Adapters
+  id: M3.3a
+  title: Jira Read Authority
   aliases:
-    - Protected Branch Delivery
-    - GitHub PR Delivery
-    - GitLab MR Delivery
+    - Jira Cloud Read Adapter
+    - Jira Task Snapshot
+    - Conservative Jira Normalization
 updated_at: null
