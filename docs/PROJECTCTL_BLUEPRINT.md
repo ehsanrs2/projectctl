@@ -605,7 +605,7 @@ Implemented:
 
 ### M3.2a — Linear read authority
 
-Implemented by the current change:
+Implemented:
 
 - Linear GraphQL read adapter scoped to one configured team UUID
 - runtime-only LINEAR_API_KEY / LINEAR_ACCESS_TOKEN credentials
@@ -617,6 +617,23 @@ Implemented by the current change:
 - non-terminal Linear issues withheld from READY eligibility
 - execution remains fail-closed for Linear
 - doctor/readability checks without credential persistence
+
+### M3.2b — Linear relationship and eligibility semantics
+
+Implemented by the current change:
+
+- independently paginated incoming Linear issue relations
+- incoming `blocks` relations normalized as canonical blocked-by dependencies
+- terminal blockers treated as satisfied
+- cross-team open blockers represented with stable external identities
+- missing same-team blockers and ambiguous relation metadata fail closed
+- local reverse `blocks` edges derived from canonical dependencies
+- parent pointers normalized as hierarchy only; local sub-issues derived in reverse
+- dependency and hierarchy cycle detection
+- unstarted + no unresolved blocker becomes READY
+- unstarted + unresolved blocker becomes BLOCKED
+- backlog remains PLANNED
+- Linear lifecycle writes remain unsupported
 
 ---
 
@@ -895,7 +912,7 @@ proven incrementally rather than assumed from GitHub.
 
 #### M3.2a — Linear Read Authority
 
-**Current milestone / implemented by this change.**
+**Completed.**
 
 Implemented:
 
@@ -925,14 +942,51 @@ Deliberately not implemented in M3.2a:
 
 #### M3.2b — Linear Relationship & Eligibility Semantics
 
-**Next milestone after M3.2a.**
+**Current milestone / implemented by this change.**
 
-Normalize Linear blocking/hierarchy relationships and define the exact conditions under which a
-Linear issue may become scheduler-eligible. This remains a read-only milestone: provider mutation,
-claim ownership and completion must stay unsupported until separately proven.
+Implemented:
 
-Later M3.2 work must separately prove Linear mutation concurrency/ownership and then evaluate Jira.
-Do not add provider-specific branches back into application services.
+- read incoming `inverseRelations` independently per issue using Relay cursor pagination
+- treat only relation type `blocks` as a scheduling dependency
+- interpret the inverse relation source issue as the blocker and verify the requested issue is the
+  target before accepting the edge
+- treat completed/canceled blockers as satisfied
+- represent unresolved cross-team blockers with stable `linear:<UUID>` external identities
+- fail closed when an unresolved blocker claims the configured team but is absent from the team
+  snapshot
+- fail closed on unknown/missing relation types, missing state/team identity, target mismatch and
+  relation-direction ambiguity
+- derive local reverse `blocks` edges from canonical dependencies
+- normalize Linear parent pointers into hierarchy without implicit blocking
+- derive local sub-issue lists from parent pointers
+- detect dependency and hierarchy cycles
+- preserve `backlog -> PLANNED`
+- allow `unstarted -> READY` only when no unresolved dependency or human-decision condition exists
+- map `unstarted + unresolved dependency -> BLOCKED`
+- keep Linear mutation capabilities unsupported, so scheduler visibility does not imply execution
+  readiness
+
+#### M3.2c — Linear Claim Ownership & Delivery Feasibility
+
+**Next milestone after M3.2b.**
+
+Before any Linear mutation is implemented, determine whether ProjectCTL can safely generalize its
+existing Git remote-ref lease into a provider-neutral task claim for Linear-backed work, and define
+the delivery/completion evidence boundary.
+
+Required questions:
+
+- Is Git remote-ref ownership valid independently of the task-provider transport?
+- What binds a Linear task UUID, ProjectCTL run, candidate commit and remote publication together?
+- How are concurrent human Linear workflow changes detected before completion?
+- What additive/non-destructive Linear representation can express needs-decision/completion without
+  overwriting native human intent?
+- What recovery evidence is required if code publication succeeds but Linear mutation fails?
+
+Only after these are answered should Linear write capabilities be marked supported.
+
+Later M3.2 work should evaluate Jira through the same proof sequence. Do not add provider-specific
+branches back into application services.
 
 ### Post-M3 directions — not yet milestone-frozen
 
