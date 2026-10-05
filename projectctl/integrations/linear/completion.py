@@ -13,6 +13,8 @@ from projectctl.integrations.linear.lifecycle import (
     NEEDS_DECISION_COLOR,
     NEEDS_DECISION_LABEL,
 )
+from projectctl.schemas.delivery import PublicationManifest
+from projectctl.schemas.evidence import EvidenceManifest
 from projectctl.schemas.execution import EvidenceReference
 
 
@@ -79,7 +81,42 @@ class LinearTaskCompletionWriter:
             raise TaskStoreError(
                 f"Linear completion evidence is invalid JSON: {exc}"
             ) from exc
-        if not isinstance(payload, dict) or digest(payload) != evidence.digest:
+        if not isinstance(payload, dict):
+            raise TaskStoreError(
+                "Linear completion evidence must be a JSON object."
+            )
+
+        schema_kind = str(payload.get("schema_kind") or "").strip()
+        try:
+            if schema_kind == "projectctl.evidence_manifest":
+                manifest = EvidenceManifest.model_validate(payload)
+                if not manifest.overall_pass:
+                    raise TaskStoreError(
+                        "Linear completion requires passing verification evidence."
+                    )
+            elif schema_kind == "projectctl.publication_manifest":
+                manifest = PublicationManifest.model_validate(payload)
+                if (
+                    not manifest.published
+                    or manifest.remote_after != manifest.candidate_commit
+                ):
+                    raise TaskStoreError(
+                        "Linear completion requires proof that the exact candidate "
+                        "is visible on the configured publication target."
+                    )
+            else:
+                raise TaskStoreError(
+                    f"Unsupported Linear completion evidence kind: "
+                    f"{schema_kind or 'missing'}."
+                )
+        except TaskStoreError:
+            raise
+        except Exception as exc:
+            raise TaskStoreError(
+                f"Linear completion evidence contract is invalid: {exc}"
+            ) from exc
+
+        if digest(manifest) != evidence.digest:
             raise TaskStoreError(
                 "Linear completion evidence digest does not match the durable artifact."
             )
