@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M3.2b — Linear Relationship & Eligibility Semantics**, mapping Linear blocker and parent/sub-issue relationships into the shared task graph so scheduler eligibility is safe while all Linear mutations remain unsupported.
+This repository currently implements **M3.2c1 — Execution Transport & Ownership Boundary**, separating task authority from code transport and execution ownership so local-only projects and generic Git remotes such as GitLab are modeled explicitly rather than through GitHub assumptions.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -1296,8 +1296,88 @@ remain unsupported.
 
 See ADR-022 and `docs/PROJECTCTL_BLUEPRINT.md`.
 
+### M3.2c1 — Execution Transport & Ownership Boundary
+
+M3.2c1 separates three concepts that must not be conflated:
+
+```text
+Task Authority       -> Beads / GitHub Issues / Linear / future Jira
+Code Transport       -> local Git / generic network Git remote
+Execution Ownership  -> task-native / local lock / exact Git ref lease
+```
+
+ProjectConfig is additively versioned to **v5**:
+
+```yaml
+task_store:
+  provider: linear
+  team: 9cfb482a-81e3-4154-b5b9-2c805e70a02d
+
+code_transport:
+  mode: git_remote
+  remote_name: origin
+  remote_identity: gitlab.com/acme/widget
+```
+
+For a local-only project:
+
+```yaml
+code_transport:
+  mode: local
+```
+
+`remote_identity` is credential-free `host/path`; ProjectCTL never persists a Git token or
+username as transport identity.
+
+Ownership resolution is now independent from Task Authority:
+
+- Beads keeps its task-native claim semantics.
+- `local` uses an exact ProjectCTL local claim marker serialized by project locks. It protects
+  concurrent processes sharing the same project filesystem but makes **no cross-machine claim**.
+- `git_remote` uses the existing exact Git ref lease as a provider-neutral distributed ownership
+  primitive. The Git host may be GitHub, GitLab or another compatible Git server.
+- historical GitHub claim refs remain compatible.
+
+Brownfield inspection records a generic network Git remote identity even when it is not GitHub.
+Adoption can therefore configure combinations such as:
+
+```bash
+projectctl adopt . \
+  --task-store linear \
+  --task-store-team <TEAM_UUID> \
+  --code-transport git-remote \
+  --git-remote-name origin \
+  --git-remote-identity gitlab.com/group/repo
+```
+
+or explicitly remain local even when an origin exists:
+
+```bash
+projectctl adopt . \
+  --task-store linear \
+  --task-store-team <TEAM_UUID> \
+  --code-transport local
+```
+
+Inspect the effective ownership strategy with:
+
+```bash
+projectctl execution-ownership --json
+```
+
+Doctor now checks Task Authority readability and Execution Ownership transport separately.
+
+M3.2c1 **does not make Linear execution-ready**. Linear still lacks proven
+`block_for_decision`/completion mutation semantics. It also does not yet generalize remote
+publication/delivery: GitLab branch/MR policy belongs to the next milestone.
+
+ProjectCTL remains Git-native. Local-only means a **local Git repository with no network remote**;
+a completely non-Git workspace is not supported by the current worktree/candidate/evidence model.
+
+See ADR-023 and `docs/PROJECTCTL_BLUEPRINT.md`.
+
 Next:
 
-- **M3.2c — Linear Claim Ownership & Delivery Feasibility** — determine whether ProjectCTL can
-  reuse/generalize its Git remote lease for Linear task ownership and define delivery/completion
-  semantics before implementing any Linear mutation
+- **M3.2c2 — Generic Delivery & Linear Completion Feasibility** — separate publication from task
+  provider, model local/direct-remote/external-review delivery, and define safe non-destructive
+  Linear completion semantics without assuming GitHub or direct-push policy
