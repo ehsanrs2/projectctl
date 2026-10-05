@@ -337,6 +337,33 @@ def check_code_delivery(root: Path) -> HealthCheckResult:
             ],
         )
 
+    assert policy.remote_name is not None
+    assert policy.remote_identity is not None
+    try:
+        lease = RemoteRefLease(root, remote_name=policy.remote_name)
+        observed_identity = normalize_git_remote_identity(lease.remote_url())
+        if observed_identity != policy.remote_identity:
+            return HealthCheckResult(
+                check_id="code_delivery",
+                status=HealthStatus.ERROR,
+                summary="Configured delivery remote identity does not match the actual Git remote.",
+                details=[
+                    f"configured={policy.remote_identity}",
+                    f"observed={observed_identity or 'unknown'}",
+                ],
+            )
+        lease.probe_readable()
+    except TaskStoreError as exc:
+        return HealthCheckResult(
+            check_id="code_delivery",
+            status=HealthStatus.WARN,
+            summary=f"Configured delivery remote is not readable: {exc}",
+            remediation=[
+                "Verify the configured Git remote and authentication. "
+                "ProjectCTL will not infer a different delivery path."
+            ],
+        )
+
     if policy.mode == "review_required":
         return HealthCheckResult(
             check_id="code_delivery",
@@ -355,7 +382,7 @@ def check_code_delivery(root: Path) -> HealthCheckResult:
         check_id="code_delivery",
         status=HealthStatus.WARN,
         summary=(
-            f"Direct Git delivery is configured for "
+            f"Direct Git delivery remote is readable: "
             f"{policy.remote_name} -> {policy.remote_identity}."
         ),
         details=[
