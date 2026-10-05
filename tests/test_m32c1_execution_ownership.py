@@ -246,15 +246,14 @@ def test_linear_gitlab_transport_resolves_distributed_git_ownership(
     assert ownership.claimer.provider == "linear"
 
 
-def test_linear_is_still_not_execution_ready_after_ownership_is_decoupled(tmp_path: Path):
+def test_linear_local_execution_is_ready_after_additive_lifecycle_support(tmp_path: Path):
     write_config(
         tmp_path,
         provider="linear",
         transport=CodeTransportConfig(mode="local"),
     )
 
-    with pytest.raises(ConfigurationError, match="block_for_decision, complete"):
-        require_project_execution_ready(tmp_path)
+    require_project_execution_ready(tmp_path)
 
 
 def test_project_config_v4_github_migrates_to_remote_transport(tmp_path: Path):
@@ -281,10 +280,11 @@ def test_project_config_v4_github_migrates_to_remote_transport(tmp_path: Path):
 
     config = load_project_config(tmp_path)
 
-    assert config.schema_version == 5
+    assert config.schema_version == 6
     assert config.code_transport.mode == "git_remote"
     assert config.code_transport.remote_name == "origin"
     assert config.code_transport.remote_identity == "github.com/acme/widget"
+    assert config.code_delivery.mode == "direct_git"
     assert yaml.safe_load(path.read_text(encoding="utf-8"))["schema_version"] == 4
 
 
@@ -311,8 +311,9 @@ def test_project_config_v4_linear_migrates_to_local_transport(tmp_path: Path):
 
     config = load_project_config(tmp_path)
 
-    assert config.schema_version == 5
+    assert config.schema_version == 6
     assert config.code_transport.mode == "local"
+    assert config.code_delivery.mode == "local"
 
 
 def test_execution_ownership_policy_schema_is_public():
