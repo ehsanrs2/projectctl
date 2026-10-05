@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Add Linear as the first additional task authority through the provider-neutral boundary, supporting authenticated read-only team snapshots while withholding execution eligibility until dependency and write-ownership semantics are proven.
+current_goal: Normalize Linear blocker and parent/sub-issue relationships into the shared task graph so unstarted issues become scheduler-eligible only when dependency state is complete and unblocked, while keeping all Linear mutations unsupported.
 active_milestone:
-  id: M3.2a
-  title: Linear Read Authority
+  id: M3.2b
+  title: Linear Relationship & Eligibility Semantics
   aliases:
-    - Linear GraphQL Read Adapter
-    - Linear Task Snapshots
-    - Read-only Linear Authority
+    - Linear Blocker Semantics
+    - Linear Dependency Graph
+    - Linear Scheduler Eligibility
 updated_at: null
