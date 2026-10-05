@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from pathlib import Path
+import subprocess
 
 import pytest
 import yaml
@@ -15,6 +16,7 @@ from projectctl.integrations.execution_ownership import (
 )
 from projectctl.integrations.local_claim import LocalTaskClaimer
 from projectctl.project.adoption import plan_adoption
+from projectctl.project.inspection import inspect_repository
 from projectctl.project.loader import load_project_config
 from projectctl.schema_export import PUBLIC_SCHEMAS
 from projectctl.schemas.config import CodeTransportConfig, ProjectConfig, ProjectIdentity, TaskStoreConfig
@@ -112,6 +114,13 @@ def test_transport_config_requires_explicit_remote_identity():
 
     with pytest.raises(ValidationError, match="remote_name"):
         CodeTransportConfig(mode="git_remote")
+
+    with pytest.raises(ValidationError, match="credential-free"):
+        CodeTransportConfig(
+            mode="git_remote",
+            remote_name="origin",
+            remote_identity="https://token@gitlab.com/acme/widget.git",
+        )
 
     with pytest.raises(ValidationError, match="cannot configure"):
         CodeTransportConfig(
@@ -360,3 +369,21 @@ def test_local_adoption_ignores_available_remote_when_explicit(tmp_path: Path):
     assert plan.code_transport_mode == "local"
     assert plan.code_remote_name is None
     assert plan.code_remote_identity is None
+
+
+def test_inspection_detects_gitlab_origin_without_inventing_task_authority(tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "remote", "add", "origin", "git@gitlab.com:acme/widget.git"],
+        check=True,
+    )
+    (repo / "README.md").write_text("# Demo\n", encoding="utf-8")
+
+    inspection = inspect_repository(repo)
+
+    assert inspection.git_remote_name == "origin"
+    assert inspection.git_remote_identity == "gitlab.com/acme/widget"
+    assert inspection.github_repository is None
+    assert "github" not in inspection.detected_task_systems
