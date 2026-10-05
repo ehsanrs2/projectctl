@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M3.3c — Jira CAS Lifecycle**, making Jira execution-capable through additive compare-and-set issue properties while leaving native Jira workflow state human-owned.
+This repository has completed the **M3 provider/task-authority sequence through M3.3c**. The post-M3 architecture review now freezes **M4.0a — Account-Global Execution Admission** as the next implementation milestone.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -1791,8 +1791,46 @@ than changing project intent/config.
 
 See ADR-028 and `docs/PROJECTCTL_BLUEPRINT.md`.
 
+### Post-M3 architecture review
+
+The review is recorded in:
+
+```text
+docs/architecture/POST_M3_ARCHITECTURE_REVIEW.md
+docs/decisions/ADR-029-global-admission-before-parallelism.md
+```
+
+The main finding is that **quota observation is already account-global, but execution admission is
+still project-local**.
+
+Two independent ProjectCTL projects sharing one Codex account can currently read the same quota
+state and both decide that a quota-consuming worker turn is allowed.
+
+Therefore the next sequence is:
+
+```text
+M4.0a  Account-Global Execution Admission
+   ↓
+M4.0b  Portfolio Scheduling & Cross-Project Arbitration
+   ↓
+M4.1a  Parallel Planning Safety Contract
+   ↓
+M4.1b  Safe Parallel Execution & Integration
+```
+
+M4.0a intentionally does **not** estimate or reserve fictional token percentages. Until ProjectCTL
+has a trustworthy per-task cost model, the safe first primitive is an exclusive account-global
+lease for quota-consuming worker turns.
+
+The lease will live in `$PROJECTCTL_HOME/state.sqlite`, bind account/project-instance/run identity,
+use atomic SQLite ownership with heartbeat/expiry, and require a fresh quota check while ownership
+is held before contacting the worker provider.
+
+Graphify/context discovery remains valuable—especially later for write-scope evidence—but it does
+not precede this correctness boundary.
+
+See ADR-029 and `docs/PROJECTCTL_BLUEPRINT.md`.
+
 Next:
 
-- perform a fresh architecture review across the post-M3 directions (portfolio scheduling,
-  account-level quota allocation, safe parallel runs, additional workers, Graphify context,
-  governed skills, research/experiment flows) and freeze the next milestone from that review
+- **M4.0a — Account-Global Execution Admission**
