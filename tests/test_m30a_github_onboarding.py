@@ -112,9 +112,12 @@ def test_inspection_and_adoption_pin_github_repository(tmp_path: Path, monkeypat
     config = load_project_config(repo)
     assert config.task_store.provider == "github"
     assert config.task_store.repository == "acme/widget"
-    assert config.schema_version == 4
+    assert config.schema_version == 5
     assert config.task_store.team is None
     assert config.task_store.cache_max_age_seconds == 30
+    assert config.code_transport.mode == "git_remote"
+    assert config.code_transport.remote_name == "origin"
+    assert config.code_transport.remote_identity == "github.com/acme/widget"
 
 
 def test_github_provider_without_repository_identity_requires_decision(tmp_path: Path):
@@ -185,8 +188,9 @@ def test_doctor_reports_github_claim_transport_without_claiming(tmp_path: Path, 
     monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ.get("PATH", ""))
 
     class FakeLease:
-        def __init__(self, root):
+        def __init__(self, root, *, remote_name="origin"):
             self.root = root
+            self.remote_name = remote_name
 
         def remote_url(self):
             return "git@github.com:acme/widget.git"

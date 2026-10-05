@@ -4,7 +4,8 @@ from pathlib import Path
 from projectctl.schemas.artifact import ArtifactMetadata
 from projectctl.schemas.auto import AutoRunPolicy, AutoRunReport
 from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDecision
-from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3
+from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3, ProjectConfigV4
+from projectctl.schemas.ownership import ExecutionOwnershipPolicy
 from projectctl.schemas.delivery import PublicationManifest, PublicationRequest, TaskDeliveryPolicy
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
 from projectctl.schemas.github_cache import GitHubCacheEntry, GitHubCacheRequest
@@ -14,11 +15,14 @@ from projectctl.schemas.onboarding import (
     AdoptionManifest,
     AdoptionManifestV1,
     AdoptionManifestV2,
+    AdoptionManifestV3,
     AdoptionPlan,
     AdoptionPlanV1,
     AdoptionPlanV2,
+    AdoptionPlanV3,
     ProjectInspection,
     ProjectInspectionV1,
+    ProjectInspectionV2,
 )
 from projectctl.schemas.project_state import ProjectState
 from projectctl.schemas.quota import QuotaSnapshot, QuotaSnapshotV1
@@ -34,7 +38,8 @@ PUBLIC_SCHEMAS = {
     "project-config.v1.schema.json": ProjectConfigV1,
     "project-config.v2.schema.json": ProjectConfigV2,
     "project-config.v3.schema.json": ProjectConfigV3,
-    "project-config.v4.schema.json": ProjectConfig,
+    "project-config.v4.schema.json": ProjectConfigV4,
+    "project-config.v5.schema.json": ProjectConfig,
     "worker-capabilities.v1.schema.json": WorkerCapabilities,
     "worker-strategy-decision.v1.schema.json": WorkerStrategyDecision,
     "quota-snapshot.v1.schema.json": QuotaSnapshotV1,
@@ -43,6 +48,7 @@ PUBLIC_SCHEMAS = {
     "task-snapshot.v2.schema.json": TaskSnapshotV2,
     "task-snapshot.v3.schema.json": TaskSnapshot,
     "task-authority-capabilities.v1.schema.json": TaskAuthorityCapabilities,
+    "execution-ownership-policy.v1.schema.json": ExecutionOwnershipPolicy,
     "task-delivery-policy.v1.schema.json": TaskDeliveryPolicy,
     "publication-request.v1.schema.json": PublicationRequest,
     "publication-manifest.v1.schema.json": PublicationManifest,
@@ -77,13 +83,16 @@ PUBLIC_SCHEMAS = {
     "integration-manifest.v2.schema.json": IntegrationManifest,
     "recovery-report.v1.schema.json": RecoveryReport,
     "project-inspection.v1.schema.json": ProjectInspectionV1,
-    "project-inspection.v2.schema.json": ProjectInspection,
+    "project-inspection.v2.schema.json": ProjectInspectionV2,
+    "project-inspection.v3.schema.json": ProjectInspection,
     "adoption-plan.v1.schema.json": AdoptionPlanV1,
     "adoption-plan.v2.schema.json": AdoptionPlanV2,
-    "adoption-plan.v3.schema.json": AdoptionPlan,
+    "adoption-plan.v3.schema.json": AdoptionPlanV3,
+    "adoption-plan.v4.schema.json": AdoptionPlan,
     "adoption-manifest.v1.schema.json": AdoptionManifestV1,
     "adoption-manifest.v2.schema.json": AdoptionManifestV2,
-    "adoption-manifest.v3.schema.json": AdoptionManifest,
+    "adoption-manifest.v3.schema.json": AdoptionManifestV3,
+    "adoption-manifest.v4.schema.json": AdoptionManifest,
 }
 
 

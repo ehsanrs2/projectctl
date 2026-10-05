@@ -18,10 +18,12 @@ from projectctl.core.paths import resolve_inside_repo
 from projectctl.core.time import utc_now
 from projectctl.integrations.github.repository import normalize_github_repository
 from projectctl.integrations.linear.team import normalize_linear_team_id
+from projectctl.git.remote import normalize_configured_remote_identity
 from projectctl.project.bootstrap import _global_init, _slug, projectctl_home
 from projectctl.project.inspection import inspect_repository
 from projectctl.project.state import PROJECT_STATE_PATH, initial_project_state, write_project_state
 from projectctl.schemas.config import (
+    CodeTransportConfig,
     KnowledgeConfig,
     KnowledgeRoleBinding,
     ProjectConfig,
@@ -83,6 +85,9 @@ def plan_adoption(
     task_store_provider: str | None = None,
     task_store_repository: str | None = None,
     task_store_team: str | None = None,
+    code_transport_mode: str | None = None,
+    code_remote_name: str | None = None,
+    code_remote_identity: str | None = None,
 ) -> AdoptionPlan:
     if inspection.classification != "existing_unmanaged":
         raise RepositoryContractError(
@@ -122,6 +127,34 @@ def plan_adoption(
         except TaskStoreError as exc:
             raise RepositoryContractError(str(exc)) from exc
 
+    transport_mode = code_transport_mode
+    if transport_mode is None:
+        transport_mode = "git_remote" if provider == "github" else "local"
+    if transport_mode not in {"local", "git_remote"}:
+        raise RepositoryContractError(
+            "code_transport_mode must be 'local' or 'git_remote'."
+        )
+
+    remote_name = code_remote_name
+    remote_identity = code_remote_identity
+    if transport_mode == "local":
+        if remote_name is not None or remote_identity is not None:
+            raise RepositoryContractError(
+                "Local code transport cannot configure a Git remote."
+            )
+        remote_name = None
+        remote_identity = None
+    else:
+        remote_name = remote_name or inspection.git_remote_name or "origin"
+        raw_identity = remote_identity or inspection.git_remote_identity
+        if raw_identity is not None:
+            try:
+                remote_identity = normalize_configured_remote_identity(raw_identity)
+            except TaskStoreError as exc:
+                raise RepositoryContractError(str(exc)) from exc
+        else:
+            remote_identity = None
+
     unresolved = [d for d in inspection.unresolved_decisions if not d.startswith("task_store")]
     if provider is None:
         unresolved.append("task_store")
@@ -129,6 +162,8 @@ def plan_adoption(
         unresolved.append("task_store_repository")
     if provider == "linear" and not team:
         unresolved.append("task_store_team")
+    if transport_mode == "git_remote" and not remote_identity:
+        unresolved.append("code_transport_remote_identity")
 
     root = Path(inspection.project_root)
     preserve_set = {a.path for a in inspection.assets}
@@ -164,6 +199,9 @@ def plan_adoption(
         task_store_provider=provider,
         task_store_repository=repository,
         task_store_team=team,
+        code_transport_mode=transport_mode,
+        code_remote_name=remote_name,
+        code_remote_identity=remote_identity,
         unresolved_decisions=sorted(set(unresolved)),
         conflicts=list(inspection.conflicts),
     )
@@ -233,13 +271,21 @@ def apply_adoption(plan: AdoptionPlan, *, allow_dirty: bool = False) -> Adoption
             for name in ["runs", "cache", "locks"]:
                 (staged_ctl / name).mkdir()
 
+            provider = plan.task_store_provider or "unresolved"
+            code_transport = CodeTransportConfig(
+                mode=plan.code_transport_mode,
+                remote_name=plan.code_remote_name,
+                remote_identity=plan.code_remote_identity,
+            )
+
             config = ProjectConfig(
                 project=ProjectIdentity(id=_slug(root.name), name=root.name),
                 task_store=TaskStoreConfig(
-                    provider=plan.task_store_provider or "unresolved",
+                    provider=provider,
                     repository=plan.task_store_repository,
                     team=plan.task_store_team,
                 ),
+                code_transport=code_transport,
                 knowledge=_knowledge_from_plan(plan),
             )
             (staged_ctl / "config.yaml").write_text(
@@ -267,6 +313,9 @@ def apply_adoption(plan: AdoptionPlan, *, allow_dirty: bool = False) -> Adoption
                 task_store_provider=plan.task_store_provider,
                 task_store_repository=plan.task_store_repository,
                 task_store_team=plan.task_store_team,
+                code_transport_mode=plan.code_transport_mode,
+                code_remote_name=plan.code_remote_name,
+                code_remote_identity=plan.code_remote_identity,
                 unresolved_decisions=plan.unresolved_decisions,
             )
             (staged_ctl / "adoption.yaml").write_text(

@@ -106,6 +106,8 @@ Exactly one authority should exist for each mutable concern.
 | Requirements / feature specification | Bound project specification sources | Spec Kit when configured; otherwise project bindings |
 | Architecture decisions | `docs/decisions/ADR-*.md` | Newer accepted ADR wins on conflict |
 | Task execution state / dependencies | Configured task authority | Beads/GitHub execution adapters and Linear read adapter implemented; exactly one provider per project |
+| Code transport intent | `.projectctl/config.yaml -> code_transport` | Local Git or one explicitly pinned generic network Git remote; independent from task authority |
+| Execution ownership | Resolved ownership strategy | Task-native, project-local exact claim, or generic remote Git ref lease |
 | Source code and integration history | Git | Git state is never inferred from worker narration |
 | Verification policy | `projectctl.verification.yaml` | Human-managed |
 | Verification result / evidence | ProjectCTL run artifacts and Evidence manifests | Worker result alone is not evidence |
@@ -219,6 +221,26 @@ M2 deliberately implements a synchronous bounded loop, not an infinite daemon.
 Quota checks, retry budgets, recovery-first behavior, and human-decision stops remain part of the
 safety boundary.
 
+### 4.13 Task authority, code transport, ownership, and delivery are separate axes
+
+The configured task tracker does not determine where source code is hosted.
+
+Valid architecture combinations include:
+
+- Beads + local Git
+- Linear + local Git
+- Linear + GitLab
+- Linear + GitHub
+- GitHub Issues + another Git host, subject to completion/delivery policy
+
+A task provider may expose no safe claim primitive while ProjectCTL still has a separate execution
+ownership strategy.
+
+Likewise, the existence of a Git remote does not mean ProjectCTL is allowed to publish to it.
+
+Local-only means a local Git repository without a network remote. The current execution model is
+Git-native and does not support a completely non-Git workspace.
+
 ---
 
 ## 5. Current architecture
@@ -287,15 +309,36 @@ Must not:
 Responsibilities:
 
 - normalize provider-specific tasks into `NormalizedTask`
-- read task state
-- expose explicit supported lifecycle operations
-- perform claim/release/block/complete only when semantics are proven
+- read canonical task state
+- expose provider-native lifecycle mutation capabilities only when semantics are proven
+- perform task-state block/complete mutations only when they preserve provider authority
+
+Task authority does **not** imply code hosting or execution ownership.
 
 Provider-specific behavior must stay behind task-authority ports/resolvers.
 
 Application services must not import Beads/GitHub/Linear/Jira implementations directly.
 
-### 6.3 Scheduling layer
+### 6.3 Execution-ownership layer
+
+Responsibilities:
+
+- select an ownership strategy independently from task-provider identity
+- provide exact claim/reconcile/validate/release semantics
+- distinguish local-only ownership from distributed ownership
+- bind durable TaskClaim evidence to one task/run/request
+- fail closed when remote identity or exact ownership evidence changes
+
+Implemented strategies:
+
+- Beads task-native claim
+- ProjectCTL local exact claim marker for `code_transport.mode=local`
+- generic network Git remote-ref lease for `code_transport.mode=git_remote`
+
+The generic Git strategy is hosting-vendor-neutral. GitHub, GitLab, or a compatible self-hosted Git
+remote may provide the transport, subject to that remote's own branch/rules permissions.
+
+### 6.4 Scheduling layer
 
 Responsibilities:
 
@@ -312,7 +355,7 @@ Must not:
 - use worker capability to change task ranking
 - invent quota or cost estimates
 
-### 6.4 Execution layer
+### 6.5 Execution layer
 
 Responsibilities:
 
@@ -324,7 +367,7 @@ Responsibilities:
 - worker capability/strategy validation
 - durable run transitions
 
-### 6.5 Worker layer
+### 6.6 Worker layer
 
 The worker boundary is provider-neutral.
 
@@ -333,7 +376,7 @@ Current implemented worker provider: **Codex**.
 The stable adapter currently relies on documented supported surfaces. Provider features not
 implemented by the adapter remain unsupported rather than prompt-emulated.
 
-### 6.6 Verification and evidence layer
+### 6.7 Verification and evidence layer
 
 Responsibilities:
 
@@ -343,7 +386,7 @@ Responsibilities:
 - evidence chain
 - ProjectCTL-owned candidate commit
 
-### 6.7 Integration/publication layer
+### 6.8 Integration/publication layer
 
 Current local integration:
 
@@ -367,7 +410,7 @@ Current remote-delivery behavior:
 For local-only task authorities such as Beads, local integration is sufficient under the current
 delivery policy.
 
-### 6.8 Runtime/recovery layer
+### 6.9 Runtime/recovery layer
 
 Responsibilities:
 
@@ -381,7 +424,7 @@ Responsibilities:
 Current locks and leases are project-instance-local unless a provider-specific distributed
 primitive is explicitly introduced.
 
-### 6.9 Telemetry/evaluation layer
+### 6.10 Telemetry/evaluation layer
 
 Current telemetry is a local SQLite event stream.
 
@@ -620,7 +663,7 @@ Implemented:
 
 ### M3.2b — Linear relationship and eligibility semantics
 
-Implemented by the current change:
+Implemented:
 
 - independently paginated incoming Linear issue relations
 - incoming `blocks` relations normalized as canonical blocked-by dependencies
@@ -634,6 +677,24 @@ Implemented by the current change:
 - unstarted + unresolved blocker becomes BLOCKED
 - backlog remains PLANNED
 - Linear lifecycle writes remain unsupported
+
+### M3.2c1 — Execution transport and ownership boundary
+
+Implemented by the current change:
+
+- ProjectConfig v5 adds code transport independently from task authority
+- local Git and generic network Git remote modes
+- credential-free canonical remote identity
+- provider-neutral ExecutionOwnershipPolicy v1
+- project-local exact claim strategy for remote task authorities without a Git remote
+- generic remote Git ref lease strategy independent of hosting vendor
+- historical GitHub claim namespace compatibility
+- execution/recovery/release paths resolve ownership independently from Task Authority
+- generic remote identity discovery during brownfield inspection
+- AdoptionPlan/Manifest v4 code transport intent
+- doctor separates task-provider health from ownership-transport health
+- `projectctl execution-ownership` inspection command
+- Linear remains non-execution-ready because task completion mutations are still unsupported
 
 ---
 
@@ -942,7 +1003,7 @@ Deliberately not implemented in M3.2a:
 
 #### M3.2b — Linear Relationship & Eligibility Semantics
 
-**Current milestone / implemented by this change.**
+**Completed.**
 
 Implemented:
 
@@ -966,24 +1027,62 @@ Implemented:
 - keep Linear mutation capabilities unsupported, so scheduler visibility does not imply execution
   readiness
 
-#### M3.2c — Linear Claim Ownership & Delivery Feasibility
+#### M3.2c1 — Execution Transport & Ownership Boundary
 
-**Next milestone after M3.2b.**
+**Current milestone / implemented by this change.**
 
-Before any Linear mutation is implemented, determine whether ProjectCTL can safely generalize its
-existing Git remote-ref lease into a provider-neutral task claim for Linear-backed work, and define
-the delivery/completion evidence boundary.
+The earlier "Linear claim" framing was too narrow because task authority and code host are
+independent.
 
-Required questions:
+Implemented:
 
-- Is Git remote-ref ownership valid independently of the task-provider transport?
-- What binds a Linear task UUID, ProjectCTL run, candidate commit and remote publication together?
-- How are concurrent human Linear workflow changes detected before completion?
-- What additive/non-destructive Linear representation can express needs-decision/completion without
-  overwriting native human intent?
-- What recovery evidence is required if code publication succeeds but Linear mutation fails?
+- ProjectConfig v5 adds explicit `code_transport`
+- `local` mode requires no network Git remote
+- `git_remote` mode pins a remote name plus credential-free `host/path` identity
+- v1-v4 project configs remain readable; existing GitHub configs migrate to
+  `origin -> github.com/<owner>/<repo>` to preserve historical behavior
+- brownfield inspection detects generic origin identities including GitLab/self-hosted Git
+- AdoptionPlan/Manifest v4 persist code transport intent independently from task-provider scope
+- `ExecutionOwnershipPolicy v1` makes effective ownership inspectable
+- Beads retains task-native ownership
+- local mode gives non-Beads providers a project-filesystem exact claim marker
+- git-remote mode gives non-Beads providers an exact remote Git ref lease
+- generic Git ownership validates configured remote identity before every remote operation
+- GitHub's historical ref namespace remains compatible
+- execution preparation, validation, recovery and release resolve the ownership strategy rather
+  than asking Task Authority to own the claim
+- doctor validates Task Authority and Execution Ownership separately
+- Linear may now have a proven ownership strategy but remains execution-disabled because
+  canonical Linear lifecycle writes are still unsupported
 
-Only after these are answered should Linear write capabilities be marked supported.
+Safety boundary:
+
+- local ownership protects processes sharing the same ProjectCTL project filesystem only
+- local ownership is not advertised as cross-machine distributed coordination
+- a completely non-Git execution workspace remains unsupported
+- generic Git ownership does not imply permission to publish verified code
+- remote publication and task completion remain separate contracts
+
+#### M3.2c2 — Generic Delivery & Linear Completion Feasibility
+
+**Next milestone after M3.2c1.**
+
+Decouple remote publication from task-provider identity.
+
+Required work:
+
+- model local integration, direct Git publication, and externally reviewed/MR delivery as distinct
+  policies
+- make the Git publisher hosting-vendor-neutral
+- preserve exact-base publication/reconciliation semantics where direct push is allowed
+- fail closed when GitLab/GitHub branch policy requires review instead of direct push
+- define safe Linear needs-decision/completion mutation semantics
+- revalidate concurrent Linear state immediately before mutation
+- bind task UUID, run, claim, candidate, evidence and delivery proof
+- define recovery when delivery succeeds but task mutation fails
+
+Only after M3.2c2 proves both delivery and canonical task mutation may Linear become
+execution-ready.
 
 Later M3.2 work should evaluate Jira through the same proof sequence. Do not add provider-specific
 branches back into application services.

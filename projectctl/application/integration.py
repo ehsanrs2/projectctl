@@ -31,6 +31,7 @@ from projectctl.core.errors import (
 )
 from projectctl.core.time import utc_now
 from projectctl.git import WorktreeManager, current_branch, resolve_commit
+from projectctl.integrations.execution_ownership import resolve_execution_ownership
 from projectctl.integrations.task_authority import (
     resolve_task_authority,
     task_delivery_policy,
@@ -330,7 +331,10 @@ def _ensure_publication(
     )
     assert durable_claim is not None
     _, claim = durable_claim
-    claimer = authority.require_claimer()
+    claimer = resolve_execution_ownership(
+        root,
+        task_authority=authority,
+    ).claimer
 
     completion_already_recorded = any(
         event.event_type == "task.completion.observed"
@@ -493,7 +497,10 @@ def _finalize_delivery(
         assert durable_claim is not None
         _, claim = durable_claim
         try:
-            authority.require_claimer().release(claim)
+            resolve_execution_ownership(
+                root,
+                task_authority=resolve_task_authority(root),
+            ).claimer.release(claim)
             record_claim_release(store, claim)
             claim_released = True
         except ClaimConflictError as exc:

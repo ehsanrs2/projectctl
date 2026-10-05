@@ -5,9 +5,10 @@ import subprocess
 from pathlib import Path
 
 from projectctl.core.digest import digest
-from projectctl.core.errors import UnsafePathError
+from projectctl.core.errors import TaskStoreError, UnsafePathError
 from projectctl.core.paths import resolve_inside_repo
 from projectctl.integrations.github.repository import parse_github_repository
+from projectctl.git.remote import normalize_git_remote_identity
 from projectctl.project.loader import load_project_config
 from projectctl.project.root import git_root
 from projectctl.schemas.onboarding import DetectedAsset, KnowledgeBinding, ProjectInspection
@@ -241,9 +242,16 @@ def inspect_repository(target: Path) -> ProjectInspection:
         classification = "existing_unmanaged"
         confidence = "high"
 
-    github_repository = parse_github_repository(
-        _git_value(root, "remote", "get-url", "origin")
-    )
+    origin_url = _git_value(root, "remote", "get-url", "origin")
+    github_repository = parse_github_repository(origin_url)
+    git_remote_identity = None
+    if origin_url is not None:
+        try:
+            git_remote_identity = normalize_git_remote_identity(origin_url)
+        except TaskStoreError:
+            notes.append(
+                "Origin exists but is not a supported network Git remote identity."
+            )
 
     task_systems: list[str] = []
     if any(a.role == "beads" for a in assets):
@@ -272,6 +280,8 @@ def inspect_repository(target: Path) -> ProjectInspection:
         suggested_bindings=_suggest_knowledge_bindings(root),
         detected_task_systems=task_systems,
         github_repository=github_repository,
+        git_remote_name="origin" if git_remote_identity else None,
+        git_remote_identity=git_remote_identity,
         unresolved_decisions=unresolved,
         conflicts=sorted(set(conflicts)),
         notes=notes,

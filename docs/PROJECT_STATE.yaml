@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Normalize Linear blocker and parent/sub-issue relationships into the shared task graph so unstarted issues become scheduler-eligible only when dependency state is complete and unblocked, while keeping all Linear mutations unsupported.
+current_goal: Decouple task authority from code transport and execution ownership so local-only projects and generic Git remotes such as GitLab can use explicit safe ownership strategies without assuming GitHub is the code host.
 active_milestone:
-  id: M3.2b
-  title: Linear Relationship & Eligibility Semantics
+  id: M3.2c1
+  title: Execution Transport & Ownership Boundary
   aliases:
-    - Linear Blocker Semantics
-    - Linear Dependency Graph
-    - Linear Scheduler Eligibility
+    - Provider-neutral Git Claim
+    - Local Execution Ownership
+    - Generic Git Transport
 updated_at: null

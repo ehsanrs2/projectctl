@@ -15,6 +15,7 @@ from projectctl.core.errors import (
 )
 from projectctl.doctor.service import run_doctor
 from projectctl.integrations.speckit import SpecKitBeadsImporter
+from projectctl.integrations.execution_ownership import resolve_execution_ownership
 from projectctl.integrations.task_authority import task_authority_capabilities
 from projectctl.project.adoption import apply_adoption
 from projectctl.project.bootstrap import initialize_project
@@ -77,6 +78,9 @@ def _show_plan(plan) -> None:
         typer.echo(f"Task repository: {plan.task_store_repository}")
     if getattr(plan, "task_store_team", None):
         typer.echo(f"Task team: {plan.task_store_team}")
+    typer.echo(f"Code transport: {getattr(plan, 'code_transport_mode', 'local')}")
+    if getattr(plan, "code_remote_name", None):
+        typer.echo(f"Code remote: {plan.code_remote_name} -> {plan.code_remote_identity}")
     if plan.unresolved_decisions:
         typer.echo("\nNEEDS DECISION")
         for item in plan.unresolved_decisions:
@@ -114,6 +118,17 @@ def _validate_task_store_choice(value: str | None) -> str | None:
             f"Unsupported onboarding task store `{value}`. Choose one of: {', '.join(sorted(allowed))}."
         )
     return value
+
+
+def _validate_code_transport_choice(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip().replace("-", "_")
+    if normalized not in {"local", "git_remote"}:
+        raise RepositoryContractError(
+            "Unsupported code transport. Choose 'local' or 'git-remote'."
+        )
+    return normalized
 
 
 def _prompt_task_store_team(provider: str | None, current: str | None) -> str | None:
@@ -171,6 +186,21 @@ def init_command(
         "--task-store-team",
         help="Provider team identity, currently the Linear team UUID.",
     ),
+    code_transport: str | None = typer.Option(
+        None,
+        "--code-transport",
+        help="Code ownership transport: local or git-remote.",
+    ),
+    git_remote_name: str | None = typer.Option(
+        None,
+        "--git-remote-name",
+        help="Git remote name used for distributed ownership, e.g. origin.",
+    ),
+    git_remote_identity: str | None = typer.Option(
+        None,
+        "--git-remote-identity",
+        help="Credential-free remote identity, e.g. gitlab.com/group/repo.",
+    ),
     allow_dirty: bool = typer.Option(False, "--allow-dirty", help="Allow adoption with uncommitted changes."),
 ) -> None:
     try:
@@ -219,6 +249,7 @@ def init_command(
                 return
 
         selected_store = _validate_task_store_choice(task_store)
+        selected_transport = _validate_code_transport_choice(code_transport)
         if selected_store is None and len(inspection.detected_task_systems) == 1:
             selected_store = inspection.detected_task_systems[0]
         if selected_store is None and interactive:
@@ -234,6 +265,9 @@ def init_command(
             task_store_provider=selected_store,
             task_store_repository=task_store_repository,
             task_store_team=task_store_team,
+            code_transport_mode=selected_transport,
+            code_remote_name=git_remote_name,
+            code_remote_identity=git_remote_identity,
         )
 
         if json_output or non_interactive:
@@ -296,12 +330,28 @@ def adopt_command(
         "--task-store-team",
         help="Provider team identity, currently the Linear team UUID.",
     ),
+    code_transport: str | None = typer.Option(
+        None,
+        "--code-transport",
+        help="Code ownership transport: local or git-remote.",
+    ),
+    git_remote_name: str | None = typer.Option(
+        None,
+        "--git-remote-name",
+        help="Git remote name used for distributed ownership, e.g. origin.",
+    ),
+    git_remote_identity: str | None = typer.Option(
+        None,
+        "--git-remote-identity",
+        help="Credential-free remote identity, e.g. gitlab.com/group/repo.",
+    ),
     allow_dirty: bool = typer.Option(False, "--allow-dirty"),
 ) -> None:
     try:
         inspection = inspect_project(path)
         interactive = not non_interactive and not json_output
         selected_store = _validate_task_store_choice(task_store)
+        selected_transport = _validate_code_transport_choice(code_transport)
         if selected_store is None and len(inspection.detected_task_systems) == 1:
             selected_store = inspection.detected_task_systems[0]
         if selected_store is None and interactive and not dry_run:
@@ -316,6 +366,9 @@ def adopt_command(
             task_store_provider=selected_store,
             task_store_repository=task_store_repository,
             task_store_team=task_store_team,
+            code_transport_mode=selected_transport,
+            code_remote_name=git_remote_name,
+            code_remote_identity=git_remote_identity,
         )
 
         if dry_run:
@@ -339,6 +392,9 @@ def adopt_command(
                 task_store_provider=selected_store,
                 task_store_repository=task_store_repository,
                 task_store_team=task_store_team,
+                code_transport_mode=selected_transport,
+                code_remote_name=git_remote_name,
+                code_remote_identity=git_remote_identity,
             )
 
         if (json_output or non_interactive) and (not yes or (plan.dirty and not allow_dirty)):
@@ -436,6 +492,45 @@ def task_authority_command(
     ]:
         typer.echo(f"{name:20} {getattr(capabilities, name).value}")
     for note in capabilities.notes:
+        typer.echo(f"note: {note}")
+
+
+@app.command("execution-ownership")
+def execution_ownership_command(
+    project: Path = typer.Option(
+        Path("."),
+        "--project",
+        exists=True,
+        file_okay=False,
+        resolve_path=True,
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit ExecutionOwnershipPolicy JSON.",
+    ),
+) -> None:
+    try:
+        root = _project_root(project)
+        policy = resolve_execution_ownership(root).policy
+    except ProjectCtlError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(EXIT_TASK_STORE)
+
+    if json_output:
+        typer.echo(_json(policy))
+        return
+
+    typer.echo(f"Execution ownership: {policy.strategy}")
+    typer.echo("=" * 56)
+    typer.echo(f"task_provider        {policy.task_provider}")
+    typer.echo(f"scope                {policy.scope}")
+    typer.echo(f"transport_mode       {policy.transport_mode}")
+    if policy.remote_name:
+        typer.echo(f"remote_name          {policy.remote_name}")
+    if policy.remote_identity:
+        typer.echo(f"remote_identity      {policy.remote_identity}")
+    for note in policy.notes:
         typer.echo(f"note: {note}")
 
 
