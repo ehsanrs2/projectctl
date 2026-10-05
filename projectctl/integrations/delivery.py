@@ -6,6 +6,7 @@ from pathlib import Path
 from projectctl.core.errors import ConfigurationError
 from projectctl.git.publication import GitRemotePublisher
 from projectctl.ports.publication import TaskPublisher
+from projectctl.ports.review_delivery import ReviewDeliveryAdapter
 from projectctl.project.loader import load_project_config
 from projectctl.schemas.delivery import CodeDeliveryPolicy
 
@@ -14,6 +15,16 @@ from projectctl.schemas.delivery import CodeDeliveryPolicy
 class CodeDelivery:
     policy: CodeDeliveryPolicy
     publisher: TaskPublisher | None = None
+    reviewer: ReviewDeliveryAdapter | None = None
+
+
+def _review_provider(remote_identity: str | None) -> str | None:
+    identity = str(remote_identity or "").strip().casefold()
+    if identity.startswith("github.com/"):
+        return "github"
+    if identity.startswith("gitlab.com/"):
+        return "gitlab"
+    return None
 
 
 def code_delivery_policy(project_root: Path) -> CodeDeliveryPolicy:
@@ -31,6 +42,7 @@ def code_delivery_policy(project_root: Path) -> CodeDeliveryPolicy:
             transport_mode=transport.mode,
             remote_name=transport.remote_name,
             remote_identity=transport.remote_identity,
+            review_provider=None,
             notes=[
                 "Verified code is integrated only into the local Git target.",
                 "No network publication is required before canonical task completion.",
@@ -55,6 +67,7 @@ def code_delivery_policy(project_root: Path) -> CodeDeliveryPolicy:
             transport_mode="git_remote",
             remote_name=transport.remote_name,
             remote_identity=transport.remote_identity,
+            review_provider=None,
             notes=[
                 "Verified candidate publication uses an exact-base Git ref lease.",
                 "Remote write/branch policy is proven only by the real publication attempt.",
@@ -62,18 +75,28 @@ def code_delivery_policy(project_root: Path) -> CodeDeliveryPolicy:
         )
 
     assert delivery.mode == "review_required"
+    review_provider = _review_provider(transport.remote_identity)
     return CodeDeliveryPolicy(
         mode="review_required",
-        supported=False,
+        supported=review_provider is not None,
         publication_required=True,
         completion_evidence="review_receipt",
         transport_mode="git_remote",
         remote_name=transport.remote_name,
         remote_identity=transport.remote_identity,
-        notes=[
-            "Review-required delivery is modeled but no PR/MR adapter is implemented yet.",
-            "Autonomous execution therefore fails closed before claiming work.",
-        ],
+        review_provider=review_provider,
+        notes=(
+            [
+                f"Review delivery uses the built-in {review_provider} adapter.",
+                "ProjectCTL creates/reconciles review requests but never auto-merges them.",
+                "Canonical task completion waits for an externally merged exact candidate.",
+            ]
+            if review_provider is not None
+            else [
+                "Review-required delivery has no built-in adapter for this Git host.",
+                "Autonomous execution fails closed before claiming work.",
+            ]
+        ),
     )
 
 
@@ -84,7 +107,31 @@ def resolve_code_delivery(project_root: Path) -> CodeDelivery:
         return CodeDelivery(policy=policy)
 
     if policy.mode == "review_required":
-        return CodeDelivery(policy=policy)
+        if not policy.supported or policy.review_provider is None:
+            return CodeDelivery(policy=policy)
+        assert policy.remote_name is not None
+        assert policy.remote_identity is not None
+        if policy.review_provider == "github":
+            from projectctl.integrations.review.github import GitHubReviewDeliveryAdapter
+
+            reviewer = GitHubReviewDeliveryAdapter(
+                root,
+                remote_name=policy.remote_name,
+                remote_identity=policy.remote_identity,
+            )
+        elif policy.review_provider == "gitlab":
+            from projectctl.integrations.review.gitlab import GitLabReviewDeliveryAdapter
+
+            reviewer = GitLabReviewDeliveryAdapter(
+                root,
+                remote_name=policy.remote_name,
+                remote_identity=policy.remote_identity,
+            )
+        else:
+            raise ConfigurationError(
+                f"Unsupported review delivery provider {policy.review_provider!r}."
+            )
+        return CodeDelivery(policy=policy, reviewer=reviewer)
 
     assert policy.mode == "direct_git"
     assert policy.remote_name is not None
@@ -100,9 +147,14 @@ def resolve_code_delivery(project_root: Path) -> CodeDelivery:
 
 
 def require_code_delivery_execution_ready(project_root: Path) -> None:
-    policy = code_delivery_policy(project_root)
+    delivery = resolve_code_delivery(project_root)
+    policy = delivery.policy
     if not policy.supported:
         raise ConfigurationError(
-            f"Code delivery mode {policy.mode!r} is not execution-ready. "
-            "A review delivery adapter is required before autonomous execution."
+            f"Code delivery mode {policy.mode!r} is not execution-ready for "
+            f"remote {policy.remote_identity or 'local'}."
+        )
+    if policy.mode == "review_required" and delivery.reviewer is None:
+        raise ConfigurationError(
+            "Review-required delivery has no runtime review adapter."
         )
