@@ -1082,7 +1082,7 @@ Safety boundary:
 
 #### M3.2c2 — Generic Delivery & Linear Lifecycle
 
-**Current milestone / implemented by this change.**
+**Completed.**
 
 Implemented:
 
@@ -1123,20 +1123,48 @@ ownership is a separate axis.
 
 #### M3.2c3 — Review-Aware Delivery Adapters
 
-**Next milestone after M3.2c2.**
+**Current milestone / implemented by this change.**
 
-Close the remaining delivery gap for repositories that require code review:
+Implemented:
 
-- define durable review request/receipt contracts
-- bind exact candidate/evidence to GitHub pull requests and GitLab merge requests
-- make request creation/reconciliation crash-safe and idempotent
-- preserve branch/rules protections rather than bypassing them
-- define what review/merge state is sufficient for canonical task completion
-- recover safely when review request creation succeeds but local persistence fails
-- keep host-specific APIs behind delivery adapters rather than Task Authority
+- explicit active `AWAITING_REVIEW` run state
+- durable `ReviewRequest v1` and `ReviewReceipt v1` contracts
+- CodeDeliveryPolicy v2 with explicit review-provider capability
+- IntegrationManifest v3 with review delivery evidence
+- deterministic candidate-bound review source branches
+- create-only remote review-branch publication; a pre-existing different SHA fails closed
+- request-before-side-effect persistence and event anchoring
+- reconcile-before-create review creation to survive create/persist crash windows
+- built-in GitHub.com pull-request delivery through authenticated `gh api`
+- built-in GitLab.com merge-request delivery through the GitLab REST API
+- runtime-only GitLab credentials; ProjectCTL persists no GitLab token
+- no automatic approval or merge
+- open reviews keep task ownership and canonical task completion pending
+- closed-unmerged reviews fail closed to NEEDS_DECISION
+- merged reviews require exact candidate head plus independent Git ancestry proof
+- fast-forward review merge acceptance when target equals candidate
+- two-parent merge-commit acceptance only when parents are exactly verified base + candidate
+- squash, rebase, stale-base, transformed-head, or ambiguous merge results require human decision
+- local target reconciliation to the independently proven merged remote target
+- canonical task completion receives only a completed ReviewReceipt as evidence
+- recovery can repeatedly reconcile AWAITING_REVIEW until external merge occurs
+- bounded auto mode stops with REVIEW_PENDING instead of launching another task
+- host-specific review APIs remain behind review-delivery adapters
 
-After the review-delivery boundary is proven, later M3.2 work should evaluate Jira through the same
-task/read/lifecycle/ownership/delivery proof sequence.
+Safety boundary:
+
+- creating a PR/MR is never treated as task completion
+- ProjectCTL never auto-merges or bypasses provider review policy
+- remote source branches are never force-replaced when they contain another commit
+- provider `merged` state alone is insufficient without Git history proof
+- old verification evidence is not reused across squash/rebase/stale-base transformations
+- the exact execution claim remains held while external review is open
+- unsupported/self-hosted review hosts fail closed before claim
+
+With review-aware delivery proven for GitHub.com and GitLab.com, the next provider expansion should
+reuse the same read/lifecycle/ownership/delivery proof sequence. Jira remains the leading candidate,
+but its milestone identifier is intentionally not frozen until its current API and concurrency
+semantics are reviewed.
 
 ### Post-M3 directions — not yet milestone-frozen
 
