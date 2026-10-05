@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Add Jira Cloud as a conservative project-scoped read authority without inferring execution readiness or lifecycle mutation semantics that Jira has not proven safe.
+current_goal: Make Jira scheduler eligibility explicit and fail-closed by pinning READY statuses and issue-link direction semantics, including safe cross-project blocker revalidation.
 active_milestone:
-  id: M3.3a
-  title: Jira Read Authority
+  id: M3.3b
+  title: Jira Relationship & Workflow Eligibility
   aliases:
-    - Jira Cloud Read Adapter
-    - Jira Task Snapshot
-    - Conservative Jira Normalization
+    - Jira Dependency Semantics
+    - Jira READY Policy
+    - Cross-Project Jira Blockers
 updated_at: null
