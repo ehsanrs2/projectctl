@@ -277,7 +277,7 @@ def test_linear_team_is_not_accepted_for_other_provider(tmp_path: Path):
         )
 
 
-def test_project_config_v3_upgrades_to_v6_without_rewrite(tmp_path: Path):
+def test_project_config_v3_upgrades_to_v7_without_rewrite(tmp_path: Path):
     ctl = tmp_path / ".projectctl"
     ctl.mkdir()
     path = ctl / "config.yaml"
@@ -300,7 +300,7 @@ def test_project_config_v3_upgrades_to_v6_without_rewrite(tmp_path: Path):
 
     config = load_project_config(tmp_path)
 
-    assert config.schema_version == 6
+    assert config.schema_version == 7
     assert config.task_store.repository == "acme/widget"
     assert config.task_store.team is None
     assert config.task_store.cache_max_age_seconds == 17
