@@ -682,33 +682,152 @@ def _finalize_delivery(
     policy = code_delivery_policy(root)
     task_provider = load_project_config(root).task_store.provider
     run_dir = root / ".projectctl" / "runs" / record.run_id
+
     target_after = resolve_commit(root, plan.integration_target_ref)
-    if target_after != record.candidate_commit:
-        raise IntegrationError("Integration target does not equal verified candidate.")
+    publication = None
+    review_request = None
+    review_receipt = None
 
-    publication = _ensure_publication(
-        root,
-        store=store,
-        record=record,
-        plan=plan,
-        evidence=evidence,
-        actor=actor,
-    )
+    publication_path = None
+    publication_digest = None
+    review_request_path = None
+    review_request_digest = None
+    review_receipt_path = None
+    review_receipt_digest = None
 
-    if publication is None:
-        completion_evidence = EvidenceReference(
-            path=f".projectctl/runs/{record.run_id}/evidence-manifest.json",
-            digest=digest(evidence),
+    if policy.mode == "review_required":
+        durable_review = load_review_receipt(
+            root,
+            store=store,
+            run_id=record.run_id,
+            allow_missing=True,
         )
-        publication_path = None
-        publication_digest = None
+        if target_after != record.candidate_commit:
+            if durable_review is None:
+                raise IntegrationError(
+                    "Local integration target changed before durable review delivery proof existed."
+                )
+            _, previous_receipt = durable_review
+            if (
+                not previous_receipt.delivery_complete
+                or previous_receipt.target_commit != target_after
+            ):
+                raise IntegrationError(
+                    "Local integration target differs from the verified candidate "
+                    "without matching completed review evidence."
+                )
+
+        review_request, review_receipt = _ensure_review_delivery(
+            root,
+            store=store,
+            record=record,
+            plan=plan,
+            evidence=evidence,
+            actor=actor,
+        )
+        review_request_path = review_request_ref(record.run_id)
+        review_request_digest = digest(review_request)
+        review_receipt_path = review_receipt_ref(record.run_id)
+        review_receipt_digest = digest(review_receipt)
+
+        if not review_receipt.delivery_complete:
+            if review_receipt.state != "open":
+                raise IntegrationError(
+                    review_receipt.reason
+                    or f"Review delivery is not completable from state {review_receipt.state!r}."
+                )
+            target_after = resolve_commit(root, plan.integration_target_ref)
+            if target_after != record.candidate_commit:
+                raise IntegrationError(
+                    "Pending review delivery must leave the local target at the exact candidate."
+                )
+
+            manifest = IntegrationManifest(
+                run_id=record.run_id,
+                task_id=record.task_id,
+                target_ref=plan.integration_target_ref,
+                base_commit=plan.base_commit,
+                candidate_commit=record.candidate_commit,
+                target_before=target_before,
+                target_after=target_after,
+                evidence_manifest=f".projectctl/runs/{record.run_id}/evidence-manifest.json",
+                evidence_digest=digest(evidence),
+                delivery_mode="review_required",
+                publication_required=True,
+                review_request=review_request_path,
+                review_request_digest=review_request_digest,
+                review_receipt=review_receipt_path,
+                review_receipt_digest=review_receipt_digest,
+                review_url=review_receipt.review_url,
+                review_state=review_receipt.state,
+                task_completed=False,
+                claim_released=False,
+                worktree_cleaned=False,
+                integrated_at=utc_now(),
+                completed_at=None,
+            )
+            _atomic_json(run_dir / "integration-manifest.json", manifest)
+            store.append_event(
+                record.run_id,
+                "integration.awaiting_review",
+                {
+                    "review_provider": review_receipt.review_provider,
+                    "review_id": review_receipt.review_id,
+                    "review_url": review_receipt.review_url,
+                    "review_request_digest": review_request_digest,
+                    "review_receipt_digest": review_receipt_digest,
+                    "candidate_commit": record.candidate_commit,
+                },
+            )
+            current = store.get(record.run_id)
+            if current.status == RunStatus.INTEGRATING:
+                current = store.transition(
+                    record.run_id,
+                    expected={RunStatus.INTEGRATING},
+                    status=RunStatus.AWAITING_REVIEW,
+                    candidate_commit=record.candidate_commit,
+                )
+            elif current.status != RunStatus.AWAITING_REVIEW:
+                raise IntegrationError(
+                    f"Pending review cannot be recorded from run status {current.status.value!r}."
+                )
+            return IntegratedRun(record=current, manifest=manifest)
+
+        target_after = resolve_commit(root, plan.integration_target_ref)
+        if target_after != review_receipt.target_commit:
+            raise IntegrationError(
+                "Local target does not match completed review delivery proof."
+            )
+        completion_evidence = EvidenceReference(
+            path=review_receipt_path,
+            digest=review_receipt_digest,
+        )
+
     else:
-        publication_path = publication_manifest_ref(record.run_id)
-        publication_digest = digest(publication)
-        completion_evidence = EvidenceReference(
-            path=publication_path,
-            digest=publication_digest,
+        if target_after != record.candidate_commit:
+            raise IntegrationError("Integration target does not equal verified candidate.")
+
+        publication = _ensure_publication(
+            root,
+            store=store,
+            record=record,
+            plan=plan,
+            evidence=evidence,
+            actor=actor,
         )
+
+        if publication is None:
+            completion_evidence = EvidenceReference(
+                path=f".projectctl/runs/{record.run_id}/evidence-manifest.json",
+                digest=digest(evidence),
+            )
+        else:
+            publication_path = publication_manifest_ref(record.run_id)
+            publication_digest = digest(publication)
+            completion_evidence = EvidenceReference(
+                path=publication_path,
+                digest=publication_digest,
+            )
 
     if not _completion_event_matches(
         store,
@@ -726,13 +845,13 @@ def _finalize_delivery(
                 "evidence_path": completion_evidence.path,
                 "evidence_digest": completion_evidence.digest,
                 "provider": task_provider,
+                "delivery_mode": policy.mode,
             },
         )
 
     claim_released = False
     ownership_policy = execution_ownership_policy(root)
     if ownership_policy.strategy != "task_native":
-        authority = resolve_task_authority(root)
         durable_claim = load_durable_claim(
             root,
             store=store,
@@ -748,9 +867,6 @@ def _finalize_delivery(
             record_claim_release(store, claim)
             claim_released = True
         except ClaimConflictError as exc:
-            # Delivery and canonical task completion are already durable at this
-            # point. Losing ownership during cleanup must not rewrite the task
-            # back to needs-decision or mutate another owner's claim.
             store.append_event(
                 record.run_id,
                 "task.claim.ownership_lost_after_completion",
@@ -763,9 +879,6 @@ def _finalize_delivery(
             )
             claim_released = False
         except ProjectCtlError as exc:
-            # A transient/ambiguous release failure leaves the run INTEGRATING
-            # so recovery can retry the exact release. Do not alter the already
-            # completed canonical task.
             store.append_event(
                 record.run_id,
                 "task.claim.release_deferred_after_completion",
@@ -790,9 +903,16 @@ def _finalize_delivery(
         target_after=target_after,
         evidence_manifest=f".projectctl/runs/{record.run_id}/evidence-manifest.json",
         evidence_digest=digest(evidence),
+        delivery_mode=policy.mode,
         publication_required=policy.publication_required,
         publication_manifest=publication_path,
         publication_digest=publication_digest,
+        review_request=review_request_path,
+        review_request_digest=review_request_digest,
+        review_receipt=review_receipt_path,
+        review_receipt_digest=review_receipt_digest,
+        review_url=review_receipt.review_url if review_receipt is not None else None,
+        review_state=review_receipt.state if review_receipt is not None else None,
         task_completed=True,
         claim_released=claim_released,
         worktree_cleaned=False,
@@ -806,15 +926,18 @@ def _finalize_delivery(
         {
             "target_ref": plan.integration_target_ref,
             "candidate_commit": record.candidate_commit,
+            "target_after": target_after,
             "evidence_digest": digest(evidence),
+            "delivery_mode": policy.mode,
             "publication_digest": publication_digest,
+            "review_receipt_digest": review_receipt_digest,
             "task_completed": True,
         },
     )
 
     final = store.transition(
         record.run_id,
-        expected={RunStatus.INTEGRATING},
+        expected={RunStatus.INTEGRATING, RunStatus.AWAITING_REVIEW},
         status=RunStatus.PASSED,
         candidate_commit=record.candidate_commit,
     )
