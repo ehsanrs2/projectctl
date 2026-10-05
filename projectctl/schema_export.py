@@ -15,11 +15,14 @@ from projectctl.schemas.onboarding import (
     AdoptionManifest,
     AdoptionManifestV1,
     AdoptionManifestV2,
+    AdoptionManifestV3,
     AdoptionPlan,
     AdoptionPlanV1,
     AdoptionPlanV2,
+    AdoptionPlanV3,
     ProjectInspection,
     ProjectInspectionV1,
+    ProjectInspectionV2,
 )
 from projectctl.schemas.project_state import ProjectState
 from projectctl.schemas.quota import QuotaSnapshot, QuotaSnapshotV1
@@ -80,13 +83,16 @@ PUBLIC_SCHEMAS = {
     "integration-manifest.v2.schema.json": IntegrationManifest,
     "recovery-report.v1.schema.json": RecoveryReport,
     "project-inspection.v1.schema.json": ProjectInspectionV1,
-    "project-inspection.v2.schema.json": ProjectInspection,
+    "project-inspection.v2.schema.json": ProjectInspectionV2,
+    "project-inspection.v3.schema.json": ProjectInspection,
     "adoption-plan.v1.schema.json": AdoptionPlanV1,
     "adoption-plan.v2.schema.json": AdoptionPlanV2,
-    "adoption-plan.v3.schema.json": AdoptionPlan,
+    "adoption-plan.v3.schema.json": AdoptionPlanV3,
+    "adoption-plan.v4.schema.json": AdoptionPlan,
     "adoption-manifest.v1.schema.json": AdoptionManifestV1,
     "adoption-manifest.v2.schema.json": AdoptionManifestV2,
-    "adoption-manifest.v3.schema.json": AdoptionManifest,
+    "adoption-manifest.v3.schema.json": AdoptionManifestV3,
+    "adoption-manifest.v4.schema.json": AdoptionManifest,
 }
 
 
