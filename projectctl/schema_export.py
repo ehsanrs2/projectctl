@@ -18,6 +18,7 @@ from projectctl.schemas.delivery import (
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
 from projectctl.schemas.github_cache import GitHubCacheEntry, GitHubCacheRequest
 from projectctl.schemas.execution import (ExecutionPlan, ExecutionPlanV1, WorkerCheckpoint, WorkerCheckpointV1, WorkerRequest, WorkerRequestV1, WorkerResult)
+from projectctl.schemas.jira_lifecycle import JiraLifecycleMarker
 from projectctl.schemas.integration import (
     IntegrationManifest,
     IntegrationManifestV1,
@@ -100,6 +101,7 @@ PUBLIC_SCHEMAS = {
     "evidence-manifest.v2.schema.json": EvidenceManifest,
     "github-cache-request.v1.schema.json": GitHubCacheRequest,
     "github-cache-entry.v1.schema.json": GitHubCacheEntry,
+    "jira-lifecycle-marker.v1.schema.json": JiraLifecycleMarker,
     "artifact-metadata.v1.schema.json": ArtifactMetadata,
     "auto-run-policy.v1.schema.json": AutoRunPolicy,
     "auto-run-report.v1.schema.json": AutoRunReport,

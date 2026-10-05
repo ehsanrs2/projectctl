@@ -1200,7 +1200,7 @@ Safety boundary:
 
 #### M3.3b — Jira Relationship & Workflow Eligibility
 
-**Current milestone / implemented by this change.**
+**Completed.**
 
 Implemented:
 
@@ -1234,9 +1234,51 @@ Safety boundary:
 - stale embedded cross-project blocker status cannot incorrectly unblock a task
 - no Jira workflow mutation, issue-property write, claim or completion mutation occurs in M3.3b
 
-A subsequent Jira lifecycle milestone is intentionally not numbered yet. Before freezing it,
-current Jira issue-property and transition concurrency semantics must be reviewed with the same
-human-intent and crash-safety standard used for Linear.
+#### M3.3c — Jira CAS Lifecycle
+
+**Current milestone / implemented by this change.**
+
+Implemented:
+
+- public `JiraLifecycleMarker v1` contract
+- reserved Jira issue-property key `projectctl.lifecycle.v1`
+- lifecycle states `completion_pending`, `completed`, and `needs_decision`
+- filtered Jira bulk issue-property mutation as a compare-and-set primitive
+- absent-property creation guarded by `hasProperty=false`
+- existing-property update guarded by exact `currentValue`
+- every CAS scoped to one stable Jira numeric issue id
+- asynchronous Jira mutation task is awaited before any subsequent lifecycle operation
+- exact read-back verification after each mutation
+- unexpected third-party property changes fail closed and are never overwritten
+- two-phase completion guard: absent -> completion_pending -> completed
+- durable evidence/run binding for pending/completed markers
+- same-evidence crash recovery and idempotent completion retry
+- malformed/foreign lifecycle property -> NEEDS_DECISION / mutation refusal
+- native Jira workflow state is never transitioned by ProjectCTL
+- native Jira terminal state remains authoritative
+- completed marker is accepted as DONE only when current dependency/provider safety still holds
+- current blocker or ambiguity can override a completed marker to NEEDS_DECISION in normalization
+- Jira `block_for_decision` and `complete` capabilities are now supported
+- Jira provider-native claim/release remain unsupported; independent local/Git ownership is used
+- local, direct-Git, and review-required delivery modes can all feed Jira completion evidence
+- Doctor reports CAS lifecycle capability without performing a destructive probe write
+
+Safety boundary:
+
+- ordinary last-write-wins Jira issue-property PUT is never used for lifecycle state
+- native Jira workflow transitions remain human-owned
+- ProjectCTL does not alter resolution, assignee, labels, summary, or description
+- entity properties are treated as externally mutable; malformed/unexpected values are never repaired automatically
+- a crash after the pending guard leaves NEEDS_DECISION rather than false DONE
+- remote-success/local-crash windows are recovered from current marker + evidence identity
+- Jira write permission is proven only by an actual lifecycle mutation
+
+With M3.3c, Jira has completed the minimum execution proof sequence: read authority, explicit
+eligibility/dependencies, additive lifecycle writes, independent ownership, and provider-neutral
+delivery.
+
+The next numbered milestone is intentionally not frozen here. A new architecture review should
+choose among the post-M3 product directions rather than extending Jira work by default.
 
 ### Post-M3 directions — not yet milestone-frozen
 

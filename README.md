@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M3.3b — Jira Relationship & Workflow Eligibility**, adding explicit Jira READY-status and issue-link dependency policy while keeping Jira lifecycle mutation fail-closed.
+This repository currently implements **M3.3c — Jira CAS Lifecycle**, making Jira execution-capable through additive compare-and-set issue properties while leaving native Jira workflow state human-owned.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -1705,6 +1705,94 @@ So M3.3b improves scheduler truth without yet making Jira autonomously executabl
 
 See ADR-027 and `docs/PROJECTCTL_BLUEPRINT.md`.
 
-Next Jira lifecycle work is intentionally not numbered yet. We first need to review current Jira
-issue-property and workflow-transition concurrency semantics before deciding whether additive,
-crash-safe completion markers can be proven.
+### M3.3c — Jira CAS Lifecycle
+
+Jira can now participate in ProjectCTL execution without ProjectCTL transitioning native Jira
+workflow state.
+
+ProjectCTL reserves one issue property:
+
+```text
+projectctl.lifecycle.v1
+```
+
+with three states:
+
+```text
+completion_pending
+completed
+needs_decision
+```
+
+Lifecycle writes do **not** use Jira's ordinary per-issue property PUT. Instead ProjectCTL uses the
+filtered bulk property endpoint as compare-and-set:
+
+```text
+new marker:
+  entityIds=[stable issue id] + hasProperty=false
+
+existing marker:
+  entityIds=[stable issue id]
+  + hasProperty=true
+  + currentValue=<exact previously observed marker>
+```
+
+The Jira async task is awaited and the property is read back before ProjectCTL accepts success.
+
+Completion is crash-safe:
+
+```text
+validate durable evidence
+        ↓
+verify current Jira task/blockers
+        ↓
+CAS absent → completion_pending
+        ↓
+re-read current Jira task/blockers
+        ↓
+CAS exact pending → completed
+        ↓
+exact property read-back
+```
+
+If ProjectCTL crashes after the guard is written, the task normalizes to `NEEDS_DECISION` until
+the same run/evidence resumes. If completion already succeeded remotely before a local crash, retry
+recognizes the same completed marker idempotently.
+
+Unexpected/malformed/foreign property values are treated as external state and are never silently
+overwritten.
+
+Native Jira terminal state remains authoritative. A completed ProjectCTL marker also does not hide
+a currently unsafe dependency/provider state; such conflicts normalize to `NEEDS_DECISION`.
+
+Jira lifecycle capabilities are now:
+
+```text
+read                supported
+claim               unsupported
+release             unsupported
+block_for_decision  supported
+complete            supported
+```
+
+Claim/release remain intentionally provider-independent. Local projects use the ProjectCTL local
+ownership lock; distributed projects use the exact Git ref lease established in M3.2c1.
+
+Completion evidence remains delivery-aware:
+
+```text
+local delivery       -> EvidenceManifest
+direct Git delivery  -> PublicationManifest
+review delivery      -> ReviewReceipt
+```
+
+ProjectConfig remains **v8**; M3.3c introduces the public `JiraLifecycleMarker v1` contract rather
+than changing project intent/config.
+
+See ADR-028 and `docs/PROJECTCTL_BLUEPRINT.md`.
+
+Next:
+
+- perform a fresh architecture review across the post-M3 directions (portfolio scheduling,
+  account-level quota allocation, safe parallel runs, additional workers, Graphify context,
+  governed skills, research/experiment flows) and freeze the next milestone from that review

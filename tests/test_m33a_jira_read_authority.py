@@ -211,14 +211,14 @@ def test_jira_normalizes_type_priority_assignee_and_hierarchy(tmp_path: Path):
     assert tasks["jira-ENG-1"].hierarchy.sub_issues == ["jira-ENG-2"]
 
 
-def test_jira_capabilities_are_read_only():
+def test_jira_capabilities_keep_independent_ownership_but_support_lifecycle():
     caps = task_authority_capabilities_for_provider("jira")
 
     assert caps.read == CapabilityState.SUPPORTED
     assert caps.claim == CapabilityState.UNSUPPORTED
     assert caps.release == CapabilityState.UNSUPPORTED
-    assert caps.block_for_decision == CapabilityState.UNSUPPORTED
-    assert caps.complete == CapabilityState.UNSUPPORTED
+    assert caps.block_for_decision == CapabilityState.SUPPORTED
+    assert caps.complete == CapabilityState.SUPPORTED
 
 
 def test_project_config_v6_upgrades_to_v8_without_rewrite(tmp_path: Path):
@@ -273,7 +273,7 @@ def test_jira_adoption_records_provider_identity(tmp_path: Path):
     assert plan.unresolved_decisions == []
 
 
-def test_jira_execution_remains_fail_closed(tmp_path: Path):
+def test_jira_execution_is_ready_through_independent_ownership(tmp_path: Path):
     ctl = tmp_path / ".projectctl"
     ctl.mkdir()
     config = ProjectConfig(
@@ -289,8 +289,7 @@ def test_jira_execution_remains_fail_closed(tmp_path: Path):
         encoding="utf-8",
     )
 
-    with pytest.raises(ConfigurationError, match="block_for_decision, complete"):
-        require_project_execution_ready(tmp_path)
+    require_project_execution_ready(tmp_path)
 
 
 def test_resolve_jira_authority_uses_runtime_client_contract(tmp_path: Path, monkeypatch):
@@ -315,4 +314,4 @@ def test_resolve_jira_authority_uses_runtime_client_contract(tmp_path: Path, mon
 
     assert authority.provider == "jira"
     assert isinstance(authority.reader, JiraIssuesTaskStore)
-    assert authority.completion_writer is None
+    assert authority.completion_writer is not None

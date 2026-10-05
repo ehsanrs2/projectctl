@@ -6,8 +6,12 @@ from projectctl.core.digest import digest
 from projectctl.core.enums import ResourceClass, RiskLevel, TaskStatus, TaskType
 from projectctl.core.errors import ProviderUnavailableError, TaskStoreError
 from projectctl.core.time import utc_now
-from projectctl.integrations.jira.client import JiraCloudClient
+from projectctl.integrations.jira.client import (
+    JIRA_LIFECYCLE_PROPERTY,
+    JiraCloudClient,
+)
 from projectctl.schemas.config import JiraLinkRule, JiraWorkflowPolicy
+from projectctl.schemas.jira_lifecycle import JiraLifecycleMarker
 from projectctl.schemas.task import (
     NormalizedTask,
     TaskHierarchy,
@@ -103,6 +107,7 @@ class JiraIssuesTaskStore:
         project_key: str,
         policy: JiraWorkflowPolicy | None = None,
         client: JiraCloudClient | None = None,
+        lifecycle_enabled: bool = True,
     ):
         self.project_root = project_root.resolve()
         self.client = client or JiraCloudClient(
@@ -113,6 +118,7 @@ class JiraIssuesTaskStore:
         self.site = self.client.site
         self.project_key = self.client.project_key
         self.policy = policy or JiraWorkflowPolicy()
+        self.lifecycle_enabled = lifecycle_enabled
         self._ready_by_id = {
             item.id: item
             for item in self.policy.ready_statuses
@@ -341,6 +347,85 @@ class JiraIssuesTaskStore:
             human_decision_required=human_decision,
             tags=tags,
             normalization_notes=notes,
+        )
+
+    @staticmethod
+    def _property_value(raw: dict[str, Any], key: str) -> Any | None:
+        properties = raw.get("properties")
+        if properties is None:
+            return None
+        if isinstance(properties, dict):
+            return properties.get(key)
+        if isinstance(properties, list):
+            matches = [
+                item.get("value")
+                for item in properties
+                if isinstance(item, dict) and item.get("key") == key
+            ]
+            if len(matches) > 1:
+                raise TaskStoreError(
+                    f"Jira issue contains duplicate property values for {key!r}."
+                )
+            return matches[0] if matches else None
+        raise TaskStoreError("Jira issue properties metadata is malformed.")
+
+    def _apply_lifecycle(
+        self,
+        task: NormalizedTask,
+        raw: dict[str, Any],
+    ) -> None:
+        if not self.lifecycle_enabled:
+            return
+        try:
+            value = self._property_value(raw, JIRA_LIFECYCLE_PROPERTY)
+        except TaskStoreError as exc:
+            self._mark_needs_decision(task, str(exc))
+            return
+        if value is None:
+            return
+        try:
+            marker = JiraLifecycleMarker.model_validate(value)
+        except Exception:
+            self._mark_needs_decision(
+                task,
+                "Jira ProjectCTL lifecycle property is malformed; human review is required.",
+            )
+            return
+
+        issue_id = str(raw.get("id") or "").strip()
+        if marker.task_id != task.id or marker.issue_id != issue_id:
+            self._mark_needs_decision(
+                task,
+                "Jira ProjectCTL lifecycle marker identity does not match this issue.",
+            )
+            return
+
+        # Native Jira terminal state remains authoritative.
+        if task.status in _TERMINAL:
+            return
+
+        if marker.state in {"needs_decision", "completion_pending"}:
+            self._mark_needs_decision(
+                task,
+                "Jira ProjectCTL lifecycle requires human decision."
+                if marker.state == "needs_decision"
+                else "Jira ProjectCTL completion is pending/recoverable.",
+            )
+            return
+
+        assert marker.state == "completed"
+        if task.human_decision_required or task.dependencies:
+            self._mark_needs_decision(
+                task,
+                "Jira ProjectCTL completion marker conflicts with current "
+                "dependency/provider safety state.",
+            )
+            return
+
+        task.status = TaskStatus.DONE
+        task.human_decision_required = False
+        task.normalization_notes.append(
+            "Jira task is completed by the verified ProjectCTL lifecycle property."
         )
 
     @staticmethod
@@ -653,6 +738,9 @@ class JiraIssuesTaskStore:
                 task_by_id[task_id],
                 "Jira parent/sub-task hierarchy contains a cycle involving this task.",
             )
+
+        for key, raw in raw_by_key.items():
+            self._apply_lifecycle(by_key[key], raw)
 
         return sorted(tasks, key=lambda task: task.id.casefold())
 
