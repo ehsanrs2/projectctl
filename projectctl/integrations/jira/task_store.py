@@ -581,12 +581,10 @@ class JiraIssuesTaskStore:
                 task.status = TaskStatus.BLOCKED
 
         # Derive reverse local blocks edges from canonical dependency edges.
+        task_by_id = {task.id: task for task in tasks}
         for task in tasks:
             for dependency in task.dependencies:
-                if dependency in by_key.values():
-                    # Unreachable because values are objects, retained below by id map.
-                    continue
-                local = next((candidate for candidate in tasks if candidate.id == dependency), None)
+                local = task_by_id.get(dependency)
                 if local is not None and task.id not in local.blocks:
                     local.blocks.append(task.id)
 
@@ -594,7 +592,6 @@ class JiraIssuesTaskStore:
             task.blocks = sorted(set(task.blocks))
             task.hierarchy.sub_issues = sorted(set(task.hierarchy.sub_issues))
 
-        task_by_id = {task.id: task for task in tasks}
         dependency_cycles = _cycle_nodes(task_by_id, hierarchy=False)
         for task_id in dependency_cycles:
             self._mark_needs_decision(
