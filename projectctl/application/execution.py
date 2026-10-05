@@ -46,6 +46,7 @@ from projectctl.integrations.execution_ownership import (
     require_project_execution_ready,
     resolve_execution_ownership,
 )
+from projectctl.integrations.task_authority import resolve_task_authority
 from projectctl.project.loader import load_project_config
 from projectctl.project.locking import project_lock
 from projectctl.project.state import load_project_state, semantic_project_state_digest
@@ -286,7 +287,11 @@ def _validate_plan_inputs(project_root: Path, plan: ExecutionPlan) -> RunTermina
 
 
 def _claimer(project_root: Path):
-    return resolve_execution_ownership(project_root).claimer
+    authority = resolve_task_authority(project_root)
+    return resolve_execution_ownership(
+        project_root,
+        task_authority=authority,
+    ).claimer
 
 
 def _assert_task_store_execution_capable(project_root: Path) -> None:
