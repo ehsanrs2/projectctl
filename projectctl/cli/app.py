@@ -558,6 +558,8 @@ def execution_ownership_command(
         typer.echo(f"remote_name          {policy.remote_name}")
     if policy.remote_identity:
         typer.echo(f"remote_identity      {policy.remote_identity}")
+    if policy.review_provider:
+        typer.echo(f"review_provider      {policy.review_provider}")
     for note in policy.notes:
         typer.echo(f"note: {note}")
 
