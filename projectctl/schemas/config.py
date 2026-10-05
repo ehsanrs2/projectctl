@@ -60,7 +60,7 @@ class TaskStoreConfigV3(ProjectCtlModel):
     )
 
 
-class TaskStoreConfig(ProjectCtlModel):
+class TaskStoreConfigV4(ProjectCtlModel):
     provider: str = "beads"
     repository: str | None = None
     team: str | None = None
@@ -73,6 +73,40 @@ class TaskStoreConfig(ProjectCtlModel):
             "Zero disables local fresh hits and forces remote revalidation."
         ),
     )
+
+
+
+def _validate_jira_site(value: str) -> str:
+    raw = str(value).strip().rstrip("/").casefold()
+    if "://" in raw or "/" in raw or "@" in raw:
+        raise ValueError(
+            "Jira site must be a credential-free host such as acme.atlassian.net."
+        )
+    if not raw.endswith(".atlassian.net"):
+        raise ValueError(
+            "Built-in Jira task authority supports Jira Cloud *.atlassian.net sites only."
+        )
+    return raw
+
+
+JiraSite = Annotated[str, AfterValidator(_validate_jira_site)]
+
+
+def _validate_jira_project(value: str) -> str:
+    raw = str(value).strip().upper()
+    if not raw or not raw[0].isalpha() or any(
+        not (ch.isalnum() or ch in {"_", "-"}) for ch in raw
+    ):
+        raise ValueError("Jira project must be a project key such as ENG or PLATFORM.")
+    return raw
+
+
+JiraProjectKey = Annotated[str, AfterValidator(_validate_jira_project)]
+
+
+class TaskStoreConfig(TaskStoreConfigV4):
+    site: JiraSite | None = None
+    project: JiraProjectKey | None = None
 
 
 class CodeTransportConfig(ProjectCtlModel):
@@ -254,7 +288,7 @@ class ProjectConfigV4(ProjectCtlModel):
     schema_kind: Literal["projectctl.project_config"] = "projectctl.project_config"
     schema_version: Literal[4] = 4
     project: ProjectIdentity
-    task_store: TaskStoreConfig = Field(default_factory=TaskStoreConfig)
+    task_store: TaskStoreConfigV4 = Field(default_factory=TaskStoreConfigV4)
     paths: ProjectPaths = Field(default_factory=ProjectPaths)
     knowledge: KnowledgeConfig = Field(default_factory=KnowledgeConfig)
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
@@ -267,7 +301,7 @@ class ProjectConfigV5(ProjectCtlModel):
     schema_kind: Literal["projectctl.project_config"] = "projectctl.project_config"
     schema_version: Literal[5] = 5
     project: ProjectIdentity
-    task_store: TaskStoreConfig = Field(default_factory=TaskStoreConfig)
+    task_store: TaskStoreConfigV4 = Field(default_factory=TaskStoreConfigV4)
     code_transport: CodeTransportConfig = Field(default_factory=CodeTransportConfig)
     paths: ProjectPaths = Field(default_factory=ProjectPaths)
     knowledge: KnowledgeConfig = Field(default_factory=KnowledgeConfig)
@@ -277,11 +311,11 @@ class ProjectConfigV5(ProjectCtlModel):
     model_profiles: dict[ModelProfile, ModelProfileConfig] = Field(default_factory=default_model_profiles)
 
 
-class ProjectConfig(ProjectCtlModel):
+class ProjectConfigV6(ProjectCtlModel):
     schema_kind: Literal["projectctl.project_config"] = "projectctl.project_config"
     schema_version: Literal[6] = 6
     project: ProjectIdentity
-    task_store: TaskStoreConfig = Field(default_factory=TaskStoreConfig)
+    task_store: TaskStoreConfigV4 = Field(default_factory=TaskStoreConfigV4)
     code_transport: CodeTransportConfig = Field(default_factory=CodeTransportConfig)
     code_delivery: CodeDeliveryConfig = Field(default_factory=CodeDeliveryConfig)
     paths: ProjectPaths = Field(default_factory=ProjectPaths)
@@ -301,4 +335,36 @@ class ProjectConfig(ProjectCtlModel):
                 f"{self.code_delivery.mode} code delivery requires "
                 "code_transport.mode='git_remote'."
             )
+        return self
+
+
+class ProjectConfig(ProjectCtlModel):
+    schema_kind: Literal["projectctl.project_config"] = "projectctl.project_config"
+    schema_version: Literal[7] = 7
+    project: ProjectIdentity
+    task_store: TaskStoreConfig = Field(default_factory=TaskStoreConfig)
+    code_transport: CodeTransportConfig = Field(default_factory=CodeTransportConfig)
+    code_delivery: CodeDeliveryConfig = Field(default_factory=CodeDeliveryConfig)
+    paths: ProjectPaths = Field(default_factory=ProjectPaths)
+    knowledge: KnowledgeConfig = Field(default_factory=KnowledgeConfig)
+    scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
+    quota: QuotaPolicy = Field(default_factory=QuotaPolicy)
+    features: FeatureFlags = Field(default_factory=FeatureFlags)
+    model_profiles: dict[ModelProfile, ModelProfileConfig] = Field(default_factory=default_model_profiles)
+
+    @model_validator(mode="after")
+    def validate_project_config(self):
+        if (
+            self.code_delivery.mode in {"direct_git", "review_required"}
+            and self.code_transport.mode != "git_remote"
+        ):
+            raise ValueError(
+                f"{self.code_delivery.mode} code delivery requires "
+                "code_transport.mode='git_remote'."
+            )
+        if self.task_store.provider == "jira":
+            if not self.task_store.site or not self.task_store.project:
+                raise ValueError(
+                    "Jira task authority requires task_store.site and task_store.project."
+                )
         return self
