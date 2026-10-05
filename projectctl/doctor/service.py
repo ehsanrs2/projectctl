@@ -3,6 +3,7 @@ from pathlib import Path
 from projectctl.core.time import utc_now
 from projectctl.doctor.checks import (
     _db_check,
+    check_code_delivery,
     check_config,
     check_global_home,
     check_optional_tools,
@@ -27,6 +28,7 @@ def run_doctor(root: Path) -> HealthReport:
         _db_check(root, "telemetry.sqlite"),
         check_task_store(root),
         check_execution_ownership(root),
+        check_code_delivery(root),
         check_global_home(),
         check_quota_provider(root),
         check_generated_artifacts(root),
