@@ -229,12 +229,13 @@ def check_task_store(root: Path) -> HealthCheckResult:
             status=HealthStatus.WARN,
             summary=(
                 f"Linear task authority is readable for team "
-                f"{str(team.get('name') or config.task_store.team)} but M3.2a is read-only."
+                f"{str(team.get('name') or config.task_store.team)}; M3.2b remains read-only."
             ),
             details=[
-                "Scheduling/status snapshot reads are available.",
-                "Non-terminal Linear issues are not auto-eligible.",
-                "Claim/release, dependency semantics, decision blocking and completion writes are unsupported.",
+                "Scheduling/status reads include blocker and parent/sub-issue semantics.",
+                "Unstarted issues may become READY only when no unresolved blocker is present.",
+                "Backlog issues remain PLANNED; started issues are observational RUNNING.",
+                "Claim/release, decision-block writes and completion writes remain unsupported.",
                 "ProjectCTL does not persist Linear credentials.",
             ],
         )

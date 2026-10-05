@@ -12,7 +12,7 @@ from projectctl.integrations.linear.team import normalize_linear_team_id
 
 
 LINEAR_GRAPHQL_ENDPOINT = "https://api.linear.app/graphql"
-LINEAR_GRAPHQL_CONTRACT = "linear-graphql-v1"
+LINEAR_GRAPHQL_CONTRACT = "linear-graphql-v2"
 
 
 _TEAM_QUERY = """
@@ -47,6 +47,13 @@ query ProjectCtlLinearIssues($teamId: String!, $first: Int!, $after: String) {
           id
           name
         }
+        parent {
+          id
+          identifier
+          team {
+            id
+          }
+        }
       }
       pageInfo {
         hasNextPage
@@ -58,8 +65,54 @@ query ProjectCtlLinearIssues($teamId: String!, $first: Int!, $after: String) {
 """
 
 
+
+_INVERSE_RELATIONS_QUERY = """
+query ProjectCtlLinearInverseRelations(
+  $issueId: String!,
+  $first: Int!,
+  $after: String
+) {
+  issue(id: $issueId) {
+    id
+    inverseRelations(first: $first, after: $after) {
+      nodes {
+        id
+        type
+        issue {
+          id
+          identifier
+          state {
+            type
+          }
+          team {
+            id
+          }
+        }
+        relatedIssue {
+          id
+          identifier
+          state {
+            type
+          }
+          team {
+            id
+          }
+        }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+}
+"""
+
 class LinearIssuesClient:
-    """Narrow read-only Linear GraphQL client for M3.2a.
+    """Narrow read-only Linear GraphQL client for M3.2a/M3.2b.
+
+    M3.2b adds independently paginated incoming IssueRelation reads so blocker
+    semantics are not truncated inside the team Issue connection.
 
     Credentials remain outside ProjectCTL persisted state. Personal API keys are
     read from LINEAR_API_KEY and OAuth access tokens from LINEAR_ACCESS_TOKEN.
@@ -226,6 +279,86 @@ class LinearIssuesClient:
                 )
             if cursor in seen_cursors:
                 raise TaskStoreError("Linear pagination cursor repeated; refusing a loop.")
+            seen_cursors.add(cursor)
+            after = cursor
+
+
+    def list_inverse_relations(
+        self,
+        issue_id: str,
+        *,
+        page_size: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Return relations whose target is the requested issue.
+
+        For Linear `type=blocks`, the source `issue` is the blocker and the
+        target `relatedIssue` is blocked. ProjectCTL validates that the target
+        UUID on every relation equals `issue_id` before using it.
+        """
+        requested = str(issue_id).strip()
+        if not requested:
+            raise ValueError("Linear issue_id must be non-empty.")
+        if page_size <= 0:
+            raise ValueError("Linear page_size must be positive.")
+
+        after: str | None = None
+        relations: list[dict[str, Any]] = []
+        seen_cursors: set[str] = set()
+
+        while True:
+            data = self._graphql(
+                _INVERSE_RELATIONS_QUERY,
+                {
+                    "issueId": requested,
+                    "first": page_size,
+                    "after": after,
+                },
+            )
+            issue = data.get("issue")
+            if not isinstance(issue, dict):
+                raise TaskStoreError(
+                    f"Linear issue {requested!r} was not found or is not readable."
+                )
+            if str(issue.get("id") or "").strip() != requested:
+                raise TaskStoreError(
+                    "Linear inverse-relation response identity does not match request."
+                )
+
+            connection = issue.get("inverseRelations")
+            if not isinstance(connection, dict):
+                raise TaskStoreError(
+                    "Linear issue inverseRelations connection is missing."
+                )
+            nodes = connection.get("nodes")
+            page_info = connection.get("pageInfo")
+            if not isinstance(nodes, list) or not isinstance(page_info, dict):
+                raise TaskStoreError(
+                    "Linear inverseRelations page has an invalid connection shape."
+                )
+            for node in nodes:
+                if not isinstance(node, dict):
+                    raise TaskStoreError(
+                        "Linear inverseRelations page contains a non-object node."
+                    )
+                relations.append(node)
+
+            has_next = page_info.get("hasNextPage")
+            if not isinstance(has_next, bool):
+                raise TaskStoreError(
+                    "Linear inverseRelations pageInfo.hasNextPage is not boolean."
+                )
+            if not has_next:
+                return relations
+
+            cursor = page_info.get("endCursor")
+            if not isinstance(cursor, str) or not cursor.strip():
+                raise TaskStoreError(
+                    "Linear inverseRelations hasNextPage=true without a usable endCursor."
+                )
+            if cursor in seen_cursors:
+                raise TaskStoreError(
+                    "Linear inverseRelations cursor repeated; refusing a loop."
+                )
             seen_cursors.add(cursor)
             after = cursor
 
