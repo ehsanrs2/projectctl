@@ -13,7 +13,7 @@ from urllib.request import Request, urlopen
 from projectctl.core.errors import ProviderUnavailableError, TaskStoreError
 
 
-JIRA_REST_CONTRACT = "jira-cloud-rest-v3-2026-10"
+JIRA_REST_CONTRACT = "jira-cloud-rest-v3-m33b-2026-10"
 _PROJECT_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_\-]*$")
 _FIELDS = [
     "summary",
@@ -28,6 +28,7 @@ _FIELDS = [
     "resolution",
     "labels",
     "project",
+    "issuelinks",
 ]
 
 
@@ -258,6 +259,32 @@ class JiraCloudClient:
             query={"fields": ",".join(_FIELDS)},
         )
         return self._validate_issue(raw)
+
+    def issue_link_types(self) -> list[dict[str, Any]]:
+        raw = self._api("GET", "/rest/api/3/issueLinkType")
+        if not isinstance(raw, dict) or not isinstance(raw.get("issueLinkTypes"), list):
+            raise TaskStoreError("Jira issue-link-type response is malformed.")
+        values: list[dict[str, Any]] = []
+        for item in raw["issueLinkTypes"]:
+            if not isinstance(item, dict):
+                raise TaskStoreError("Jira issue-link-type response contains a non-object.")
+            if not all(str(item.get(key) or "").strip() for key in ("id", "name", "inward", "outward")):
+                raise TaskStoreError("Jira issue-link-type response is missing identity/labels.")
+            values.append(item)
+        return values
+
+    def statuses(self) -> list[dict[str, Any]]:
+        raw = self._api("GET", "/rest/api/3/status")
+        if not isinstance(raw, list):
+            raise TaskStoreError("Jira status catalog response is malformed.")
+        values: list[dict[str, Any]] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                raise TaskStoreError("Jira status catalog contains a non-object.")
+            if not str(item.get("id") or "").strip() or not str(item.get("name") or "").strip():
+                raise TaskStoreError("Jira status catalog entry is missing id/name.")
+            values.append(item)
+        return values
 
     def version(self) -> str:
         return JIRA_REST_CONTRACT
