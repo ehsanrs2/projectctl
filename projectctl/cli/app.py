@@ -120,8 +120,6 @@ def _validate_task_store_choice(value: str | None) -> str | None:
     return value
 
 
-
-
 def _validate_code_transport_choice(value: str | None) -> str | None:
     if value is None:
         return None
@@ -131,6 +129,7 @@ def _validate_code_transport_choice(value: str | None) -> str | None:
             "Unsupported code transport. Choose 'local' or 'git-remote'."
         )
     return normalized
+
 
 def _prompt_task_store_team(provider: str | None, current: str | None) -> str | None:
     if provider != "linear" or current is not None:
@@ -393,6 +392,9 @@ def adopt_command(
                 task_store_provider=selected_store,
                 task_store_repository=task_store_repository,
                 task_store_team=task_store_team,
+                code_transport_mode=selected_transport,
+                code_remote_name=git_remote_name,
+                code_remote_identity=git_remote_identity,
             )
 
         if (json_output or non_interactive) and (not yes or (plan.dirty and not allow_dirty)):
