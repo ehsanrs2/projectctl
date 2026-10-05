@@ -16,10 +16,12 @@ from projectctl.schemas.onboarding import (
     AdoptionManifestV1,
     AdoptionManifestV2,
     AdoptionManifestV3,
+    AdoptionManifestV4,
     AdoptionPlan,
     AdoptionPlanV1,
     AdoptionPlanV2,
     AdoptionPlanV3,
+    AdoptionPlanV4,
     ProjectInspection,
     ProjectInspectionV1,
     ProjectInspectionV2,
@@ -90,11 +92,13 @@ PUBLIC_SCHEMAS = {
     "adoption-plan.v1.schema.json": AdoptionPlanV1,
     "adoption-plan.v2.schema.json": AdoptionPlanV2,
     "adoption-plan.v3.schema.json": AdoptionPlanV3,
-    "adoption-plan.v4.schema.json": AdoptionPlan,
+    "adoption-plan.v4.schema.json": AdoptionPlanV4,
+    "adoption-plan.v5.schema.json": AdoptionPlan,
     "adoption-manifest.v1.schema.json": AdoptionManifestV1,
     "adoption-manifest.v2.schema.json": AdoptionManifestV2,
     "adoption-manifest.v3.schema.json": AdoptionManifestV3,
-    "adoption-manifest.v4.schema.json": AdoptionManifest,
+    "adoption-manifest.v4.schema.json": AdoptionManifestV4,
+    "adoption-manifest.v5.schema.json": AdoptionManifest,
 }
 
 
