@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Make code delivery independent from task authority and enable safe Linear lifecycle completion without overwriting native human workflow state.
+current_goal: Support protected-branch delivery through durable, idempotent GitHub pull requests and GitLab merge requests while preserving exact verified-candidate evidence and human merge authority.
 active_milestone:
-  id: M3.2c2
-  title: Generic Delivery & Linear Lifecycle
+  id: M3.2c3
+  title: Review-Aware Delivery Adapters
   aliases:
-    - Provider-neutral Code Delivery
-    - Linear Additive Completion
-    - Crash-safe Linear Lifecycle
+    - Protected Branch Delivery
+    - GitHub PR Delivery
+    - GitLab MR Delivery
 updated_at: null

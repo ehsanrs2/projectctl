@@ -40,6 +40,7 @@ _ACTIVE_STATUSES = {
     RunStatus.VERIFYING,
     RunStatus.READY_TO_INTEGRATE,
     RunStatus.INTEGRATING,
+    RunStatus.AWAITING_REVIEW,
 }
 
 _RETRYABLE_REASONS = {
@@ -100,6 +101,8 @@ def _classify_terminal(record, attempts_for_task: int, policy: AutoRunPolicy):
         return AutoStopReason.QUOTA_CHECKPOINTED
     if record.status == RunStatus.PASSED:
         return None
+    if record.status == RunStatus.AWAITING_REVIEW:
+        return AutoStopReason.REVIEW_PENDING
     if record.status == RunStatus.BLOCKED_POLICY:
         return AutoStopReason.POLICY_BLOCKED
     if record.status == RunStatus.NEEDS_DECISION:
@@ -133,7 +136,7 @@ def _advance_run(project_root: Path, run_id: str):
         else:
             recover_run(project_root, run_id)
         record = store.get(run_id)
-    elif record.status == RunStatus.INTEGRATING:
+    elif record.status in {RunStatus.INTEGRATING, RunStatus.AWAITING_REVIEW}:
         recover_run(project_root, run_id)
         record = store.get(run_id)
 

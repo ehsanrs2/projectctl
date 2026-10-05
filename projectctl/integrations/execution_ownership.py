@@ -164,8 +164,11 @@ def require_project_execution_ready(project_root: Path) -> None:
     require_code_delivery_execution_ready(root)
 
     delivery = code_delivery_policy(root)
-    if capabilities.provider == "github" and delivery.mode != "direct_git":
+    if capabilities.provider == "github" and delivery.mode not in {
+        "direct_git",
+        "review_required",
+    }:
         raise ConfigurationError(
-            "GitHub task completion currently requires code_delivery.mode='direct_git' "
-            "because completion is gated on remote-visible publication evidence."
+            "GitHub task completion requires remote-visible delivery evidence: "
+            "use code_delivery.mode='direct_git' or 'review_required'."
         )

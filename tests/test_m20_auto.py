@@ -150,6 +150,35 @@ def test_auto_stops_on_material_project_state_change(tmp_path: Path, monkeypatch
     assert report.completed_tasks == 1
 
 
+def test_auto_stops_while_external_review_is_pending(tmp_path: Path, monkeypatch):
+    setup_common(monkeypatch)
+    monkeypatch.setattr(auto_app, "collect_status", lambda root: status_bundle())
+    monkeypatch.setattr(
+        auto_app,
+        "prepare_next_run",
+        lambda *a, **k: SimpleNamespace(
+            record=SimpleNamespace(run_id="run-review")
+        ),
+    )
+    monkeypatch.setattr(
+        auto_app,
+        "_advance_run",
+        lambda root, run_id: SimpleNamespace(
+            run_id=run_id,
+            task_id="task-1",
+            status=RunStatus.AWAITING_REVIEW,
+            terminal_reason=None,
+        ),
+    )
+
+    report = auto_app.run_auto(tmp_path, AutoRunPolicy(max_tasks=3))
+
+    assert report.stop_reason == AutoStopReason.REVIEW_PENDING
+    assert report.attempted_tasks == 1
+    assert report.completed_tasks == 0
+    assert report.steps[-1].final_status == RunStatus.AWAITING_REVIEW
+
+
 def test_auto_stops_on_human_decision(tmp_path: Path, monkeypatch):
     setup_common(monkeypatch)
     monkeypatch.setattr(auto_app, "collect_status", lambda root: status_bundle())

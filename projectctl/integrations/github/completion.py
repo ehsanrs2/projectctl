@@ -7,7 +7,7 @@ from typing import Any
 from projectctl.core.digest import digest
 from projectctl.core.errors import TaskStoreError
 from projectctl.integrations.github.client import GitHubIssuesClient
-from projectctl.schemas.delivery import PublicationManifest
+from projectctl.schemas.delivery import PublicationManifest, ReviewReceipt
 from projectctl.schemas.execution import EvidenceReference
 
 
@@ -50,29 +50,57 @@ class GitHubTaskCompletionWriter:
             repository=repository,
         )
 
-    def _validate_publication_evidence(self, evidence: EvidenceReference) -> PublicationManifest:
+    def _validate_completion_evidence(self, evidence: EvidenceReference) -> None:
         path = (self.project_root / evidence.path).resolve()
         if not path.is_relative_to(self.project_root) or not path.exists():
             raise TaskStoreError(
-                "GitHub completion requires a durable publication manifest inside the project."
+                "GitHub completion requires durable remote delivery evidence inside the project."
             )
         try:
-            manifest = PublicationManifest.model_validate(
-                json.loads(path.read_text(encoding="utf-8"))
-            )
+            payload = json.loads(path.read_text(encoding="utf-8"))
         except Exception as exc:
             raise TaskStoreError(
-                f"GitHub completion publication evidence is invalid: {exc}"
+                f"GitHub completion delivery evidence is invalid JSON: {exc}"
             ) from exc
+        if not isinstance(payload, dict):
+            raise TaskStoreError("GitHub completion evidence must be a JSON object.")
+
+        schema_kind = str(payload.get("schema_kind") or "").strip()
+        try:
+            if schema_kind == "projectctl.publication_manifest":
+                manifest = PublicationManifest.model_validate(payload)
+                if (
+                    not manifest.published
+                    or manifest.remote_after != manifest.candidate_commit
+                ):
+                    raise TaskStoreError(
+                        "GitHub completion requires proof that the exact candidate is published."
+                    )
+            elif schema_kind == "projectctl.review_receipt":
+                manifest = ReviewReceipt.model_validate(payload)
+                if (
+                    not manifest.delivery_complete
+                    or manifest.state != "merged"
+                    or manifest.head_commit != manifest.candidate_commit
+                ):
+                    raise TaskStoreError(
+                        "GitHub completion requires a merged review bound to the exact candidate."
+                    )
+            else:
+                raise TaskStoreError(
+                    f"Unsupported GitHub completion evidence kind: {schema_kind or 'missing'}."
+                )
+        except TaskStoreError:
+            raise
+        except Exception as exc:
+            raise TaskStoreError(
+                f"GitHub completion delivery evidence is invalid: {exc}"
+            ) from exc
+
         if digest(manifest) != evidence.digest:
             raise TaskStoreError(
-                "GitHub completion publication evidence digest does not match."
+                "GitHub completion delivery evidence digest does not match."
             )
-        if not manifest.published or manifest.remote_after != manifest.candidate_commit:
-            raise TaskStoreError(
-                "GitHub completion requires proof that the exact candidate is published."
-            )
-        return manifest
 
     def complete(self, task_id: str, *, evidence: EvidenceReference) -> None:
         issue = self.client.show(task_id)
@@ -86,7 +114,7 @@ class GitHubTaskCompletionWriter:
                 f"state_reason={state_reason or 'unknown'}; refusing to overwrite human intent."
             )
 
-        self._validate_publication_evidence(evidence)
+        self._validate_completion_evidence(evidence)
 
         self.client.ensure_label(
             COMPLETED_LABEL,

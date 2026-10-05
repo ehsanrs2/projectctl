@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository currently implements **M3.2c2 — Generic Delivery & Linear Lifecycle**, separating code delivery from task authority and adding crash-safe additive Linear completion without overwriting native human workflow state.
+This repository currently implements **M3.2c3 — Review-Aware Delivery Adapters**, adding durable GitHub pull-request and GitLab merge-request delivery for protected branches without treating review creation as completion or bypassing human merge authority.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -1487,7 +1487,74 @@ policy with a direct push.
 
 See ADR-024 and `docs/PROJECTCTL_BLUEPRINT.md`.
 
-Next:
+### M3.2c3 — Review-Aware Delivery Adapters
 
-- **M3.2c3 — Review-Aware Delivery Adapters** — define durable review request/receipt contracts and
-  safe GitHub PR / GitLab MR delivery without weakening branch protections
+`review_required` is now an executable delivery mode for canonical GitHub.com and GitLab.com
+remotes.
+
+ProjectCTL creates a deterministic candidate branch:
+
+```text
+projectctl/review/<run-id>-<candidate-prefix>
+```
+
+and publishes **only the exact verified candidate** to that branch. If the branch already exists
+at another SHA, delivery fails closed rather than replacing reviewed code.
+
+Before any PR/MR creation side effect, ProjectCTL persists and event-anchors a `ReviewRequest`.
+Creation is reconcile-first and idempotent, so a crash after the provider created the review but
+before ProjectCTL persisted the receipt does not create duplicate reviews on retry.
+
+Supported built-in review hosts:
+
+```text
+github.com/<owner>/<repo> -> pull request via authenticated gh
+gitlab.com/<group>/<repo> -> merge request via GitLab API
+```
+
+GitLab credentials are runtime-only. Configure exactly one of:
+
+```text
+GITLAB_TOKEN
+GITLAB_ACCESS_TOKEN
+```
+
+Opening a review is **not completion**. The run enters `AWAITING_REVIEW`, keeps its execution
+claim, and bounded autonomous mode stops with `REVIEW_PENDING`.
+
+ProjectCTL never approves or merges the review itself.
+
+After an external merge, recovery independently proves that old verification evidence is still
+valid. Accepted delivery is intentionally strict:
+
+- review head must still equal the verified candidate
+- fast-forward merge is accepted when the target equals the candidate
+- a merge commit is accepted only when its two parents are exactly the verified base and candidate
+- the proven merge result must be reachable from the current stable remote target
+- the local integration target must fast-forward to the proven remote target
+
+Squash merges, rebase merges, stale-base merges, changed review heads, closed-unmerged reviews, or
+ambiguous provider state fail closed to human decision rather than reusing stale verification.
+
+Recovery:
+
+```bash
+projectctl run recover <RUN_ID>
+```
+
+While the PR/MR is open, recovery remains idempotently in `AWAITING_REVIEW`. Once the exact
+review merge is proven, ProjectCTL synchronizes the local target, completes the canonical task with
+the durable `ReviewReceipt`, releases independent ownership, and transitions the run to `PASSED`.
+
+Public contracts added/versioned in this milestone:
+
+- `ReviewRequest v1`
+- `ReviewReceipt v1`
+- `CodeDeliveryPolicy v2`
+- `IntegrationManifest v3`
+
+See ADR-025 and `docs/PROJECTCTL_BLUEPRINT.md`.
+
+Next provider work should reuse this same proof sequence. Jira is the leading candidate, but the
+next milestone number is intentionally left unfrozen until its current API/concurrency semantics
+are reviewed.

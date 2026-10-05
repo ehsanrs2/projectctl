@@ -24,6 +24,7 @@ _ACTIVE = {
     RunStatus.VERIFYING,
     RunStatus.READY_TO_INTEGRATE,
     RunStatus.INTEGRATING,
+    RunStatus.AWAITING_REVIEW,
 }
 
 

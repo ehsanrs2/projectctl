@@ -2,7 +2,7 @@ import shutil
 from pathlib import Path
 
 from projectctl.core.enums import HealthStatus
-from projectctl.core.errors import ConfigurationError, DatabaseVersionError, ProviderUnavailableError, QuotaError, RepositoryContractError, TaskStoreError, UnsafePathError
+from projectctl.core.errors import ConfigurationError, DatabaseVersionError, IntegrationError, ProviderUnavailableError, QuotaError, RepositoryContractError, TaskStoreError, UnsafePathError
 from projectctl.core.paths import resolve_inside_repo
 from projectctl.git.ref_lease import RemoteRefLease
 from projectctl.git.remote import normalize_git_remote_identity
@@ -10,7 +10,7 @@ from projectctl.integrations.github import GitHubIssuesClient
 from projectctl.integrations.github.repository import parse_github_repository
 from projectctl.integrations.linear.client import LinearIssuesClient
 from projectctl.integrations.linear.lifecycle import COMPLETED_LABEL, NEEDS_DECISION_LABEL
-from projectctl.integrations.delivery import code_delivery_policy
+from projectctl.integrations.delivery import code_delivery_policy, resolve_code_delivery
 from projectctl.integrations.execution_ownership import resolve_execution_ownership
 from projectctl.project.bootstrap import projectctl_home
 from projectctl.project.loader import load_project_config
@@ -365,16 +365,41 @@ def check_code_delivery(root: Path) -> HealthCheckResult:
         )
 
     if policy.mode == "review_required":
+        if not policy.supported or not policy.review_provider:
+            return HealthCheckResult(
+                check_id="code_delivery",
+                status=HealthStatus.ERROR,
+                summary=(
+                    "Review-required delivery has no built-in adapter for the configured Git host."
+                ),
+                details=[
+                    f"remote={policy.remote_name} -> {policy.remote_identity}",
+                    "ProjectCTL will not silently fall back to direct push.",
+                ],
+            )
+        try:
+            delivery = resolve_code_delivery(root)
+            if delivery.reviewer is None:
+                raise ConfigurationError("Review delivery adapter did not resolve.")
+        except (ConfigurationError, IntegrationError, ProviderUnavailableError) as exc:
+            return HealthCheckResult(
+                check_id="code_delivery",
+                status=HealthStatus.ERROR,
+                summary=f"Review delivery runtime is unavailable: {exc}",
+                remediation=[
+                    "Authenticate the configured review provider without storing credentials in ProjectCTL."
+                ],
+            )
         return HealthCheckResult(
             check_id="code_delivery",
-            status=HealthStatus.WARN,
+            status=HealthStatus.PASS,
             summary=(
-                "Review-required delivery is configured but no PR/MR delivery adapter "
-                "is implemented yet; autonomous execution remains fail-closed."
+                f"Review delivery is ready through the built-in {policy.review_provider} adapter."
             ),
             details=[
                 f"remote={policy.remote_name} -> {policy.remote_identity}",
-                "ProjectCTL will not silently fall back to direct push.",
+                "ProjectCTL may create/reconcile a PR/MR but never auto-merges it.",
+                "Canonical task completion waits for an externally merged exact candidate.",
             ],
         )
 

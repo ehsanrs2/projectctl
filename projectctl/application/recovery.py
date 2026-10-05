@@ -561,6 +561,43 @@ def recover_run(project_root: Path, run_id: str) -> RecoveryAction:
                 details=details,
             )
 
+        if record.status == RunStatus.AWAITING_REVIEW:
+            plan = _load_json_model(run_dir / "execution-plan.json", ExecutionPlan)
+            evidence = _load_json_model(run_dir / "evidence-manifest.json", EvidenceManifest)
+            integrated = _finalize_delivery(
+                root,
+                store=store,
+                record=record,
+                plan=plan,
+                evidence=evidence,
+                target_before=plan.base_commit,
+                actor=actor,
+            )
+            if integrated.record.status == RunStatus.AWAITING_REVIEW:
+                review_url = integrated.manifest.review_url
+                details.append(
+                    "Review delivery is still open; task completion and claim release remain deferred."
+                )
+                if review_url:
+                    details.append(f"review={review_url}")
+                return RecoveryAction(
+                    run_id=run_id,
+                    previous_status=previous.value,
+                    resolved_status=integrated.record.status.value,
+                    action="review_pending",
+                    details=details,
+                )
+            details.append(
+                "Merged review was reconciled to exact delivery, canonical task completion, and claim cleanup."
+            )
+            return RecoveryAction(
+                run_id=run_id,
+                previous_status=previous.value,
+                resolved_status=integrated.record.status.value,
+                action="finalized_review_delivery",
+                details=details,
+            )
+
         if record.status == RunStatus.INTEGRATING:
             plan = _load_json_model(run_dir / "execution-plan.json", ExecutionPlan)
             evidence = _load_json_model(run_dir / "evidence-manifest.json", EvidenceManifest)

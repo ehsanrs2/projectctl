@@ -6,11 +6,24 @@ from projectctl.schemas.auto import AutoRunPolicy, AutoRunReport
 from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDecision
 from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3, ProjectConfigV4, ProjectConfigV5
 from projectctl.schemas.ownership import ExecutionOwnershipPolicy
-from projectctl.schemas.delivery import CodeDeliveryPolicy, PublicationManifest, PublicationRequest, TaskDeliveryPolicy
+from projectctl.schemas.delivery import (
+    CodeDeliveryPolicy,
+    CodeDeliveryPolicyV1,
+    PublicationManifest,
+    PublicationRequest,
+    ReviewReceipt,
+    ReviewRequest,
+    TaskDeliveryPolicy,
+)
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
 from projectctl.schemas.github_cache import GitHubCacheEntry, GitHubCacheRequest
 from projectctl.schemas.execution import (ExecutionPlan, ExecutionPlanV1, WorkerCheckpoint, WorkerCheckpointV1, WorkerRequest, WorkerRequestV1, WorkerResult)
-from projectctl.schemas.integration import IntegrationManifest, IntegrationManifestV1, RecoveryReport
+from projectctl.schemas.integration import (
+    IntegrationManifest,
+    IntegrationManifestV1,
+    IntegrationManifestV2,
+    RecoveryReport,
+)
 from projectctl.schemas.onboarding import (
     AdoptionManifest,
     AdoptionManifestV1,
@@ -53,7 +66,10 @@ PUBLIC_SCHEMAS = {
     "task-authority-capabilities.v1.schema.json": TaskAuthorityCapabilities,
     "execution-ownership-policy.v1.schema.json": ExecutionOwnershipPolicy,
     "task-delivery-policy.v1.schema.json": TaskDeliveryPolicy,
-    "code-delivery-policy.v1.schema.json": CodeDeliveryPolicy,
+    "code-delivery-policy.v1.schema.json": CodeDeliveryPolicyV1,
+    "code-delivery-policy.v2.schema.json": CodeDeliveryPolicy,
+    "review-request.v1.schema.json": ReviewRequest,
+    "review-receipt.v1.schema.json": ReviewReceipt,
     "publication-request.v1.schema.json": PublicationRequest,
     "publication-manifest.v1.schema.json": PublicationManifest,
     "task-claim-request.v1.schema.json": TaskClaimRequest,
@@ -84,7 +100,8 @@ PUBLIC_SCHEMAS = {
     "auto-run-policy.v1.schema.json": AutoRunPolicy,
     "auto-run-report.v1.schema.json": AutoRunReport,
     "integration-manifest.v1.schema.json": IntegrationManifestV1,
-    "integration-manifest.v2.schema.json": IntegrationManifest,
+    "integration-manifest.v2.schema.json": IntegrationManifestV2,
+    "integration-manifest.v3.schema.json": IntegrationManifest,
     "recovery-report.v1.schema.json": RecoveryReport,
     "project-inspection.v1.schema.json": ProjectInspectionV1,
     "project-inspection.v2.schema.json": ProjectInspectionV2,

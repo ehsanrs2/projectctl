@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from projectctl.core.digest import digest
 from projectctl.core.enums import TaskStatus
-from projectctl.core.errors import ConfigurationError, TaskStoreError
+from projectctl.core.errors import ConfigurationError, ProviderUnavailableError, TaskStoreError
 from projectctl.git.publication import GitRemotePublisher
 from projectctl.integrations.delivery import code_delivery_policy
 from projectctl.integrations.execution_ownership import require_project_execution_ready
@@ -28,7 +28,7 @@ from projectctl.schemas.config import (
     ProjectIdentity,
     TaskStoreConfig,
 )
-from projectctl.schemas.delivery import CodeDeliveryPolicy, PublicationRequest
+from projectctl.schemas.delivery import CodeDeliveryPolicy, CodeDeliveryPolicyV1, PublicationRequest
 from projectctl.schemas.evidence import EvidenceManifest
 from projectctl.schemas.execution import EvidenceReference
 from projectctl.schemas.onboarding import ProjectInspection
@@ -217,7 +217,7 @@ def test_delivery_config_requires_network_transport_for_remote_modes():
     [
         ("local", True, False, "evidence_manifest"),
         ("direct_git", True, True, "publication_manifest"),
-        ("review_required", False, True, "review_receipt"),
+        ("review_required", True, True, "review_receipt"),
     ],
 )
 def test_code_delivery_policy_is_explicit(
@@ -250,7 +250,7 @@ def test_code_delivery_policy_is_explicit(
     assert policy.completion_evidence == evidence
 
 
-def test_review_required_fails_before_execution_claim(tmp_path: Path):
+def test_review_required_requires_runtime_provider_auth(tmp_path: Path, monkeypatch):
     write_config(
         tmp_path,
         transport=CodeTransportConfig(
@@ -261,7 +261,9 @@ def test_review_required_fails_before_execution_claim(tmp_path: Path):
         delivery=CodeDeliveryConfig(mode="review_required"),
     )
 
-    with pytest.raises(ConfigurationError, match="not execution-ready"):
+    monkeypatch.delenv("GITLAB_TOKEN", raising=False)
+    monkeypatch.delenv("GITLAB_ACCESS_TOKEN", raising=False)
+    with pytest.raises(ProviderUnavailableError, match="GITLAB_TOKEN"):
         require_project_execution_ready(tmp_path)
 
 
@@ -342,7 +344,8 @@ def test_gitlab_adoption_requires_explicit_direct_delivery_opt_in(tmp_path: Path
 
 
 def test_code_delivery_policy_schema_is_public():
-    assert PUBLIC_SCHEMAS["code-delivery-policy.v1.schema.json"] is CodeDeliveryPolicy
+    assert PUBLIC_SCHEMAS["code-delivery-policy.v1.schema.json"] is CodeDeliveryPolicyV1
+    assert PUBLIC_SCHEMAS["code-delivery-policy.v2.schema.json"] is CodeDeliveryPolicy
 
 
 @pytest.mark.parametrize(
