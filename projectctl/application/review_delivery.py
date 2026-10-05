@@ -127,6 +127,10 @@ def persist_review_receipt(
         raise RunStoreError("Review receipt provider does not match request.")
     if receipt.source_ref != request.source_ref or receipt.target_ref != request.target_ref:
         raise RunStoreError("Review receipt refs do not match durable request.")
+    if receipt.candidate_commit != request.candidate_commit:
+        raise RunStoreError(
+            "Review receipt candidate differs from durable request."
+        )
     if receipt.head_commit not in (None, request.candidate_commit):
         raise RunStoreError(
             "Review receipt head commit differs from verified candidate."
