@@ -367,9 +367,9 @@ def _ensure_publication(
         )
 
     remote_name = policy.remote_name
-    if not remote_name:
+    if not remote_name or not policy.remote_identity:
         raise IntegrationError(
-            "Task authority requires publication but has no publication remote."
+            "Code delivery requires publication but has no pinned publication remote."
         )
     request = _publication_request(
         root,
@@ -379,7 +379,7 @@ def _ensure_publication(
         evidence=evidence,
         provider=authority.provider,
         remote_name=remote_name,
-        repository=claim.repository,
+        repository=claim.repository or policy.remote_identity,
     )
     publisher = delivery.publisher
 
