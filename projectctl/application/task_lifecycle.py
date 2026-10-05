@@ -8,6 +8,7 @@ from projectctl.application.claims import (
 )
 from projectctl.core.digest import digest
 from projectctl.core.enums import RunStatus, RunTerminalReason
+from projectctl.integrations.execution_ownership import resolve_execution_ownership
 from projectctl.integrations.task_authority import (
     resolve_task_authority,
     task_delivery_policy,
@@ -22,7 +23,7 @@ def release_task_for_retry(
     run_id: str,
     actor: str,
 ) -> None:
-    claimer = resolve_task_authority(project_root).require_claimer()
+    claimer = resolve_execution_ownership(project_root).claimer
     durable = load_durable_claim(
         project_root,
         store=store,
