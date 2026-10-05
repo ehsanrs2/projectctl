@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Decouple task authority from code transport and execution ownership so local-only projects and generic Git remotes such as GitLab can use explicit safe ownership strategies without assuming GitHub is the code host.
+current_goal: Make code delivery independent from task authority and enable safe Linear lifecycle completion without overwriting native human workflow state.
 active_milestone:
-  id: M3.2c1
-  title: Execution Transport & Ownership Boundary
+  id: M3.2c2
+  title: Generic Delivery & Linear Lifecycle
   aliases:
-    - Provider-neutral Git Claim
-    - Local Execution Ownership
-    - Generic Git Transport
+    - Provider-neutral Code Delivery
+    - Linear Additive Completion
+    - Crash-safe Linear Lifecycle
 updated_at: null
