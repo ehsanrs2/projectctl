@@ -23,7 +23,10 @@ def release_task_for_retry(
     run_id: str,
     actor: str,
 ) -> None:
-    claimer = resolve_execution_ownership(project_root).claimer
+    claimer = resolve_execution_ownership(
+        project_root,
+        task_authority=resolve_task_authority(project_root),
+    ).claimer
     durable = load_durable_claim(
         project_root,
         store=store,
