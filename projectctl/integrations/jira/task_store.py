@@ -4,6 +4,7 @@ from typing import Any
 
 from projectctl.core.digest import digest
 from projectctl.core.enums import ResourceClass, RiskLevel, TaskStatus, TaskType
+from projectctl.core.errors import ProviderUnavailableError, TaskStoreError
 from projectctl.core.time import utc_now
 from projectctl.integrations.jira.client import JiraCloudClient
 from projectctl.schemas.config import JiraLinkRule, JiraWorkflowPolicy
@@ -552,7 +553,7 @@ class JiraIssuesTaskStore:
                         if current_external is None:
                             current_external = self.client.show_linked(linked_key)
                             external_issue_cache[linked_id] = current_external
-                    except Exception as exc:
+                    except (ProviderUnavailableError, TaskStoreError) as exc:
                         self._mark_needs_decision(
                             task,
                             f"Jira external linked issue {linked_key} could not be "
