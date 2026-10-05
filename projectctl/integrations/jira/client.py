@@ -4,16 +4,18 @@ import base64
 import json
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode
-from urllib.request import Request, urlopen
+from urllib.parse import quote, urlencode, urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 from projectctl.core.errors import ProviderUnavailableError, TaskStoreError
 
 
-JIRA_REST_CONTRACT = "jira-cloud-rest-v3-m33b-2026-10"
+JIRA_REST_CONTRACT = "jira-cloud-rest-v3-m33c-2026-10"
+JIRA_LIFECYCLE_PROPERTY = "projectctl.lifecycle.v1"
 _PROJECT_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_\-]*$")
 _FIELDS = [
     "summary",
@@ -60,6 +62,11 @@ def _jql_literal(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
+class _NoRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 class JiraCloudClient:
     """Narrow read-only Jira Cloud REST v3 authority client.
 
@@ -104,14 +111,24 @@ class JiraCloudClient:
         self.timeout_seconds = timeout_seconds
         self.base_url = f"https://{self.site}"
 
-    def _api(
+    @staticmethod
+    def _decode_json(raw: bytes) -> Any:
+        if not raw:
+            return None
+        try:
+            return json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise TaskStoreError("Jira REST returned invalid JSON.") from exc
+
+    def _request(
         self,
         method: str,
         endpoint: str,
         *,
         payload: dict[str, Any] | None = None,
         query: dict[str, Any] | None = None,
-    ) -> Any:
+        allow_not_found: bool = False,
+    ) -> tuple[int, dict[str, str], Any]:
         path = endpoint if endpoint.startswith("/") else f"/{endpoint}"
         url = f"{self.base_url}{path}"
         if query:
@@ -127,7 +144,7 @@ class JiraCloudClient:
         headers = {
             "Accept": "application/json",
             "Authorization": self.authorization,
-            "User-Agent": "projectctl-jira-read-authority",
+            "User-Agent": "projectctl-jira-authority",
         }
         if payload is not None:
             body = json.dumps(payload, sort_keys=True).encode("utf-8")
@@ -137,8 +154,14 @@ class JiraCloudClient:
         try:
             with urlopen(request, timeout=self.timeout_seconds) as response:
                 status = int(response.status)
+                response_headers = {
+                    str(key).casefold(): str(value)
+                    for key, value in response.headers.items()
+                }
                 raw = response.read()
         except HTTPError as exc:
+            if allow_not_found and exc.code == 404:
+                return 404, {}, None
             detail = exc.read().decode("utf-8", errors="replace")[:1000]
             raise TaskStoreError(
                 f"Jira REST {method} {path} failed with HTTP {exc.code}: {detail}"
@@ -152,12 +175,105 @@ class JiraCloudClient:
             raise TaskStoreError(
                 f"Jira REST {method} {path} returned unexpected HTTP {status}."
             )
-        if not raw:
-            return None
+        return status, response_headers, self._decode_json(raw)
+
+    def _api(
+        self,
+        method: str,
+        endpoint: str,
+        *,
+        payload: dict[str, Any] | None = None,
+        query: dict[str, Any] | None = None,
+    ) -> Any:
+        _, _, value = self._request(
+            method,
+            endpoint,
+            payload=payload,
+            query=query,
+        )
+        return value
+
+    def _submit_async(
+        self,
+        method: str,
+        endpoint: str,
+        *,
+        payload: dict[str, Any],
+    ) -> Any:
+        path = endpoint if endpoint.startswith("/") else f"/{endpoint}"
+        url = f"{self.base_url}{path}"
+        body = json.dumps(payload, sort_keys=True).encode("utf-8")
+        request = Request(
+            url,
+            data=body,
+            method=method,
+            headers={
+                "Accept": "application/json",
+                "Authorization": self.authorization,
+                "Content-Type": "application/json",
+                "User-Agent": "projectctl-jira-authority",
+            },
+        )
+        opener = build_opener(_NoRedirectHandler())
+        location: str | None = None
         try:
-            return json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise TaskStoreError("Jira REST returned invalid JSON.") from exc
+            with opener.open(request, timeout=self.timeout_seconds) as response:
+                status = int(response.status)
+                if status == 303:
+                    location = response.headers.get("Location")
+                else:
+                    raise TaskStoreError(
+                        f"Jira async REST {method} {path} returned HTTP {status}; "
+                        "expected 303."
+                    )
+        except HTTPError as exc:
+            if exc.code == 303:
+                location = exc.headers.get("Location")
+            else:
+                detail = exc.read().decode("utf-8", errors="replace")[:1000]
+                raise TaskStoreError(
+                    f"Jira async REST {method} {path} failed with HTTP "
+                    f"{exc.code}: {detail}"
+                ) from exc
+        except (URLError, TimeoutError, OSError) as exc:
+            raise ProviderUnavailableError(
+                f"Jira async REST request failed: {exc}"
+            ) from exc
+
+        if not location:
+            raise TaskStoreError(
+                "Jira async operation did not return a task Location."
+            )
+        parsed = urlparse(location)
+        if parsed.netloc and parsed.netloc.casefold() != self.site:
+            raise TaskStoreError(
+                "Jira async task Location points outside the configured site."
+            )
+        task_endpoint = parsed.path
+        if parsed.query:
+            task_endpoint += "?" + parsed.query
+
+        deadline = time.monotonic() + self.timeout_seconds
+        while True:
+            task = self._api("GET", task_endpoint)
+            if not isinstance(task, dict):
+                raise TaskStoreError("Jira async task response is malformed.")
+            status = str(task.get("status") or "").strip().upper()
+            if status == "COMPLETE":
+                return task.get("result")
+            if status in {"FAILED", "CANCELLED"}:
+                raise TaskStoreError(
+                    f"Jira async task ended with status {status}."
+                )
+            if status not in {"ENQUEUED", "RUNNING", "IN_PROGRESS"}:
+                raise TaskStoreError(
+                    f"Jira async task returned unknown status {status or 'missing'}."
+                )
+            if time.monotonic() >= deadline:
+                raise ProviderUnavailableError(
+                    "Jira async property mutation did not complete before timeout."
+                )
+            time.sleep(0.1)
 
     def project_info(self) -> dict[str, Any]:
         raw = self._api(
@@ -221,6 +337,7 @@ class JiraCloudClient:
                 "jql": jql,
                 "maxResults": page_size,
                 "fields": _FIELDS,
+                "properties": [JIRA_LIFECYCLE_PROPERTY],
                 "fieldsByKeys": True,
             }
             if token is not None:
@@ -265,7 +382,10 @@ class JiraCloudClient:
         raw = self._api(
             "GET",
             f"/rest/api/3/issue/{quote(key, safe='')}",
-            query={"fields": ",".join(_FIELDS)},
+            query={
+                "fields": ",".join(_FIELDS),
+                "properties": [JIRA_LIFECYCLE_PROPERTY],
+            },
         )
         return self._validate_issue(raw)
 
@@ -285,6 +405,67 @@ class JiraCloudClient:
             query={"fields": ",".join(_FIELDS)},
         )
         return self._validate_issue(raw, require_project_scope=False)
+
+    def get_issue_property(
+        self,
+        issue_id_or_key: str,
+        property_key: str,
+    ) -> Any | None:
+        status, _, raw = self._request(
+            "GET",
+            f"/rest/api/3/issue/{quote(str(issue_id_or_key), safe='')}/properties/"
+            f"{quote(property_key, safe='')}",
+            allow_not_found=True,
+        )
+        if status == 404:
+            return None
+        if not isinstance(raw, dict) or raw.get("key") != property_key:
+            raise TaskStoreError("Jira issue-property response is malformed.")
+        if "value" not in raw:
+            raise TaskStoreError("Jira issue-property response is missing value.")
+        return raw["value"]
+
+    def compare_and_set_issue_property(
+        self,
+        issue_id: str,
+        property_key: str,
+        *,
+        expected: Any | None,
+        desired: Any,
+    ) -> bool:
+        try:
+            numeric_id = int(str(issue_id))
+        except ValueError as exc:
+            raise TaskStoreError(
+                "Jira issue property CAS requires a stable numeric issue id."
+            ) from exc
+
+        filter_value: dict[str, Any] = {"entityIds": [numeric_id]}
+        if expected is None:
+            filter_value["hasProperty"] = False
+        else:
+            filter_value["hasProperty"] = True
+            filter_value["currentValue"] = expected
+
+        self._submit_async(
+            "PUT",
+            f"/rest/api/3/issue/properties/{quote(property_key, safe='')}",
+            payload={
+                "filter": filter_value,
+                "value": desired,
+            },
+        )
+
+        observed = self.get_issue_property(issue_id, property_key)
+        if observed == desired:
+            return True
+        if observed == expected:
+            return False
+        if observed is None and expected is None:
+            return False
+        raise TaskStoreError(
+            "Jira lifecycle property changed to an unexpected value during CAS."
+        )
 
     def issue_link_types(self) -> list[dict[str, Any]]:
         raw = self._api("GET", "/rest/api/3/issueLinkType")
