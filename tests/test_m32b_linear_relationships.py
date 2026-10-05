@@ -320,6 +320,52 @@ def test_inverse_blocks_target_mismatch_fails_closed(tmp_path: Path):
     assert any("direction is ambiguous" in note for note in task.normalization_notes)
 
 
+def test_unknown_relation_type_fails_closed(tmp_path: Path):
+    target = issue("ENG-2", "22222222-2222-2222-2222-222222222222")
+    rel = relation(
+        blocker_id="11111111-1111-1111-1111-111111111111",
+        blocker_identifier="ENG-1",
+        target_id=target["id"],
+        target_identifier="ENG-2",
+        relation_type="future_dependency_kind",
+    )
+    store = LinearIssuesTaskStore(
+        tmp_path,
+        team_id=TEAM_ID,
+        client=RelationshipClient([target], {target["id"]: [rel]}),
+    )
+
+    task = store.list_all()[0]
+
+    assert task.status == TaskStatus.NEEDS_DECISION
+    assert task.human_decision_required
+    assert task.dependencies == []
+    assert any("unknown or missing type" in note for note in task.normalization_notes)
+
+
+def test_open_blocker_without_team_identity_fails_closed(tmp_path: Path):
+    target = issue("ENG-2", "22222222-2222-2222-2222-222222222222")
+    blocker_uuid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    rel = relation(
+        blocker_id=blocker_uuid,
+        blocker_identifier="OPS-9",
+        target_id=target["id"],
+        target_identifier="ENG-2",
+    )
+    rel["issue"]["team"] = None
+    store = LinearIssuesTaskStore(
+        tmp_path,
+        team_id=TEAM_ID,
+        client=RelationshipClient([target], {target["id"]: [rel]}),
+    )
+
+    task = store.list_all()[0]
+
+    assert task.status == TaskStatus.NEEDS_DECISION
+    assert task.dependencies == [f"linear:{blocker_uuid}"]
+    assert any("missing team identity" in note for note in task.normalization_notes)
+
+
 def test_non_blocking_relations_do_not_create_dependencies(tmp_path: Path):
     target = issue("ENG-2", "22222222-2222-2222-2222-222222222222")
     rel = relation(
