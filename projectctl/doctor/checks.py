@@ -330,7 +330,9 @@ def check_task_store(root: Path) -> HealthCheckResult:
                 "Issue-link semantics are pinned by type id/name/inward/outward labels.",
                 "Unknown/custom issue-link semantics fail closed to NEEDS_DECISION.",
                 "Parent/sub-task hierarchy remains separate from dependencies.",
-                "Lifecycle writes and provider-native claim/release remain unsupported.",
+                "M3.3c lifecycle writes use filtered issue-property CAS; native Jira workflow state is never changed.",
+                "Jira property write permission is proven only by a real lifecycle mutation.",
+                "Provider-native claim/release remain unsupported; execution ownership is independent.",
                 "Jira credentials are runtime-only and are never persisted by ProjectCTL.",
             ],
         )
