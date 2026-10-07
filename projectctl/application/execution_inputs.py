@@ -288,7 +288,13 @@ def finalize_execution_input(
 
     before_task = _task_by_id(before_snapshot, preclaim.task_id)
     after_task = _task_by_id(after_snapshot, preclaim.task_id)
-    if not claimer.validate_transition(before_task, after_task, claim):
+    transition_validator = getattr(claimer, "validate_transition", None)
+    transition_valid = (
+        bool(transition_validator(before_task, after_task, claim))
+        if callable(transition_validator)
+        else semantic_task_digest(before_task) == semantic_task_digest(after_task)
+    )
+    if not transition_valid:
         raise StaleSnapshotError(
             "Post-claim selected-task state is not the expected consequence "
             "of the durable claim."
