@@ -13,8 +13,15 @@ from projectctl.application.claims import (
 )
 from projectctl.application.execution import (
     _actor,
+    _atomic_json,
     _checkpoint_event_matches,
     _worktree_state_digest,
+)
+from projectctl.application.execution_inputs import (
+    finalize_execution_input_from_current,
+    load_execution_input,
+    revalidate_execution_input,
+    semantic_execution_input_digest,
 )
 from projectctl.application.integration import (
     _cleanup_verified_worktree,
@@ -205,6 +212,59 @@ def _recover_preparing(
             action="prepare_claim_lost",
             details=details,
         )
+
+    if getattr(plan, "execution_input_digest", None):
+        try:
+            execution_input = load_execution_input(run_dir)
+            if execution_input.phase == "preclaim":
+                execution_input = finalize_execution_input_from_current(
+                    root,
+                    execution_input,
+                    claim=claim,
+                    claimer=claimer,
+                )
+                revalidate_execution_input(root, execution_input)
+                plan = plan.model_copy(
+                    update={
+                        "execution_input_digest": semantic_execution_input_digest(
+                            execution_input
+                        )
+                    }
+                )
+                _atomic_json(run_dir / "execution-input.json", execution_input)
+                _atomic_json(run_dir / "execution-plan.json", plan)
+                store.rebind_execution_plan(
+                    record.run_id,
+                    expected={RunStatus.PREPARING},
+                    execution_plan_digest=digest(plan),
+                )
+                details.append(
+                    "Recovered the expected provider-native claim transition and "
+                    "bound the admitted ExecutionInputManifest."
+                )
+            else:
+                execution_input = load_execution_input(
+                    run_dir,
+                    expected_digest=plan.execution_input_digest,
+                )
+                revalidate_execution_input(root, execution_input)
+        except Exception as exc:
+            final = store.transition(
+                record.run_id,
+                expected={RunStatus.PREPARING},
+                status=RunStatus.NEEDS_DECISION,
+                terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
+            )
+            details.append(
+                f"Execution-input claim transition cannot be reconciled safely: {exc}"
+            )
+            return RecoveryAction(
+                run_id=record.run_id,
+                previous_status=previous.value,
+                resolved_status=final.status.value,
+                action="escalated_execution_input_recovery",
+                details=details,
+            )
 
     manager = WorktreeManager(root)
     expected = manager.path_for(record.worktree_id)
