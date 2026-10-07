@@ -32,6 +32,8 @@ from projectctl.core.enums import (
 from projectctl.core.errors import (
     CapabilityMismatchError,
     ClaimConflictError,
+    QuotaAdmissionError,
+    QuotaError,
     RunStoreError,
     WorkerError,
     WorktreeError,
@@ -52,6 +54,7 @@ from projectctl.schemas.execution import (
 )
 from projectctl.application.recovery import recover_run
 from projectctl.schemas.quota import QuotaSnapshot, QuotaWindow
+from projectctl.quota.admission import AccountAdmissionStore
 from projectctl.schemas.run import WorkerDescriptor
 from projectctl.schemas.task_claim import TaskClaim
 from projectctl.schemas.task import NormalizedTask, TaskSource
@@ -563,3 +566,141 @@ def test_checkpoint_resume_refuses_lost_task_claim(tmp_path: Path, monkeypatch):
     record = RunStore(repo).get(prepared.record.run_id)
     assert record.status == RunStatus.FAILED
     assert record.terminal_reason == RunTerminalReason.CLAIM_LOST
+
+
+def test_worker_start_releases_global_admission_after_turn(tmp_path: Path, monkeypatch):
+    repo, prepared, task, caps = setup_prepared(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "projectctl.application.execution._adapter_for_provider",
+        lambda provider: FakeAdapter(caps),
+    )
+
+    started = start_prepared_run(repo, prepared.record.run_id)
+
+    assert started.record.status == RunStatus.VERIFYING
+    admissions = AccountAdmissionStore()
+    assert admissions.get("openai-default") is None
+    event_types = [
+        event["event_type"] for event in admissions.events("openai-default")
+    ]
+    assert event_types == ["acquired", "released"]
+    run_events = RunStore(repo).events(prepared.record.run_id)
+    assert any(event.event_type == "worker.admission_acquired" for event in run_events)
+    assert any(event.event_type == "worker.quota_revalidated" for event in run_events)
+    assert any(event.event_type == "worker.admission_released" for event in run_events)
+
+
+def test_worker_start_conflict_preserves_claimed_and_never_probes(
+    tmp_path: Path, monkeypatch
+):
+    repo, prepared, task, caps = setup_prepared(tmp_path, monkeypatch)
+    admissions = AccountAdmissionStore()
+    foreign = admissions.acquire(
+        account_id="openai-default",
+        project_instance_id="foreign-instance",
+        project_id="foreign-project",
+        run_id="foreign-run",
+        lease_owner="foreign-owner",
+    )
+    monkeypatch.setattr(
+        "projectctl.application.execution._adapter_for_provider",
+        lambda provider: (_ for _ in ()).throw(
+            AssertionError("worker provider must not be contacted without admission")
+        ),
+    )
+
+    try:
+        with pytest.raises(QuotaAdmissionError, match="already admitted"):
+            start_prepared_run(repo, prepared.record.run_id)
+    finally:
+        admissions.release(foreign)
+
+    record = RunStore(repo).get(prepared.record.run_id)
+    assert record.status == RunStatus.CLAIMED
+    events = RunStore(repo).events(prepared.record.run_id)
+    deferred = [
+        event
+        for event in events
+        if event.event_type == "worker.start_deferred"
+    ]
+    assert deferred[-1].payload["reason"] == "account_admission_unavailable"
+
+
+def test_worker_start_revalidates_quota_inside_admission_and_releases_on_denial(
+    tmp_path: Path, monkeypatch
+):
+    repo, prepared, task, caps = setup_prepared(tmp_path, monkeypatch)
+    denied = QuotaSnapshot(
+        provider="test",
+        account="openai-default",
+        observed_at=datetime.now(timezone.utc),
+        five_hour=QuotaWindow(remaining_ratio=.95),
+        weekly=QuotaWindow(remaining_ratio=.95),
+        ordinary_usage_allowed=False,
+    )
+    monkeypatch.setattr(
+        "projectctl.application.execution.read_current_quota",
+        lambda account: denied,
+    )
+    monkeypatch.setattr(
+        "projectctl.application.execution._adapter_for_provider",
+        lambda provider: (_ for _ in ()).throw(
+            AssertionError("worker provider must not be contacted after quota denial")
+        ),
+    )
+
+    with pytest.raises(QuotaError, match="deferred"):
+        start_prepared_run(repo, prepared.record.run_id)
+
+    record = RunStore(repo).get(prepared.record.run_id)
+    assert record.status == RunStatus.CLAIMED
+    admissions = AccountAdmissionStore()
+    assert admissions.get("openai-default") is None
+    assert [
+        event["event_type"] for event in admissions.events("openai-default")
+    ] == ["acquired", "released"]
+
+
+def test_checkpoint_resume_conflict_preserves_checkpoint_and_never_probes(
+    tmp_path: Path, monkeypatch
+):
+    repo, prepared, task, caps = setup_prepared(tmp_path, monkeypatch)
+    adapter = FakeAdapter(caps, checkpoint=True)
+    monkeypatch.setattr(
+        "projectctl.application.execution._adapter_for_provider",
+        lambda provider: adapter,
+    )
+    started = start_prepared_run(repo, prepared.record.run_id)
+    assert started.checkpoint is not None
+
+    admissions = AccountAdmissionStore()
+    foreign = admissions.acquire(
+        account_id="openai-default",
+        project_instance_id="foreign-instance",
+        project_id="foreign-project",
+        run_id="foreign-run",
+        lease_owner="foreign-owner",
+    )
+    monkeypatch.setattr(
+        "projectctl.application.execution._adapter_for_provider",
+        lambda provider: (_ for _ in ()).throw(
+            AssertionError("resume must not contact worker provider without admission")
+        ),
+    )
+
+    try:
+        with pytest.raises(QuotaAdmissionError, match="already admitted"):
+            resume_checkpointed_run(repo, prepared.record.run_id)
+    finally:
+        admissions.release(foreign)
+
+    record = RunStore(repo).get(prepared.record.run_id)
+    assert record.status == RunStatus.RUNNING
+    assert record.checkpoint_ref == started.record.checkpoint_ref
+    events = RunStore(repo).events(prepared.record.run_id)
+    deferred = [
+        event
+        for event in events
+        if event.event_type == "worker.resume_deferred"
+    ]
+    assert deferred[-1].payload["reason"] == "account_admission_unavailable"
