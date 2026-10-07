@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Unify scheduler observation, claim-aware task transitions, scoped execution inputs, context scope and verification into one execution-input authority shared by serial and parallel runs.
+current_goal: Unify project-local serial and parallel active-set worker-turn selection with account-global portfolio arbitration so all automated quota-consuming turns share one fairness authority.
 active_milestone:
-  id: M4.2a
-  title: Execution Input Contract Unification
+  id: M4.2b
+  title: Unified Turn Orchestration
   aliases:
-    - Execution Input Authority
-    - Claim-Aware Execution Inputs
-    - Scoped Execution Contract
+    - Active-Set-Aware Portfolio
+    - Unified Worker Turn Dispatcher
+    - Global Turn Orchestration
 updated_at: null
