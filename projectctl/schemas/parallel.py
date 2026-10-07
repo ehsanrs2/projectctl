@@ -148,7 +148,7 @@ class ParallelRunBindingV1(ProjectCtlModel):
     run_id: str = Field(min_length=1)
     task_id: str = Field(min_length=1)
     preclaim_plan_digest: str = Field(min_length=1)
-    admitted_plan: ParallelPlan
+    admitted_plan: ParallelPlanV1
     peer_plan_digests: list[str] = Field(default_factory=list)
     peer_decision_digests: list[str] = Field(default_factory=list)
     bound_at: AwareDatetime
