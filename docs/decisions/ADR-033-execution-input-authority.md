@@ -165,12 +165,29 @@ Rejected because remote ownership or dependencies can change during claim acquis
 
 Rejected because task ownership and execution validity are control-plane authorities.
 
+## Implementation record
+
+Implemented by M4.2a in ProjectCTL 0.37.0.
+
+The accepted decision is realized through:
+
+- `ExecutionInputManifest v1`
+- `ClaimTransitionEvidence v1`
+- `ExecutionPlan v3`
+- `ContextManifest v3`
+- `WorkerRequest v3`
+- `ParallelPlan v2`
+- `ParallelRunBinding v2`
+- `ParallelReapplicationRequest v2`
+- `ParallelReapplicationManifest v2`
+
+Scheduler TaskSnapshot identity remains durable audit evidence but is excluded from the semantic
+execution-input digest. Provider-specific claim transition semantics live behind TaskClaimer.
+Explicit write scopes are enforced by independent verification as well as integration defense in
+depth.
+
+Legacy v1/v2 contracts remain exported and parseable.
+
 ## Follow-up
-
-Implement:
-
-> **M4.2a — Execution Input Contract Unification**
-
-Then:
 
 > **M4.2b — Unified Turn Orchestration**
