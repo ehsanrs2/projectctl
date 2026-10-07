@@ -239,7 +239,11 @@ def collect_project_turn_envelope(
     if not manager.eligible_for_resource(task.resource_class, status.quota_state):
         return _excluded(base, "quota_insufficient")
 
-    parallel_admission = bool(active)
+    # If the project is configured for more than one active run, every
+    # automated new run is parallel-bound from its first slot. Otherwise a
+    # serial first run would become an unbound peer and make the second slot
+    # impossible to admit safely.
+    parallel_admission = effective_max > 1
     if parallel_admission:
         bindings = []
         for record in active:
