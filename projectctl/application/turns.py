@@ -8,13 +8,17 @@ from projectctl.application.execution import (
     resume_checkpointed_run,
     start_prepared_run,
 )
+from projectctl.application.integration import integrate_run
+from projectctl.application.recovery import recover_run
 from projectctl.application.status import collect_status
+from projectctl.application.verification import verify_run
 from projectctl.core.digest import digest
 from projectctl.core.enums import RunStatus
 from projectctl.core.errors import ConfigurationError, PortfolioError, ProjectCtlError
 from projectctl.core.time import utc_now
 from projectctl.parallel.runtime import (
     build_parallel_integration_queue,
+    integrate_parallel_run,
     load_parallel_run_binding,
     prepare_parallel_run,
 )
@@ -24,7 +28,9 @@ from projectctl.quota import QuotaManager
 from projectctl.quota.admission import project_instance_id
 from projectctl.schemas.capabilities import StrategyFallbackPolicy
 from projectctl.schemas.orchestration import (
+    NonWorkerPhaseStep,
     OrchestrationStatus,
+    ProjectMaintenanceResult,
     ProjectTurnEnvelope,
     ProjectTurnResult,
 )
@@ -402,4 +408,89 @@ def collect_orchestration_status(project_root: Path) -> OrchestrationStatus:
             else None
         ),
         account_busy=account_busy,
+    )
+
+
+
+def advance_non_worker_phases(
+    project_root: Path,
+) -> ProjectMaintenanceResult:
+    """Advance only lifecycle phases that do not consume a worker turn."""
+    root = project_root.resolve()
+    config = load_project_config(root)
+    steps: list[NonWorkerPhaseStep] = []
+
+    for record in _active_records(root):
+        started = record.status
+        action = "phase_wait"
+        detail = None
+        final = record
+        try:
+            if record.status == RunStatus.PLANNED:
+                action = "unsafe_planned"
+                detail = (
+                    "PLANNED has no durable claim/worktree proof; automatic "
+                    "maintenance will not guess prepare progress."
+                )
+            elif record.status == RunStatus.PREPARING:
+                action = "recover_prepare"
+                recover_run(root, record.run_id)
+                final = RunStore(root).get(record.run_id)
+            elif record.status == RunStatus.RUNNING:
+                if record.checkpoint_ref:
+                    action = "skip_worker_turn"
+                    detail = "Checkpointed RUNNING requires a portfolio worker turn."
+                else:
+                    action = "recover_running"
+                    recover_run(root, record.run_id)
+                    final = RunStore(root).get(record.run_id)
+            elif record.status == RunStatus.CLAIMED:
+                action = "skip_worker_turn"
+                detail = "CLAIMED requires a portfolio worker turn."
+            elif record.status == RunStatus.VERIFYING:
+                action = "verify"
+                verify_run(root, record.run_id)
+                final = RunStore(root).get(record.run_id)
+            elif record.status == RunStatus.READY_TO_INTEGRATE:
+                action = "integrate"
+                binding = load_parallel_run_binding(
+                    root,
+                    record.run_id,
+                    allow_missing=True,
+                )
+                if binding is None:
+                    integrate_run(root, record.run_id)
+                else:
+                    integrate_parallel_run(root, record.run_id)
+                final = RunStore(root).get(record.run_id)
+            elif record.status in {
+                RunStatus.INTEGRATING,
+                RunStatus.AWAITING_REVIEW,
+            }:
+                action = "recover_delivery"
+                recover_run(root, record.run_id)
+                final = RunStore(root).get(record.run_id)
+        except ProjectCtlError as exc:
+            final = RunStore(root).get(record.run_id)
+            detail = str(exc)
+
+        steps.append(
+            NonWorkerPhaseStep(
+                run_id=record.run_id,
+                task_id=record.task_id,
+                started_status=started,
+                final_status=final.status,
+                action=action,
+                detail=detail,
+            )
+        )
+
+    return ProjectMaintenanceResult(
+        generated_at=utc_now(),
+        project_id=config.project.id,
+        project_root=str(root),
+        steps=steps,
+        active_run_ids_after=[
+            item.run_id for item in _active_records(root)
+        ],
     )
