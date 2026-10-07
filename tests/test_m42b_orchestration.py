@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from projectctl.application import turns
-from projectctl.core.enums import QuotaMode, ResourceClass, RunStatus
+from projectctl.core.enums import QuotaMode, ResourceClass, RunStatus, TaskStatus
 from projectctl.core.errors import ConfigurationError
 from projectctl.parallel import runtime
 from projectctl.schemas.orchestration import ProjectTurnEnvelope
@@ -21,7 +21,7 @@ def task(task_id: str) -> NormalizedTask:
         id=task_id,
         title=task_id,
         source=TaskSource(provider="test", external_id=task_id),
-        status=RunStatus.READY.value,
+        status=TaskStatus.READY,
         resource_class=ResourceClass.SMALL,
     )
 
@@ -307,3 +307,23 @@ def test_m42b_public_schema_surface():
         "portfolio-turn-result.v2.schema.json",
     }
     assert expected <= set(PUBLIC_SCHEMAS)
+
+
+
+def test_first_slot_is_parallel_bound_when_project_capacity_exceeds_one(
+    tmp_path: Path,
+    monkeypatch,
+):
+    setup_turns(monkeypatch, [], max_active=2, selected="task-b")
+    monkeypatch.setattr(
+        turns,
+        "build_parallel_plan",
+        lambda *args, **kwargs: SimpleNamespace(task_id="task-b"),
+    )
+
+    envelope = turns.collect_project_turn_envelope(tmp_path, now=NOW)
+
+    assert envelope.eligible is True
+    assert envelope.action == "admit_task"
+    assert envelope.parallel_admission is True
+    assert envelope.active_run_count == 0
