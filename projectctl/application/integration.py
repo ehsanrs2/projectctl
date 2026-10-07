@@ -57,7 +57,7 @@ from projectctl.schemas.delivery import (
     ReviewReceipt,
     ReviewRequest,
 )
-from projectctl.schemas.evidence import EvidenceManifest
+from projectctl.schemas.evidence import EvidenceManifest, parse_evidence_manifest
 from projectctl.schemas.execution import (
     EvidenceReference,
     ExecutionPlan,
@@ -69,7 +69,7 @@ from projectctl.schemas.execution import (
 from projectctl.schemas.integration import IntegrationManifest
 from projectctl.schemas.run import ContextManifest, parse_context_manifest
 from projectctl.schemas.run_store import RunRecord
-from projectctl.schemas.verification import VerificationManifest
+from projectctl.schemas.verification import VerificationManifest, parse_verification_manifest
 from projectctl.storage.runs import RunStore
 from projectctl.verification.diff import committed_diff_digest
 
@@ -113,6 +113,10 @@ def _load_json_model(path: Path, model):
             return parse_worker_request(raw)
         if model is ContextManifest:
             return parse_context_manifest(raw)
+        if model is VerificationManifest:
+            return parse_verification_manifest(raw)
+        if model is EvidenceManifest:
+            return parse_evidence_manifest(raw)
         return model.model_validate(raw)
     except Exception as exc:
         raise RunStoreError(f"Invalid run artifact {path.name}: {exc}") from exc
@@ -158,6 +162,12 @@ def _validate_verified_candidate(
         raise IntegrationError("Evidence identity does not match run identity.")
     if evidence.base_commit != plan.base_commit:
         raise IntegrationError("Evidence base commit differs from ExecutionPlan.")
+    expected_execution_input = getattr(plan, "execution_input_digest", None)
+    if expected_execution_input is not None:
+        if getattr(evidence, "execution_input_digest", None) != expected_execution_input:
+            raise IntegrationError(
+                "Evidence execution-input digest differs from ExecutionPlan."
+            )
     if not record.candidate_commit or evidence.candidate_commit != record.candidate_commit:
         raise IntegrationError("Evidence candidate does not match durable run state.")
 
@@ -173,6 +183,11 @@ def _validate_verified_candidate(
         )
     if not verification.overall_pass:
         raise IntegrationError("VerificationManifest no longer records a passing result.")
+    if expected_execution_input is not None:
+        if getattr(verification, "execution_input_digest", None) != expected_execution_input:
+            raise IntegrationError(
+                "Verification execution-input digest differs from ExecutionPlan."
+            )
     if verification.profile_digest != evidence.verification_profile_digest:
         raise IntegrationError("Verification profile digest chain is inconsistent.")
 
