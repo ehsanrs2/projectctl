@@ -1391,7 +1391,8 @@ eligibility/dependencies, additive lifecycle writes, independent ownership, and 
 delivery.
 
 The post-M3 architecture review selected the M4 global-orchestration sequence rather than
-extending provider-specific work. M4.0a is complete and M4.0b is now active.
+extending provider-specific work. That sequence progressed through M4.1b; the post-M4 review below
+records the current M4.2 contract-closure work.
 
 ### M4 — Global Orchestration & Safe Concurrency
 
