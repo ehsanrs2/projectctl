@@ -6,6 +6,8 @@ import typer
 
 from projectctl.application.portfolio import (
     collect_portfolio_decision,
+    maintain_portfolio_projects,
+    run_portfolio_cycle,
     run_portfolio_turn,
 )
 from projectctl.core.errors import ProjectCtlError
@@ -74,9 +76,92 @@ def register_m40b(app: typer.Typer) -> None:
                 else ""
             )
             action = f" action={candidate.action}" if candidate.action else ""
+            active = (
+                f" active={candidate.active_run_count}/{candidate.max_active_runs}"
+            )
+            parallel = (
+                " parallel-admit"
+                if candidate.parallel_admission
+                else ""
+            )
+            queue = (
+                f" queue_head={candidate.integration_queue_head_run_id}"
+                if candidate.integration_queue_head_run_id
+                else ""
+            )
             typer.echo(
                 f"  {candidate.project_id} [{candidate.project_instance_id}] "
-                f"{status}{action}{reason}"
+                f"{status}{action}{active}{parallel}{queue}{reason}"
+            )
+
+    @portfolio_app.command("maintain")
+    def portfolio_maintain_command(
+        account: str = typer.Option(..., "--account"),
+        json_output: bool = typer.Option(False, "--json"),
+    ) -> None:
+        try:
+            results, errors = maintain_portfolio_projects(account)
+        except ProjectCtlError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(EXIT_PORTFOLIO)
+
+        if json_output:
+            typer.echo(
+                _json(
+                    {
+                        "account_id": account,
+                        "projects": [
+                            item.model_dump(mode="json")
+                            for item in results
+                        ],
+                        "errors": errors,
+                    }
+                )
+            )
+            return
+
+        typer.echo(f"Portfolio maintenance account: {account}")
+        for result in results:
+            typer.echo(
+                f"  {result.project_id}: "
+                f"{len(result.steps)} lifecycle step(s)"
+            )
+        for error in errors:
+            typer.echo(f"  error: {error}")
+
+    @portfolio_app.command("cycle")
+    def portfolio_cycle_command(
+        account: str = typer.Option(..., "--account"),
+        json_output: bool = typer.Option(False, "--json"),
+    ) -> None:
+        try:
+            result = run_portfolio_cycle(account)
+        except ProjectCtlError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(EXIT_PORTFOLIO)
+
+        if json_output:
+            typer.echo(_json(result))
+            return
+
+        typer.echo(f"Portfolio cycle account: {result.account_id}")
+        typer.echo(f"Maintenance projects: {len(result.maintenance)}")
+        if result.maintenance_errors:
+            typer.echo(
+                f"Maintenance errors: {len(result.maintenance_errors)}"
+            )
+        if result.turn is None:
+            if result.decision.account_busy:
+                typer.echo(
+                    "Worker turn: none (account busy: "
+                    f"{result.decision.active_run_id})"
+                )
+            else:
+                typer.echo("Worker turn: none")
+        else:
+            typer.echo(
+                f"Worker turn: {result.turn.project_id} "
+                f"{result.turn.action} run={result.turn.run_id}"
             )
 
     @portfolio_app.command("run")

@@ -8,15 +8,9 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
-from projectctl.application.execution import (
-    prepare_next_run,
-    resume_checkpointed_run,
-    start_prepared_run,
-)
-from projectctl.application.integration import integrate_run
-from projectctl.application.recovery import recover_run
+from projectctl.application.portfolio import request_fair_project_turn
 from projectctl.application.status import collect_status
-from projectctl.application.verification import verify_run
+from projectctl.application.turns import advance_non_worker_phases
 from projectctl.core.enums import (
     AutoStopReason,
     QuotaMode,
@@ -27,8 +21,8 @@ from projectctl.core.errors import ProjectCtlError
 from projectctl.core.time import utc_now
 from projectctl.project.locking import project_lock
 from projectctl.schemas.auto import AutoRunPolicy, AutoRunReport, AutoRunStep
-from projectctl.schemas.execution import ExecutionPlan
 from projectctl.schemas.capabilities import StrategyFallbackPolicy
+from projectctl.schemas.execution import ExecutionPlan, parse_execution_plan
 from projectctl.storage.runs import RunStore
 
 
@@ -61,7 +55,11 @@ def _atomic_json(path: Path, value) -> None:
         sort_keys=True,
         ensure_ascii=False,
     ) + "\n"
-    fd, tmp_name = tempfile.mkstemp(prefix=".projectctl-", suffix=".json", dir=path.parent)
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=".projectctl-",
+        suffix=".json",
+        dir=path.parent,
+    )
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(payload)
@@ -84,20 +82,40 @@ def _has_live_lease(record, now: datetime) -> bool:
 
 
 def _active_runs(store: RunStore):
-    return [record for record in store.list(limit=1000) if record.status in _ACTIVE_STATUSES]
+    return sorted(
+        (
+            record
+            for record in store.list(limit=1000)
+            if record.status in _ACTIVE_STATUSES
+        ),
+        key=lambda item: (item.created_at, item.run_id),
+    )
 
 
 def _execution_plan_state_digest(project_root: Path, run_id: str) -> str | None:
-    path = project_root / ".projectctl" / "runs" / run_id / "execution-plan.json"
+    path = (
+        project_root
+        / ".projectctl"
+        / "runs"
+        / run_id
+        / "execution-plan.json"
+    )
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-        return ExecutionPlan.model_validate(raw).project_state_digest
+        return parse_execution_plan(raw).project_state_digest
     except Exception:
         return None
 
 
-def _classify_terminal(record, attempts_for_task: int, policy: AutoRunPolicy):
-    if record.status == RunStatus.RUNNING and getattr(record, "checkpoint_ref", None):
+def _classify_terminal(
+    record,
+    attempts_for_task: int,
+    policy: AutoRunPolicy,
+):
+    if (
+        record.status == RunStatus.RUNNING
+        and getattr(record, "checkpoint_ref", None)
+    ):
         return AutoStopReason.QUOTA_CHECKPOINTED
     if record.status == RunStatus.PASSED:
         return None
@@ -121,38 +139,43 @@ def _classify_terminal(record, attempts_for_task: int, policy: AutoRunPolicy):
     return AutoStopReason.RECOVERY_REQUIRED
 
 
-def _advance_run(project_root: Path, run_id: str):
-    store = RunStore(project_root)
-    record = store.get(run_id)
+def _maintenance_details(result) -> list[str]:
+    details = []
+    for step in result.steps:
+        text = (
+            f"maintenance:{step.run_id}:{step.action}:"
+            f"{step.started_status.value}->{step.final_status.value}"
+        )
+        if step.detail:
+            text += f":{step.detail}"
+        details.append(text)
+    return details
 
-    # Recover crash windows before attempting their next deterministic phase.
-    if record.status in {RunStatus.PREPARING, RunStatus.CLAIMED}:
-        recover_run(project_root, run_id)
-        record = store.get(run_id)
 
-    if record.status == RunStatus.RUNNING:
-        if record.checkpoint_ref:
-            resume_checkpointed_run(project_root, run_id)
-        else:
-            recover_run(project_root, run_id)
-        record = store.get(run_id)
-    elif record.status in {RunStatus.INTEGRATING, RunStatus.AWAITING_REVIEW}:
-        recover_run(project_root, run_id)
-        record = store.get(run_id)
-
-    if record.status == RunStatus.CLAIMED:
-        start_prepared_run(project_root, run_id)
-        record = store.get(run_id)
-
-    if record.status == RunStatus.VERIFYING:
-        verify_run(project_root, run_id)
-        record = store.get(run_id)
-
-    if record.status == RunStatus.READY_TO_INTEGRATE:
-        integrate_run(project_root, run_id)
-        record = store.get(run_id)
-
-    return record
+def _drain_non_worker_phases(
+    project_root: Path,
+    *,
+    max_passes: int = 8,
+) -> list[str]:
+    details: list[str] = []
+    previous = None
+    for _ in range(max_passes):
+        before = tuple(
+            (item.run_id, item.status.value)
+            for item in _active_runs(RunStore(project_root))
+        )
+        if before == previous:
+            break
+        previous = before
+        result = advance_non_worker_phases(project_root)
+        details.extend(_maintenance_details(result))
+        after = tuple(
+            (item.run_id, item.status.value)
+            for item in _active_runs(RunStore(project_root))
+        )
+        if after == before or not after:
+            break
+    return details
 
 
 def _finalize(
@@ -181,7 +204,45 @@ def _finalize(
     return report
 
 
-def run_auto(project_root: Path, policy: AutoRunPolicy | None = None) -> AutoRunReport:
+def _portfolio_yield_step(
+    *,
+    iteration: int,
+    decision,
+    task_id: str | None = None,
+    run_id: str | None = None,
+    started_status: RunStatus | None = None,
+    details: list[str] | None = None,
+) -> AutoRunStep:
+    extra = list(details or [])
+    if decision.account_busy:
+        extra.append(
+            "account_busy:"
+            f"project={decision.active_project_instance_id}:"
+            f"run={decision.active_run_id}"
+        )
+    elif decision.selected_project_instance_id is not None:
+        extra.append(
+            "portfolio_selected_other_project:"
+            f"{decision.selected_project_id}/"
+            f"{decision.selected_project_instance_id}"
+        )
+    else:
+        extra.append("portfolio_has_no_eligible_worker_turn")
+    return AutoRunStep(
+        iteration=iteration,
+        task_id=task_id,
+        run_id=run_id,
+        started_status=started_status,
+        final_status=started_status,
+        action="portfolio_yield",
+        details=extra,
+    )
+
+
+def run_auto(
+    project_root: Path,
+    policy: AutoRunPolicy | None = None,
+) -> AutoRunReport:
     root = project_root.resolve()
     policy = policy or AutoRunPolicy()
     auto_run_id = f"auto-{uuid.uuid4().hex}"
@@ -190,31 +251,161 @@ def run_auto(project_root: Path, policy: AutoRunPolicy | None = None) -> AutoRun
     completed_tasks = 0
     attempted_tasks = 0
     attempts_by_task: Counter[str] = Counter()
+    fallback = StrategyFallbackPolicy(
+        allow_goal_to_plan_then_execute=policy.allow_goal_fallback,
+        allow_plan_to_direct=policy.allow_plan_fallback,
+    )
 
     with project_lock(root, "auto-loop"):
         while attempted_tasks < policy.max_tasks:
+            maintenance_details: list[str] = []
             store = RunStore(root)
             active = _active_runs(store)
 
             if len(active) > 1:
+                # M4.2b: a valid parallel active-set is no longer an error for
+                # project-local auto mode. Non-worker phases remain local, while
+                # the next quota-consuming worker turn must still be selected by
+                # the account-global portfolio.
+                maintenance_details.extend(_drain_non_worker_phases(root))
+                active = _active_runs(RunStore(root))
+                if not active:
+                    continue
+
+                worker_relevant = [
+                    record
+                    for record in active
+                    if (
+                        record.status == RunStatus.CLAIMED
+                        or (
+                            record.status == RunStatus.RUNNING
+                            and record.checkpoint_ref
+                        )
+                    )
+                ]
+                if not worker_relevant:
+                    # Only non-worker/review phases remain. If maintenance
+                    # cannot make progress, stop according to the oldest active
+                    # run rather than inventing a worker turn.
+                    record = active[0]
+                    attempted_tasks += 1
+                    attempts_by_task[record.task_id] += 1
+                    stop = _classify_terminal(
+                        record,
+                        attempts_by_task[record.task_id],
+                        policy,
+                    )
+                    if stop is None:
+                        stop = AutoStopReason.RECOVERY_REQUIRED
+                    steps.append(
+                        AutoRunStep(
+                            iteration=len(steps) + 1,
+                            task_id=record.task_id,
+                            run_id=record.run_id,
+                            started_status=record.status,
+                            final_status=record.status,
+                            action="resume_non_worker",
+                            details=maintenance_details,
+                        )
+                    )
+                    return _finalize(
+                        root,
+                        auto_run_id=auto_run_id,
+                        started_at=started_at,
+                        stop_reason=stop,
+                        completed_tasks=completed_tasks,
+                        attempted_tasks=attempted_tasks,
+                        steps=steps,
+                    )
+
+                selected_record = sorted(
+                    worker_relevant,
+                    key=lambda item: (item.created_at, item.run_id),
+                )[0]
+                attempted_tasks += 1
+                attempts_by_task[selected_record.task_id] += 1
+                try:
+                    decision, turn = request_fair_project_turn(
+                        root,
+                        requested_strategy=policy.requested_strategy,
+                        fallback=fallback,
+                    )
+                except ProjectCtlError as exc:
+                    steps.append(
+                        AutoRunStep(
+                            iteration=len(steps) + 1,
+                            task_id=selected_record.task_id,
+                            run_id=selected_record.run_id,
+                            started_status=selected_record.status,
+                            final_status=selected_record.status,
+                            action="portfolio_yield",
+                            details=[*maintenance_details, str(exc)],
+                        )
+                    )
+                    return _finalize(
+                        root,
+                        auto_run_id=auto_run_id,
+                        started_at=started_at,
+                        stop_reason=AutoStopReason.RECOVERY_REQUIRED,
+                        completed_tasks=completed_tasks,
+                        attempted_tasks=attempted_tasks,
+                        steps=steps,
+                    )
+
+                if turn is None:
+                    steps.append(
+                        _portfolio_yield_step(
+                            iteration=len(steps) + 1,
+                            decision=decision,
+                            task_id=selected_record.task_id,
+                            run_id=selected_record.run_id,
+                            started_status=selected_record.status,
+                            details=maintenance_details,
+                        )
+                    )
+                    return _finalize(
+                        root,
+                        auto_run_id=auto_run_id,
+                        started_at=started_at,
+                        stop_reason=AutoStopReason.PORTFOLIO_YIELD,
+                        completed_tasks=completed_tasks,
+                        attempted_tasks=attempted_tasks,
+                        steps=steps,
+                    )
+
+                maintenance_details.extend(_drain_non_worker_phases(root))
+                final = RunStore(root).get(turn.run_id)
+                if final.status == RunStatus.PASSED:
+                    completed_tasks += 1
+                stop = _classify_terminal(
+                    final,
+                    attempts_by_task[final.task_id],
+                    policy,
+                )
                 steps.append(
                     AutoRunStep(
                         iteration=len(steps) + 1,
-                        action="multiple_active_runs",
-                        details=[record.run_id for record in active],
+                        task_id=final.task_id,
+                        run_id=final.run_id,
+                        started_status=turn.project_turn.envelope.run_status,
+                        final_status=final.status,
+                        action=turn.action,
+                        details=maintenance_details,
                     )
                 )
-                return _finalize(
-                    root,
-                    auto_run_id=auto_run_id,
-                    started_at=started_at,
-                    stop_reason=AutoStopReason.MULTIPLE_ACTIVE_RUNS,
-                    completed_tasks=completed_tasks,
-                    attempted_tasks=attempted_tasks,
-                    steps=steps,
-                )
+                if stop is not None:
+                    return _finalize(
+                        root,
+                        auto_run_id=auto_run_id,
+                        started_at=started_at,
+                        stop_reason=stop,
+                        completed_tasks=completed_tasks,
+                        attempted_tasks=attempted_tasks,
+                        steps=steps,
+                    )
+                continue
 
-            if len(active) == 1:
+            if active:
                 record = active[0]
                 if _has_live_lease(record, utc_now()):
                     steps.append(
@@ -227,7 +418,10 @@ def run_auto(project_root: Path, policy: AutoRunPolicy | None = None) -> AutoRun
                             action="active_run_present",
                             details=[
                                 f"lease_owner={record.lease_owner}",
-                                f"lease_expires_at={record.lease_expires_at.isoformat()}",
+                                (
+                                    "lease_expires_at="
+                                    f"{record.lease_expires_at.isoformat()}"
+                                ),
                             ],
                         )
                     )
@@ -250,8 +444,187 @@ def run_auto(project_root: Path, policy: AutoRunPolicy | None = None) -> AutoRun
                             started_status=record.status,
                             final_status=record.status,
                             action="unsafe_partial_prepare",
+                        )
+                    )
+                    return _finalize(
+                        root,
+                        auto_run_id=auto_run_id,
+                        started_at=started_at,
+                        stop_reason=AutoStopReason.RECOVERY_REQUIRED,
+                        completed_tasks=completed_tasks,
+                        attempted_tasks=attempted_tasks,
+                        steps=steps,
+                    )
+
+                if (
+                    attempts_by_task[record.task_id]
+                    >= policy.max_attempts_per_task
+                ):
+                    return _finalize(
+                        root,
+                        auto_run_id=auto_run_id,
+                        started_at=started_at,
+                        stop_reason=AutoStopReason.RETRY_BUDGET_EXHAUSTED,
+                        completed_tasks=completed_tasks,
+                        attempted_tasks=attempted_tasks,
+                        steps=steps,
+                    )
+
+                attempted_tasks += 1
+                attempts_by_task[record.task_id] += 1
+                started_status = record.status
+                state_before = _execution_plan_state_digest(
+                    root,
+                    record.run_id,
+                )
+
+                worker_ready = (
+                    record.status == RunStatus.CLAIMED
+                    or (
+                        record.status == RunStatus.RUNNING
+                        and record.checkpoint_ref
+                    )
+                )
+                if not worker_ready:
+                    maintenance_details = _drain_non_worker_phases(root)
+                    final = RunStore(root).get(record.run_id)
+
+                    if final.status == RunStatus.PASSED:
+                        completed_tasks += 1
+                        status_after = collect_status(root)
+                        steps.append(
+                            AutoRunStep(
+                                iteration=len(steps) + 1,
+                                task_id=record.task_id,
+                                run_id=record.run_id,
+                                started_status=started_status,
+                                final_status=final.status,
+                                action="resume_non_worker",
+                                project_state_digest_before=state_before,
+                                project_state_digest_after=(
+                                    status_after.decision.project_state_digest
+                                ),
+                                quota_mode=status_after.quota_state.mode,
+                                quota_stale=status_after.quota_state.stale,
+                                details=maintenance_details,
+                            )
+                        )
+                        if (
+                            policy.stop_on_material_project_state_change
+                            and state_before is not None
+                            and state_before
+                            != status_after.decision.project_state_digest
+                        ):
+                            return _finalize(
+                                root,
+                                auto_run_id=auto_run_id,
+                                started_at=started_at,
+                                stop_reason=(
+                                    AutoStopReason.MATERIAL_PROJECT_STATE_CHANGE
+                                ),
+                                completed_tasks=completed_tasks,
+                                attempted_tasks=attempted_tasks,
+                                steps=steps,
+                            )
+                        continue
+
+                    worker_ready = (
+                        final.status == RunStatus.CLAIMED
+                        or (
+                            final.status == RunStatus.RUNNING
+                            and final.checkpoint_ref
+                        )
+                    )
+                    if not worker_ready:
+                        stop = _classify_terminal(
+                            final,
+                            attempts_by_task[record.task_id],
+                            policy,
+                        )
+                        steps.append(
+                            AutoRunStep(
+                                iteration=len(steps) + 1,
+                                task_id=record.task_id,
+                                run_id=record.run_id,
+                                started_status=started_status,
+                                final_status=final.status,
+                                action="resume_non_worker",
+                                project_state_digest_before=state_before,
+                                details=maintenance_details,
+                            )
+                        )
+                        return _finalize(
+                            root,
+                            auto_run_id=auto_run_id,
+                            started_at=started_at,
+                            stop_reason=(
+                                stop or AutoStopReason.RECOVERY_REQUIRED
+                            ),
+                            completed_tasks=completed_tasks,
+                            attempted_tasks=attempted_tasks,
+                            steps=steps,
+                        )
+                    record = final
+
+                try:
+                    decision, turn = request_fair_project_turn(
+                        root,
+                        requested_strategy=policy.requested_strategy,
+                        fallback=fallback,
+                    )
+                except ProjectCtlError as exc:
+                    steps.append(
+                        AutoRunStep(
+                            iteration=len(steps) + 1,
+                            task_id=record.task_id,
+                            run_id=record.run_id,
+                            started_status=started_status,
+                            final_status=record.status,
+                            action="worker_turn_failed",
+                            details=[*maintenance_details, str(exc)],
+                        )
+                    )
+                    return _finalize(
+                        root,
+                        auto_run_id=auto_run_id,
+                        started_at=started_at,
+                        stop_reason=AutoStopReason.RECOVERY_REQUIRED,
+                        completed_tasks=completed_tasks,
+                        attempted_tasks=attempted_tasks,
+                        steps=steps,
+                    )
+                if turn is None:
+                    steps.append(
+                        _portfolio_yield_step(
+                            iteration=len(steps) + 1,
+                            decision=decision,
+                            task_id=record.task_id,
+                            run_id=record.run_id,
+                            started_status=started_status,
+                            details=maintenance_details,
+                        )
+                    )
+                    return _finalize(
+                        root,
+                        auto_run_id=auto_run_id,
+                        started_at=started_at,
+                        stop_reason=AutoStopReason.PORTFOLIO_YIELD,
+                        completed_tasks=completed_tasks,
+                        attempted_tasks=attempted_tasks,
+                        steps=steps,
+                    )
+                if turn.run_id != record.run_id:
+                    steps.append(
+                        AutoRunStep(
+                            iteration=len(steps) + 1,
+                            task_id=record.task_id,
+                            run_id=record.run_id,
+                            started_status=started_status,
+                            final_status=record.status,
+                            action="turn_identity_mismatch",
                             details=[
-                                "Automatic recovery cannot prove whether run creation reached durable prepare state."
+                                *maintenance_details,
+                                f"dispatcher_run={turn.run_id}",
                             ],
                         )
                     )
@@ -265,48 +638,17 @@ def run_auto(project_root: Path, policy: AutoRunPolicy | None = None) -> AutoRun
                         steps=steps,
                     )
 
-                attempted_tasks += 1
-                attempts_by_task[record.task_id] += 1
-                started_status = record.status
-                details: list[str] = ["resumed unfinished run"]
-                try:
-                    final = _advance_run(root, record.run_id)
-                except ProjectCtlError as exc:
-                    details.append(str(exc))
-                    final = RunStore(root).get(record.run_id)
-
+                details = [
+                    *maintenance_details,
+                    *_drain_non_worker_phases(root),
+                ]
+                final = RunStore(root).get(record.run_id)
                 stop = _classify_terminal(
                     final,
                     attempts_by_task[record.task_id],
                     policy,
                 )
-                if final.status != RunStatus.PASSED:
-                    steps.append(
-                        AutoRunStep(
-                            iteration=len(steps) + 1,
-                            task_id=record.task_id,
-                            run_id=record.run_id,
-                            started_status=started_status,
-                            final_status=final.status,
-                            action="resume_run",
-                            details=details,
-                        )
-                    )
-                    if stop is not None:
-                        return _finalize(
-                            root,
-                            auto_run_id=auto_run_id,
-                            started_at=started_at,
-                            stop_reason=stop,
-                            completed_tasks=completed_tasks,
-                            attempted_tasks=attempted_tasks,
-                            steps=steps,
-                        )
-                    continue
-
-                completed_tasks += 1
                 status_after = collect_status(root)
-                original_state_digest = _execution_plan_state_digest(root, record.run_id)
                 steps.append(
                     AutoRunStep(
                         iteration=len(steps) + 1,
@@ -314,25 +656,42 @@ def run_auto(project_root: Path, policy: AutoRunPolicy | None = None) -> AutoRun
                         run_id=record.run_id,
                         started_status=started_status,
                         final_status=final.status,
-                        action="resume_run",
-                        project_state_digest_before=original_state_digest,
-                        project_state_digest_after=status_after.decision.project_state_digest,
+                        action=turn.project_turn.envelope.action or "worker_turn",
+                        project_state_digest_before=state_before,
+                        project_state_digest_after=(
+                            status_after.decision.project_state_digest
+                        ),
                         quota_mode=status_after.quota_state.mode,
                         quota_stale=status_after.quota_state.stale,
                         details=details,
                     )
                 )
-                if (
-                    policy.stop_on_material_project_state_change
-                    and original_state_digest is not None
-                    and original_state_digest
-                    != status_after.decision.project_state_digest
-                ):
+                if final.status == RunStatus.PASSED:
+                    completed_tasks += 1
+                    if (
+                        policy.stop_on_material_project_state_change
+                        and state_before is not None
+                        and state_before
+                        != status_after.decision.project_state_digest
+                    ):
+                        return _finalize(
+                            root,
+                            auto_run_id=auto_run_id,
+                            started_at=started_at,
+                            stop_reason=(
+                                AutoStopReason.MATERIAL_PROJECT_STATE_CHANGE
+                            ),
+                            completed_tasks=completed_tasks,
+                            attempted_tasks=attempted_tasks,
+                            steps=steps,
+                        )
+                    continue
+                if stop is not None:
                     return _finalize(
                         root,
                         auto_run_id=auto_run_id,
                         started_at=started_at,
-                        stop_reason=AutoStopReason.MATERIAL_PROJECT_STATE_CHANGE,
+                        stop_reason=stop,
                         completed_tasks=completed_tasks,
                         attempted_tasks=attempted_tasks,
                         steps=steps,
@@ -340,15 +699,22 @@ def run_auto(project_root: Path, policy: AutoRunPolicy | None = None) -> AutoRun
                 continue
 
             status_before = collect_status(root)
-            if policy.stop_on_stale_quota and status_before.quota_state.stale:
+            if (
+                policy.stop_on_stale_quota
+                and status_before.quota_state.stale
+            ):
                 steps.append(
                     AutoRunStep(
                         iteration=len(steps) + 1,
                         action="quota_checkpoint",
-                        project_state_digest_before=status_before.decision.project_state_digest,
+                        project_state_digest_before=(
+                            status_before.decision.project_state_digest
+                        ),
                         quota_mode=status_before.quota_state.mode,
                         quota_stale=True,
-                        details=["Autonomous mode requires a fresh quota snapshot by default."],
+                        details=[
+                            "Autonomous mode requires a fresh quota snapshot."
+                        ],
                     )
                 )
                 return _finalize(
@@ -369,7 +735,9 @@ def run_auto(project_root: Path, policy: AutoRunPolicy | None = None) -> AutoRun
                     AutoRunStep(
                         iteration=len(steps) + 1,
                         action="quota_checkpoint",
-                        project_state_digest_before=status_before.decision.project_state_digest,
+                        project_state_digest_before=(
+                            status_before.decision.project_state_digest
+                        ),
                         quota_mode=status_before.quota_state.mode,
                         quota_stale=status_before.quota_state.stale,
                         details=["Quota is in critical mode."],
@@ -392,42 +760,24 @@ def run_auto(project_root: Path, policy: AutoRunPolicy | None = None) -> AutoRun
                     and status_before.status.task_counts.done
                     == status_before.status.task_counts.total
                 )
-                reason = (
-                    AutoStopReason.COMPLETED
-                    if done
-                    else AutoStopReason.NO_ELIGIBLE_TASK
-                )
-                steps.append(
-                    AutoRunStep(
-                        iteration=len(steps) + 1,
-                        action="scheduler_stop",
-                        project_state_digest_before=status_before.decision.project_state_digest,
-                        quota_mode=status_before.quota_state.mode,
-                        quota_stale=status_before.quota_state.stale,
-                        details=["Scheduler selected no eligible task."],
-                    )
-                )
                 return _finalize(
                     root,
                     auto_run_id=auto_run_id,
                     started_at=started_at,
-                    stop_reason=reason,
+                    stop_reason=(
+                        AutoStopReason.COMPLETED
+                        if done
+                        else AutoStopReason.NO_ELIGIBLE_TASK
+                    ),
                     completed_tasks=completed_tasks,
                     attempted_tasks=attempted_tasks,
                     steps=steps,
                 )
 
-            if attempts_by_task[task_id] >= policy.max_attempts_per_task:
-                steps.append(
-                    AutoRunStep(
-                        iteration=len(steps) + 1,
-                        task_id=task_id,
-                        action="retry_budget_exhausted",
-                        project_state_digest_before=status_before.decision.project_state_digest,
-                        quota_mode=status_before.quota_state.mode,
-                        quota_stale=status_before.quota_state.stale,
-                    )
-                )
+            if (
+                attempts_by_task[task_id]
+                >= policy.max_attempts_per_task
+            ):
                 return _finalize(
                     root,
                     auto_run_id=auto_run_id,
@@ -438,106 +788,107 @@ def run_auto(project_root: Path, policy: AutoRunPolicy | None = None) -> AutoRun
                     steps=steps,
                 )
 
-            run_id: str | None = None
-            details: list[str] = []
             attempted_tasks += 1
             attempts_by_task[task_id] += 1
             try:
-                prepared = prepare_next_run(
+                decision, turn = request_fair_project_turn(
                     root,
                     requested_strategy=policy.requested_strategy,
-                    fallback=StrategyFallbackPolicy(
-                        allow_goal_to_plan_then_execute=policy.allow_goal_fallback,
-                        allow_plan_to_direct=policy.allow_plan_fallback,
-                    ),
+                    fallback=fallback,
                 )
-                run_id = prepared.record.run_id
-                final = _advance_run(root, run_id)
             except ProjectCtlError as exc:
-                details.append(str(exc))
-                if run_id is None:
-                    steps.append(
-                        AutoRunStep(
-                            iteration=len(steps) + 1,
-                            task_id=task_id,
-                            action="prepare_failed",
-                            project_state_digest_before=status_before.decision.project_state_digest,
-                            quota_mode=status_before.quota_state.mode,
-                            quota_stale=status_before.quota_state.stale,
-                            details=details,
-                        )
+                steps.append(
+                    AutoRunStep(
+                        iteration=len(steps) + 1,
+                        task_id=task_id,
+                        action="worker_turn_failed",
+                        project_state_digest_before=(
+                            status_before.decision.project_state_digest
+                        ),
+                        quota_mode=status_before.quota_state.mode,
+                        quota_stale=status_before.quota_state.stale,
+                        details=[str(exc)],
                     )
-                    return _finalize(
-                        root,
-                        auto_run_id=auto_run_id,
-                        started_at=started_at,
-                        stop_reason=AutoStopReason.RUN_FAILED,
-                        completed_tasks=completed_tasks,
-                        attempted_tasks=attempted_tasks,
-                        steps=steps,
+                )
+                return _finalize(
+                    root,
+                    auto_run_id=auto_run_id,
+                    started_at=started_at,
+                    stop_reason=AutoStopReason.RUN_FAILED,
+                    completed_tasks=completed_tasks,
+                    attempted_tasks=attempted_tasks,
+                    steps=steps,
+                )
+            if turn is None:
+                steps.append(
+                    _portfolio_yield_step(
+                        iteration=len(steps) + 1,
+                        decision=decision,
+                        task_id=task_id,
                     )
-                final = RunStore(root).get(run_id)
+                )
+                return _finalize(
+                    root,
+                    auto_run_id=auto_run_id,
+                    started_at=started_at,
+                    stop_reason=AutoStopReason.PORTFOLIO_YIELD,
+                    completed_tasks=completed_tasks,
+                    attempted_tasks=attempted_tasks,
+                    steps=steps,
+                )
 
+            after_details = _drain_non_worker_phases(root)
+            final = RunStore(root).get(turn.run_id)
             stop = _classify_terminal(
                 final,
                 attempts_by_task[task_id],
                 policy,
             )
-            if final.status != RunStatus.PASSED:
-                steps.append(
-                    AutoRunStep(
-                        iteration=len(steps) + 1,
-                        task_id=task_id,
-                        run_id=run_id,
-                        started_status=RunStatus.CLAIMED if run_id else None,
-                        final_status=final.status,
-                        action="execute_task",
-                        project_state_digest_before=status_before.decision.project_state_digest,
-                        quota_mode=status_before.quota_state.mode,
-                        quota_stale=status_before.quota_state.stale,
-                        details=details,
-                    )
-                )
-                if stop is not None:
-                    return _finalize(
-                        root,
-                        auto_run_id=auto_run_id,
-                        started_at=started_at,
-                        stop_reason=stop,
-                        completed_tasks=completed_tasks,
-                        attempted_tasks=attempted_tasks,
-                        steps=steps,
-                    )
-                continue
-
-            completed_tasks += 1
             status_after = collect_status(root)
             steps.append(
                 AutoRunStep(
                     iteration=len(steps) + 1,
                     task_id=task_id,
-                    run_id=run_id,
-                    started_status=RunStatus.CLAIMED if run_id else None,
+                    run_id=turn.run_id,
+                    started_status=RunStatus.CLAIMED,
                     final_status=final.status,
-                    action="execute_task",
-                    project_state_digest_before=status_before.decision.project_state_digest,
-                    project_state_digest_after=status_after.decision.project_state_digest,
+                    action=turn.project_turn.envelope.action or "worker_turn",
+                    project_state_digest_before=(
+                        status_before.decision.project_state_digest
+                    ),
+                    project_state_digest_after=(
+                        status_after.decision.project_state_digest
+                    ),
                     quota_mode=status_after.quota_state.mode,
                     quota_stale=status_after.quota_state.stale,
-                    details=details,
+                    details=after_details,
                 )
             )
-
-            if (
-                policy.stop_on_material_project_state_change
-                and status_after.decision.project_state_digest
-                != status_before.decision.project_state_digest
-            ):
+            if final.status == RunStatus.PASSED:
+                completed_tasks += 1
+                if (
+                    policy.stop_on_material_project_state_change
+                    and status_after.decision.project_state_digest
+                    != status_before.decision.project_state_digest
+                ):
+                    return _finalize(
+                        root,
+                        auto_run_id=auto_run_id,
+                        started_at=started_at,
+                        stop_reason=(
+                            AutoStopReason.MATERIAL_PROJECT_STATE_CHANGE
+                        ),
+                        completed_tasks=completed_tasks,
+                        attempted_tasks=attempted_tasks,
+                        steps=steps,
+                    )
+                continue
+            if stop is not None:
                 return _finalize(
                     root,
                     auto_run_id=auto_run_id,
                     started_at=started_at,
-                    stop_reason=AutoStopReason.MATERIAL_PROJECT_STATE_CHANGE,
+                    stop_reason=stop,
                     completed_tasks=completed_tasks,
                     attempted_tasks=attempted_tasks,
                     steps=steps,

@@ -8,46 +8,33 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from projectctl.application.execution import (
-    prepare_next_run,
-    resume_checkpointed_run,
-    start_prepared_run,
+from projectctl.application.turns import (
+    advance_non_worker_phases,
+    collect_project_turn_envelope,
+    execute_project_turn,
 )
-from projectctl.application.status import collect_status
 from projectctl.core.digest import digest
-from projectctl.core.enums import RunStatus
 from projectctl.core.errors import PortfolioError, ProjectCtlError
 from projectctl.core.time import utc_now
-from projectctl.project.root import git_root
-from projectctl.project.bootstrap import _global_init, projectctl_home
 from projectctl.integrations.execution_ownership import require_project_execution_ready
+from projectctl.project.bootstrap import _global_init, projectctl_home
 from projectctl.project.loader import load_project_config
-from projectctl.quota import QuotaManager
+from projectctl.project.root import git_root
 from projectctl.quota.admission import AccountAdmissionStore, project_instance_id
+from projectctl.schemas.capabilities import StrategyFallbackPolicy
 from projectctl.schemas.portfolio import (
     PortfolioCandidate,
+    PortfolioCycleResult,
     PortfolioDecision,
     PortfolioTurnResult,
 )
-from projectctl.storage.runs import RunStore
 from projectctl.storage.sqlite import connect_db
 
-
-_ACTIVE_RUN_STATUSES = {
-    RunStatus.PLANNED,
-    RunStatus.PREPARING,
-    RunStatus.CLAIMED,
-    RunStatus.RUNNING,
-    RunStatus.VERIFYING,
-    RunStatus.READY_TO_INTEGRATE,
-    RunStatus.INTEGRATING,
-    RunStatus.AWAITING_REVIEW,
-}
 
 _ACTION_RANK = {
     "resume_run": 0,
     "start_run": 1,
-    "new_task": 2,
+    "admit_task": 2,
 }
 
 
@@ -145,14 +132,6 @@ def _touch_registration(
         conn.close()
 
 
-def _active_runs(store: RunStore):
-    return [
-        record
-        for record in store.list(limit=1000)
-        if record.status in _ACTIVE_RUN_STATUSES
-    ]
-
-
 def _base_candidate(
     registration: ProjectRegistration,
     *,
@@ -183,6 +162,7 @@ def _excluded(
         update={
             "eligible": False,
             "action": None,
+            "turn": None,
             "exclusion_reasons": reasons,
             "details": details,
         }
@@ -207,7 +187,6 @@ def _inspect_registration(
     try:
         if not root.exists() or not root.is_dir():
             return _excluded(candidate, "project_root_missing")
-
         if git_root(root) != root:
             return _excluded(candidate, "repository_root_mismatch")
 
@@ -221,9 +200,7 @@ def _inspect_registration(
 
         config = load_project_config(root)
         candidate = candidate.model_copy(
-            update={
-                "account_id": config.quota.account,
-            }
+            update={"account_id": config.quota.account}
         )
         if config.project.id != registration.project_id:
             return _excluded(
@@ -238,89 +215,36 @@ def _inspect_registration(
             return _excluded(candidate, "different_quota_account")
 
         require_project_execution_ready(root)
+        turn = collect_project_turn_envelope(root, now=now)
 
-        store = RunStore(root)
-        active = _active_runs(store)
-        if len(active) > 1:
-            return _excluded(
-                candidate,
-                "multiple_active_runs",
-                ",".join(sorted(record.run_id for record in active)),
-            )
-
-        status = collect_status(root, now=now, record_telemetry=False)
         candidate = candidate.model_copy(
             update={
-                "project_state_digest": status.decision.project_state_digest,
-                "task_snapshot_digest": status.decision.task_snapshot_digest,
-                "quota_snapshot_digest": status.decision.quota_snapshot_digest,
-                "quota_mode": status.quota_state.mode,
-                "quota_stale": status.quota_state.stale,
+                "account_id": turn.account_id,
+                "eligible": turn.eligible,
+                "action": turn.action,
+                "run_id": turn.run_id,
+                "run_status": turn.run_status,
+                "selected_task_id": turn.task_id,
+                "project_state_digest": turn.project_state_digest,
+                "task_snapshot_digest": turn.task_snapshot_digest,
+                "quota_snapshot_digest": turn.quota_snapshot_digest,
+                "quota_mode": turn.quota_mode,
+                "quota_stale": turn.quota_stale,
+                "resource_class": turn.resource_class,
+                "active_run_ids": turn.active_run_ids,
+                "active_run_count": turn.active_run_count,
+                "max_active_runs": turn.max_active_runs,
+                "parallel_admission": turn.parallel_admission,
+                "non_worker_run_ids": turn.non_worker_run_ids,
+                "integration_queue_head_run_id": (
+                    turn.integration_queue_head_run_id
+                ),
+                "turn": turn,
+                "exclusion_reasons": turn.exclusion_reasons,
+                "details": turn.details,
             }
         )
-
-        if status.quota_state.stale:
-            return _excluded(candidate, "quota_stale")
-
-        action = None
-        run_id = None
-        run_status = None
-        task_id = None
-
-        if active:
-            record = active[0]
-            run_id = record.run_id
-            run_status = record.status
-            if (
-                record.lease_owner is not None
-                and record.lease_expires_at is not None
-                and record.lease_expires_at > now
-            ):
-                return _excluded(candidate, "active_run_leased")
-
-            if record.status == RunStatus.RUNNING and record.checkpoint_ref:
-                action = "resume_run"
-                task_id = record.task_id
-            elif record.status == RunStatus.CLAIMED:
-                action = "start_run"
-                task_id = record.task_id
-            elif record.status in {
-                RunStatus.VERIFYING,
-                RunStatus.READY_TO_INTEGRATE,
-                RunStatus.INTEGRATING,
-                RunStatus.AWAITING_REVIEW,
-            }:
-                return _excluded(candidate, "non_worker_phase_pending")
-            else:
-                return _excluded(candidate, "run_recovery_required")
-        else:
-            task_id = status.decision.selected_task_id
-            if task_id is None:
-                return _excluded(candidate, "no_eligible_task")
-            action = "new_task"
-
-        task = next((item for item in status.tasks.tasks if item.id == task_id), None)
-        if task is None:
-            return _excluded(
-                candidate,
-                "selected_task_missing",
-                f"task_id={task_id}",
-            )
-
-        manager = QuotaManager(config.quota)
-        if not manager.eligible_for_resource(task.resource_class, status.quota_state):
-            return _excluded(candidate, "quota_insufficient")
-
-        return candidate.model_copy(
-            update={
-                "eligible": True,
-                "action": action,
-                "run_id": run_id,
-                "run_status": run_status,
-                "selected_task_id": task_id,
-                "resource_class": task.resource_class,
-            }
-        )
+        return candidate
     except ProjectCtlError as exc:
         return _excluded(candidate, "project_unhealthy", str(exc))
     except Exception as exc:
@@ -351,7 +275,9 @@ def collect_portfolio_decision(
     persist: bool = True,
 ) -> PortfolioDecision:
     if not account_id.strip():
-        raise PortfolioError("Portfolio arbitration requires a non-empty quota account id.")
+        raise PortfolioError(
+            "Portfolio arbitration requires a non-empty quota account id."
+        )
 
     now = now or utc_now()
     if now.tzinfo is None:
@@ -412,20 +338,80 @@ def collect_portfolio_decision(
         selected_project_instance_id=(
             selected.project_instance_id if selected is not None else None
         ),
-        selected_project_id=selected.project_id if selected is not None else None,
-        selected_project_root=selected.project_root if selected is not None else None,
+        selected_project_id=(
+            selected.project_id if selected is not None else None
+        ),
+        selected_project_root=(
+            selected.project_root if selected is not None else None
+        ),
         selected_action=selected.action if selected is not None else None,
         selected_run_id=selected.run_id if selected is not None else None,
-        selected_task_id=selected.selected_task_id if selected is not None else None,
+        selected_task_id=(
+            selected.selected_task_id if selected is not None else None
+        ),
         candidates=candidates,
     )
 
     if persist:
         _atomic_json(
-            home / "portfolio" / "decisions" / f"{decision.decision_id}.json",
+            home
+            / "portfolio"
+            / "decisions"
+            / f"{decision.decision_id}.json",
             decision,
         )
     return decision
+
+
+def _selected_candidate(decision: PortfolioDecision) -> PortfolioCandidate:
+    if decision.account_busy:
+        raise PortfolioError(
+            f"Quota account {decision.account_id!r} already has an active "
+            f"worker-turn admission for run {decision.active_run_id}."
+        )
+    if decision.selected_project_instance_id is None:
+        raise PortfolioError(
+            f"No registered project is eligible for the next worker turn on "
+            f"account {decision.account_id!r}."
+        )
+    candidate = next(
+        (
+            item
+            for item in decision.candidates
+            if item.project_instance_id
+            == decision.selected_project_instance_id
+        ),
+        None,
+    )
+    if candidate is None or candidate.turn is None or candidate.action is None:
+        raise PortfolioError("Selected portfolio candidate is incomplete.")
+    return candidate
+
+
+def _execute_selected(
+    decision: PortfolioDecision,
+    candidate: PortfolioCandidate,
+    *,
+    requested_strategy=None,
+    fallback: StrategyFallbackPolicy | None = None,
+) -> PortfolioTurnResult:
+    root = Path(candidate.project_root).resolve()
+    project_turn = execute_project_turn(
+        root,
+        candidate.turn,
+        requested_strategy=requested_strategy,
+        fallback=fallback,
+    )
+    return PortfolioTurnResult(
+        decision=decision,
+        project_instance_id=candidate.project_instance_id,
+        project_id=candidate.project_id,
+        project_root=candidate.project_root,
+        action=candidate.action,
+        run_id=project_turn.run_id,
+        run_status=project_turn.run_status,
+        project_turn=project_turn,
+    )
 
 
 def run_portfolio_turn(
@@ -433,6 +419,8 @@ def run_portfolio_turn(
     *,
     now: datetime | None = None,
     home: Path | None = None,
+    requested_strategy=None,
+    fallback: StrategyFallbackPolicy | None = None,
 ) -> PortfolioTurnResult:
     decision = collect_portfolio_decision(
         account_id,
@@ -440,56 +428,143 @@ def run_portfolio_turn(
         home=home,
         persist=True,
     )
-    if decision.account_busy:
-        raise PortfolioError(
-            f"Quota account {account_id!r} already has an active worker-turn admission "
-            f"for run {decision.active_run_id}."
-        )
-    if decision.selected_project_instance_id is None:
-        raise PortfolioError(
-            f"No registered project is eligible for the next worker turn on account "
-            f"{account_id!r}."
-        )
-
-    candidate = next(
-        item
-        for item in decision.candidates
-        if item.project_instance_id == decision.selected_project_instance_id
+    candidate = _selected_candidate(decision)
+    return _execute_selected(
+        decision,
+        candidate,
+        requested_strategy=requested_strategy,
+        fallback=fallback,
     )
-    if candidate.action is None or candidate.selected_task_id is None:
-        raise PortfolioError("Selected portfolio candidate is incomplete.")
 
-    root = Path(candidate.project_root).resolve()
-    if candidate.action == "resume_run":
-        if candidate.run_id is None:
-            raise PortfolioError("Resume candidate is missing run identity.")
-        started = resume_checkpointed_run(root, candidate.run_id)
-    elif candidate.action == "start_run":
-        if candidate.run_id is None:
-            raise PortfolioError("Start candidate is missing run identity.")
-        started = start_prepared_run(root, candidate.run_id)
-    else:
-        if (
-            candidate.task_snapshot_digest is None
-            or candidate.project_state_digest is None
-        ):
-            raise PortfolioError(
-                "New-task portfolio candidate is missing scheduler input digests."
-            )
-        prepared = prepare_next_run(
-            root,
-            expected_task_id=candidate.selected_task_id,
-            expected_task_snapshot_digest=candidate.task_snapshot_digest,
-            expected_project_state_digest=candidate.project_state_digest,
+
+def request_fair_project_turn(
+    project_root: Path,
+    *,
+    requested_strategy=None,
+    fallback: StrategyFallbackPolicy | None = None,
+    now: datetime | None = None,
+    home: Path | None = None,
+) -> tuple[PortfolioDecision, PortfolioTurnResult | None]:
+    """Request one automated worker turn without bypassing account fairness.
+
+    Project-scoped autonomous commands yield when the portfolio selects another
+    registered project. They never execute another project's work implicitly.
+    """
+    root = project_root.resolve()
+    config = load_project_config(root)
+    decision = collect_portfolio_decision(
+        config.quota.account,
+        now=now,
+        home=home,
+        persist=True,
+    )
+    if decision.account_busy:
+        return decision, None
+    if decision.selected_project_instance_id != project_instance_id(root):
+        return decision, None
+
+    candidate = _selected_candidate(decision)
+    return (
+        decision,
+        _execute_selected(
+            decision,
+            candidate,
+            requested_strategy=requested_strategy,
+            fallback=fallback,
+        ),
+    )
+
+
+
+def maintain_portfolio_projects(
+    account_id: str,
+    *,
+    home: Path | None = None,
+    now: datetime | None = None,
+) -> tuple[list, list[str]]:
+    """Advance non-worker phases for every registered project on one account."""
+    if not account_id.strip():
+        raise PortfolioError(
+            "Portfolio maintenance requires a non-empty quota account id."
         )
-        started = start_prepared_run(root, prepared.record.run_id)
+    account_id = account_id.strip()
+    now = now or utc_now()
+    home = (home or projectctl_home()).resolve()
+    results = []
+    errors: list[str] = []
 
-    return PortfolioTurnResult(
+    for registration in _registrations(home):
+        root = registration.project_root
+        try:
+            if not root.exists() or not root.is_dir():
+                continue
+            if git_root(root) != root:
+                continue
+            if project_instance_id(root) != registration.project_instance_id:
+                continue
+            config = load_project_config(root)
+            if (
+                config.project.id != registration.project_id
+                or config.quota.account != account_id
+            ):
+                continue
+            require_project_execution_ready(root)
+            results.append(advance_non_worker_phases(root))
+            _touch_registration(home, registration, observed_at=now)
+        except ProjectCtlError as exc:
+            errors.append(
+                f"{registration.project_id}/"
+                f"{registration.project_instance_id}: {exc}"
+            )
+        except Exception as exc:
+            errors.append(
+                f"{registration.project_id}/"
+                f"{registration.project_instance_id}: "
+                f"{type(exc).__name__}: {exc}"
+            )
+    return results, errors
+
+
+def run_portfolio_cycle(
+    account_id: str,
+    *,
+    now: datetime | None = None,
+    home: Path | None = None,
+    requested_strategy=None,
+    fallback: StrategyFallbackPolicy | None = None,
+) -> PortfolioCycleResult:
+    """Advance all non-worker phases, then execute at most one fair worker turn."""
+    now = now or utc_now()
+    home = (home or projectctl_home()).resolve()
+    maintenance, errors = maintain_portfolio_projects(
+        account_id,
+        home=home,
+        now=now,
+    )
+    decision = collect_portfolio_decision(
+        account_id,
+        now=now,
+        home=home,
+        persist=True,
+    )
+    turn = None
+    if (
+        not decision.account_busy
+        and decision.selected_project_instance_id is not None
+    ):
+        candidate = _selected_candidate(decision)
+        turn = _execute_selected(
+            decision,
+            candidate,
+            requested_strategy=requested_strategy,
+            fallback=fallback,
+        )
+
+    return PortfolioCycleResult(
+        generated_at=utc_now(),
+        account_id=account_id.strip(),
+        maintenance=maintenance,
+        maintenance_errors=errors,
         decision=decision,
-        project_instance_id=candidate.project_instance_id,
-        project_id=candidate.project_id,
-        project_root=candidate.project_root,
-        action=candidate.action,
-        run_id=started.record.run_id,
-        run_status=started.record.status,
+        turn=turn,
     )

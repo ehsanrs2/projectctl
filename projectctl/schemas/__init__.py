@@ -10,7 +10,12 @@ from projectctl.schemas.capabilities import (
     WorkerRuntimeDescriptor,
     WorkerStrategyDecision,
 )
-from projectctl.schemas.config import ProjectConfig, ProjectConfigV1
+from projectctl.schemas.config import (
+    OrchestrationConfig,
+    ProjectConfig,
+    ProjectConfigV1,
+    ProjectConfigV8,
+)
 from projectctl.schemas.delivery import (
     PublicationManifest,
     PublicationRequest,
@@ -55,6 +60,13 @@ from projectctl.schemas.onboarding import (
     AdoptionPlanV1,
     ProjectInspection,
     ProjectInspectionV1,
+)
+from projectctl.schemas.orchestration import (
+    NonWorkerPhaseStep,
+    OrchestrationStatus,
+    ProjectMaintenanceResult,
+    ProjectTurnEnvelope,
+    ProjectTurnResult,
 )
 from projectctl.schemas.project_state import MilestoneState, ProjectState
 from projectctl.schemas.quota import QuotaSnapshot, QuotaSnapshotV1
@@ -127,14 +139,21 @@ __all__ = [
     "NormalizedTask",
     "NormalizedTaskV1",
     "NormalizedTaskV2",
+    "NonWorkerPhaseStep",
+    "OrchestrationConfig",
+    "OrchestrationStatus",
     "PermissionCapabilities",
     "PermissionRequest",
     "ProjectConfig",
+    "ProjectConfigV8",
     "ProjectConfigV1",
     "ProjectInspection",
     "ProjectInspectionV1",
+    "ProjectMaintenanceResult",
     "ProjectState",
     "ProjectStatus",
+    "ProjectTurnEnvelope",
+    "ProjectTurnResult",
     "QuotaSnapshot",
     "QuotaSnapshotV1",
     "RecoveryAction",

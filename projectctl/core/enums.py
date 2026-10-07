@@ -251,4 +251,5 @@ class AutoStopReason(StrEnum):
     MULTIPLE_ACTIVE_RUNS = "multiple_active_runs"
     MATERIAL_PROJECT_STATE_CHANGE = "material_project_state_change"
     RETRY_BUDGET_EXHAUSTED = "retry_budget_exhausted"
+    PORTFOLIO_YIELD = "portfolio_yield"
     COMPLETED = "completed"

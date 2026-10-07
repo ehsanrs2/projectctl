@@ -4,7 +4,17 @@ from pathlib import Path
 from projectctl.schemas.artifact import ArtifactMetadata
 from projectctl.schemas.auto import AutoRunPolicy, AutoRunReport
 from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDecision
-from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3, ProjectConfigV4, ProjectConfigV5, ProjectConfigV6, ProjectConfigV7
+from projectctl.schemas.config import (
+    ProjectConfig,
+    ProjectConfigV1,
+    ProjectConfigV2,
+    ProjectConfigV3,
+    ProjectConfigV4,
+    ProjectConfigV5,
+    ProjectConfigV6,
+    ProjectConfigV7,
+    ProjectConfigV8,
+)
 from projectctl.schemas.ownership import ExecutionOwnershipPolicy
 from projectctl.schemas.delivery import (
     CodeDeliveryPolicy,
@@ -70,7 +80,19 @@ from projectctl.schemas.parallel import (
     ParallelSafetyDecision,
     ParallelScopeCatalog,
 )
-from projectctl.schemas.portfolio import PortfolioDecision, PortfolioTurnResult
+from projectctl.schemas.orchestration import (
+    OrchestrationStatus,
+    ProjectMaintenanceResult,
+    ProjectTurnEnvelope,
+    ProjectTurnResult,
+)
+from projectctl.schemas.portfolio import (
+    PortfolioCycleResult,
+    PortfolioDecision,
+    PortfolioDecisionV1,
+    PortfolioTurnResult,
+    PortfolioTurnResultV1,
+)
 from projectctl.schemas.project_state import ProjectState
 from projectctl.schemas.quota import QuotaSnapshot, QuotaSnapshotV1
 from projectctl.schemas.run import (
@@ -95,7 +117,8 @@ PUBLIC_SCHEMAS = {
     "project-config.v5.schema.json": ProjectConfigV5,
     "project-config.v6.schema.json": ProjectConfigV6,
     "project-config.v7.schema.json": ProjectConfigV7,
-    "project-config.v8.schema.json": ProjectConfig,
+    "project-config.v8.schema.json": ProjectConfigV8,
+    "project-config.v9.schema.json": ProjectConfig,
     "worker-capabilities.v1.schema.json": WorkerCapabilities,
     "worker-strategy-decision.v1.schema.json": WorkerStrategyDecision,
     "quota-snapshot.v1.schema.json": QuotaSnapshotV1,
@@ -118,8 +141,15 @@ PUBLIC_SCHEMAS = {
     "scheduler-decision.v2.schema.json": SchedulerDecision,
     "project-state.v1.schema.json": ProjectState,
     "project-status.v1.schema.json": ProjectStatus,
-    "portfolio-decision.v1.schema.json": PortfolioDecision,
-    "portfolio-turn-result.v1.schema.json": PortfolioTurnResult,
+    "project-turn-envelope.v1.schema.json": ProjectTurnEnvelope,
+    "project-turn-result.v1.schema.json": ProjectTurnResult,
+    "project-maintenance-result.v1.schema.json": ProjectMaintenanceResult,
+    "orchestration-status.v1.schema.json": OrchestrationStatus,
+    "portfolio-decision.v1.schema.json": PortfolioDecisionV1,
+    "portfolio-decision.v2.schema.json": PortfolioDecision,
+    "portfolio-turn-result.v1.schema.json": PortfolioTurnResultV1,
+    "portfolio-turn-result.v2.schema.json": PortfolioTurnResult,
+    "portfolio-cycle-result.v1.schema.json": PortfolioCycleResult,
     "parallel-scope-catalog.v1.schema.json": ParallelScopeCatalog,
     "parallel-plan.v1.schema.json": ParallelPlanV1,
     "parallel-plan.v2.schema.json": ParallelPlan,

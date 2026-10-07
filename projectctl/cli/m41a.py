@@ -5,6 +5,10 @@ from pathlib import Path
 
 import typer
 
+from projectctl.application.turns import (
+    advance_non_worker_phases,
+    collect_orchestration_status,
+)
 from projectctl.core.errors import ProjectCtlError
 from projectctl.parallel import (
     assess_parallel_safety,
@@ -215,17 +219,101 @@ def register_m41a(app: typer.Typer) -> None:
         for item in details:
             typer.echo(item)
 
+    @parallel_app.command("status")
+    def parallel_status_command(
+        project: Path = typer.Option(
+            Path("."), "--project", exists=True, file_okay=False, resolve_path=True
+        ),
+        json_output: bool = typer.Option(False, "--json"),
+    ) -> None:
+        try:
+            root = find_project_root(project)
+            status = collect_orchestration_status(root)
+        except ProjectCtlError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(EXIT_PARALLEL)
+
+        if json_output:
+            typer.echo(_json(status))
+            return
+
+        typer.echo(f"Project: {status.project_id} [{status.project_instance_id}]")
+        typer.echo(f"Account: {status.account_id}")
+        typer.echo(
+            f"Active runs: {status.active_run_count}/{status.max_active_runs}"
+        )
+        if status.active_run_ids:
+            typer.echo("  " + ", ".join(status.active_run_ids))
+        typer.echo(
+            "Account worker admission: "
+            + (
+                f"busy project={status.account_admission_project_instance_id} "
+                f"run={status.account_admission_run_id}"
+                if status.account_busy
+                else "free"
+            )
+        )
+        if status.integration_queue_head_run_id:
+            typer.echo(
+                f"Integration queue head: {status.integration_queue_head_run_id}"
+            )
+        turn = status.next_worker_turn
+        if turn is not None and turn.eligible:
+            typer.echo(
+                f"Next local turn: {turn.action} "
+                f"task={turn.task_id} run={turn.run_id or '-'}"
+            )
+        elif turn is not None:
+            typer.echo(
+                "Next local turn: none"
+                + (
+                    " reasons=" + ",".join(turn.exclusion_reasons)
+                    if turn.exclusion_reasons
+                    else ""
+                )
+            )
+
+    @parallel_app.command("maintain")
+    def parallel_maintain_command(
+        project: Path = typer.Option(
+            Path("."), "--project", exists=True, file_okay=False, resolve_path=True
+        ),
+        json_output: bool = typer.Option(False, "--json"),
+    ) -> None:
+        try:
+            root = find_project_root(project)
+            result = advance_non_worker_phases(root)
+        except ProjectCtlError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(EXIT_PARALLEL)
+
+        if json_output:
+            typer.echo(_json(result))
+            return
+        if not result.steps:
+            typer.echo("No active non-worker phases to advance.")
+            return
+        for step in result.steps:
+            typer.echo(
+                f"{step.run_id}: {step.action} "
+                f"{step.started_status.value}->{step.final_status.value}"
+                + (f" ({step.detail})" if step.detail else "")
+            )
+
     @parallel_app.command("run")
     def parallel_run_command(
         project: Path = typer.Option(
             Path("."), "--project", exists=True, file_okay=False, resolve_path=True
         ),
-        max_runs: int = typer.Option(
-            2,
+        max_runs: int | None = typer.Option(
+            None,
             "--max-runs",
             min=2,
             max=8,
-            help="Maximum number of same-project active runs in this bounded batch.",
+            help=(
+                "Compatibility assertion only. When supplied it must equal "
+                ".projectctl/config.yaml orchestration.max_active_runs."
+            ),
         ),
         strategy: str | None = typer.Option(
             None,
