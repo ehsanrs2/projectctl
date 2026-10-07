@@ -8,6 +8,7 @@ import yaml
 from typer.testing import CliRunner
 
 from projectctl.application.verification import verify_run
+from projectctl.application.execution_inputs import semantic_execution_input_digest
 from projectctl.cli.entry import app
 from projectctl.core.digest import digest
 from projectctl.core.enums import (
@@ -20,6 +21,12 @@ from projectctl.core.enums import (
 )
 from projectctl.git import WorktreeManager, resolve_commit
 from projectctl.schemas.execution import ExecutionPlan, WorkerResult
+from projectctl.schemas.execution_input import (
+    ClaimTransitionEvidence,
+    ExecutionInputManifest,
+    ExecutionPathScope,
+)
+from projectctl.schemas.task import NormalizedTask, TaskSource
 from projectctl.schemas.run import RunManifest, WorkerDescriptor
 from projectctl.storage.runs import RunStore
 
@@ -242,6 +249,87 @@ def test_review_run_requires_no_changes_and_finishes_without_integration(
     assert verified.evidence.candidate_commit == base
     assert verified.evidence.changed_paths == []
 
+
+
+
+
+def test_execution_write_scope_blocks_before_passing_evidence(tmp_path: Path, monkeypatch):
+    repo, worktree, base, run_id = setup_run(tmp_path, monkeypatch)
+    run_dir = repo / ".projectctl" / "runs" / run_id
+    raw_plan = json.loads((run_dir / "execution-plan.json").read_text(encoding="utf-8"))
+    plan = ExecutionPlan.model_validate(raw_plan)
+
+    scoped_task = NormalizedTask(
+        id="bd-1",
+        title="Scoped task",
+        source=TaskSource(provider="test", external_id="bd-1"),
+        status="running",
+    )
+    transition = ClaimTransitionEvidence(
+        provider="test",
+        claim_digest="claim",
+        before_selected_task_digest="before",
+        after_selected_task_digest="after",
+        transition_kind="unchanged",
+        validated_at=NOW,
+    )
+    execution_input = ExecutionInputManifest(
+        project_id="repo",
+        task_id="bd-1",
+        task_provider="test",
+        scheduler_task_snapshot_digest=plan.task_snapshot_digest,
+        project_state_digest=plan.project_state_digest,
+        preclaim_task_scope_digest="task-scope",
+        admitted_task_scope_digest="task-scope",
+        scoped_task_ids=["bd-1"],
+        preclaim_tasks=[scoped_task],
+        base_commit=base,
+        integration_target_ref=plan.integration_target_ref,
+        writes=[ExecutionPathScope(path="src/allowed.py", kind="exact")],
+        phase="admitted",
+        claim_transition=transition,
+        created_at=NOW,
+    )
+    input_digest = semantic_execution_input_digest(execution_input)
+    updated_plan = plan.model_copy(
+        update={
+            "execution_input_manifest": f".projectctl/runs/{run_id}/execution-input.json",
+            "execution_input_digest": input_digest,
+        }
+    )
+    (run_dir / "execution-input.json").write_text(
+        json.dumps(execution_input.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+    (run_dir / "execution-plan.json").write_text(
+        json.dumps(updated_plan.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+    RunStore(repo).rebind_execution_plan(
+        run_id,
+        expected={RunStatus.VERIFYING},
+        execution_plan_digest=digest(updated_plan),
+        now=NOW,
+    )
+    monkeypatch.setattr(
+        "projectctl.application.verification.revalidate_execution_input",
+        lambda root, manifest: None,
+    )
+
+    verified = verify_run(repo, run_id)
+
+    assert verified.record.status == RunStatus.BLOCKED_POLICY
+    assert verified.record.terminal_reason == RunTerminalReason.POLICY_BLOCKED
+    assert verified.verification.overall_pass is False
+    assert verified.evidence.overall_pass is False
+    assert verified.evidence.candidate_commit is None
+    assert "execution_write_scope:app.py" in verified.verification.policy_violations
+    scope_check = next(
+        check
+        for check in verified.verification.checks
+        if check.id == "execution-write-scope"
+    )
+    assert scope_check.status.value == "failed"
 
 
 def test_run_verify_cli_is_registered():
