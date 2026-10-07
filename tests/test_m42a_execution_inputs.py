@@ -361,3 +361,110 @@ def test_prepare_rejects_relevant_dependency_drift_during_claim(tmp_path: Path, 
 
     with pytest.raises(StaleSnapshotError, match="dependency"):
         prepare_next_run(repo)
+
+
+def test_public_schema_versions_include_m42a_contracts():
+    from projectctl.schema_export import PUBLIC_SCHEMAS
+
+    expected = {
+        "execution-input-manifest.v1.schema.json",
+        "claim-transition-evidence.v1.schema.json",
+        "execution-plan.v1.schema.json",
+        "execution-plan.v2.schema.json",
+        "execution-plan.v3.schema.json",
+        "worker-request.v1.schema.json",
+        "worker-request.v2.schema.json",
+        "worker-request.v3.schema.json",
+        "context-manifest.v1.schema.json",
+        "context-manifest.v2.schema.json",
+        "context-manifest.v3.schema.json",
+        "parallel-plan.v1.schema.json",
+        "parallel-plan.v2.schema.json",
+        "parallel-run-binding.v1.schema.json",
+        "parallel-run-binding.v2.schema.json",
+        "parallel-reapplication-request.v1.schema.json",
+        "parallel-reapplication-request.v2.schema.json",
+        "parallel-reapplication.v1.schema.json",
+        "parallel-reapplication.v2.schema.json",
+    }
+    assert expected <= set(PUBLIC_SCHEMAS)
+
+
+def test_beads_claim_transition_accepts_only_expected_lifecycle_mutation():
+    from types import SimpleNamespace
+
+    from projectctl.integrations.beads.claim import BeadsTaskClaimer
+
+    before = NormalizedTask(
+        id="bd-1",
+        title="Implement",
+        source=TaskSource(provider="beads", external_id="bd-1", revision="r1"),
+        status=TaskStatus.READY,
+        resource_class=ResourceClass.SMALL,
+    )
+    after = before.model_copy(
+        update={
+            "status": TaskStatus.RUNNING,
+            "source": before.source.model_copy(update={"revision": "r2"}),
+        }
+    )
+    changed_title = after.model_copy(update={"title": "silently changed"})
+
+    claim = TaskClaim(
+        provider="beads",
+        task_id="bd-1",
+        run_id="run-1",
+        actor="projectctl:test",
+        base_commit="a" * 40,
+        integration_target_ref="main",
+        claim_token="token",
+        request_digest="request",
+        acquired=True,
+        observed_at=NOW,
+    )
+    fake = SimpleNamespace(validate=lambda value: value == claim)
+
+    assert BeadsTaskClaimer.validate_transition(fake, claim, before, after) is True
+    assert (
+        BeadsTaskClaimer.validate_transition(fake, claim, before, changed_title)
+        is False
+    )
+
+
+def test_verification_write_scope_rejects_outside_paths():
+    from projectctl.application.verification import _write_scope_violations
+    from projectctl.schemas.execution_input import (
+        ExecutionInputManifest,
+        ExecutionPathScope,
+        ExecutionTaskInput,
+    )
+
+    selected = task("task-a", status=TaskStatus.RUNNING)
+    manifest = ExecutionInputManifest(
+        input_id="input",
+        project_id="repo",
+        task_id="task-a",
+        integration_target_ref="main",
+        base_commit="a" * 40,
+        project_state_digest="state",
+        scheduler_task_snapshot_digest="scheduler",
+        task_scope_digest="scope",
+        task_scope_ids=["task-a"],
+        task_inputs=[
+            ExecutionTaskInput(
+                task_id="task-a",
+                digest="task-digest",
+                task=selected,
+            )
+        ],
+        references_digest="refs",
+        write_scopes=[
+            ExecutionPathScope(path="src/allowed", kind="tree"),
+        ],
+        created_at=NOW,
+    )
+
+    assert _write_scope_violations(
+        manifest,
+        ["src/allowed/a.py", "src/outside.py"],
+    ) == ["execution_write_scope:src/outside.py"]
