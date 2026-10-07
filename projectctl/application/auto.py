@@ -262,29 +262,148 @@ def run_auto(
             store = RunStore(root)
             active = _active_runs(store)
 
-            # Serial auto intentionally does not adopt a parallel active-set.
-            # Worker turns are still globally fair; parallel ownership belongs
-            # to the explicit parallel/portfolio orchestrator.
             if len(active) > 1:
+                # M4.2b: a valid parallel active-set is no longer an error for
+                # project-local auto mode. Non-worker phases remain local, while
+                # the next quota-consuming worker turn must still be selected by
+                # the account-global portfolio.
+                maintenance_details.extend(_drain_non_worker_phases(root))
+                active = _active_runs(RunStore(root))
+                if not active:
+                    continue
+
+                worker_relevant = [
+                    record
+                    for record in active
+                    if (
+                        record.status == RunStatus.CLAIMED
+                        or (
+                            record.status == RunStatus.RUNNING
+                            and record.checkpoint_ref
+                        )
+                    )
+                ]
+                if not worker_relevant:
+                    # Only non-worker/review phases remain. If maintenance
+                    # cannot make progress, stop according to the oldest active
+                    # run rather than inventing a worker turn.
+                    record = active[0]
+                    attempted_tasks += 1
+                    attempts_by_task[record.task_id] += 1
+                    stop = _classify_terminal(
+                        record,
+                        attempts_by_task[record.task_id],
+                        policy,
+                    )
+                    if stop is None:
+                        stop = AutoStopReason.RECOVERY_REQUIRED
+                    steps.append(
+                        AutoRunStep(
+                            iteration=len(steps) + 1,
+                            task_id=record.task_id,
+                            run_id=record.run_id,
+                            started_status=record.status,
+                            final_status=record.status,
+                            action="resume_non_worker",
+                            details=maintenance_details,
+                        )
+                    )
+                    return _finalize(
+                        root,
+                        auto_run_id=auto_run_id,
+                        started_at=started_at,
+                        stop_reason=stop,
+                        completed_tasks=completed_tasks,
+                        attempted_tasks=attempted_tasks,
+                        steps=steps,
+                    )
+
+                selected_record = sorted(
+                    worker_relevant,
+                    key=lambda item: (item.created_at, item.run_id),
+                )[0]
+                attempted_tasks += 1
+                attempts_by_task[selected_record.task_id] += 1
+                try:
+                    decision, turn = request_fair_project_turn(
+                        root,
+                        requested_strategy=policy.requested_strategy,
+                        fallback=fallback,
+                    )
+                except ProjectCtlError as exc:
+                    steps.append(
+                        AutoRunStep(
+                            iteration=len(steps) + 1,
+                            task_id=selected_record.task_id,
+                            run_id=selected_record.run_id,
+                            started_status=selected_record.status,
+                            final_status=selected_record.status,
+                            action="portfolio_yield",
+                            details=[*maintenance_details, str(exc)],
+                        )
+                    )
+                    return _finalize(
+                        root,
+                        auto_run_id=auto_run_id,
+                        started_at=started_at,
+                        stop_reason=AutoStopReason.RECOVERY_REQUIRED,
+                        completed_tasks=completed_tasks,
+                        attempted_tasks=attempted_tasks,
+                        steps=steps,
+                    )
+
+                if turn is None:
+                    steps.append(
+                        _portfolio_yield_step(
+                            iteration=len(steps) + 1,
+                            decision=decision,
+                            task_id=selected_record.task_id,
+                            run_id=selected_record.run_id,
+                            started_status=selected_record.status,
+                            details=maintenance_details,
+                        )
+                    )
+                    return _finalize(
+                        root,
+                        auto_run_id=auto_run_id,
+                        started_at=started_at,
+                        stop_reason=AutoStopReason.PORTFOLIO_YIELD,
+                        completed_tasks=completed_tasks,
+                        attempted_tasks=attempted_tasks,
+                        steps=steps,
+                    )
+
+                maintenance_details.extend(_drain_non_worker_phases(root))
+                final = RunStore(root).get(turn.run_id)
+                if final.status == RunStatus.PASSED:
+                    completed_tasks += 1
+                stop = _classify_terminal(
+                    final,
+                    attempts_by_task[final.task_id],
+                    policy,
+                )
                 steps.append(
                     AutoRunStep(
                         iteration=len(steps) + 1,
-                        action="multiple_active_runs",
-                        details=[
-                            *maintenance_details,
-                            *[record.run_id for record in active],
-                        ],
+                        task_id=final.task_id,
+                        run_id=final.run_id,
+                        started_status=turn.project_turn.envelope.run_status,
+                        final_status=final.status,
+                        action=turn.action,
+                        details=maintenance_details,
                     )
                 )
-                return _finalize(
-                    root,
-                    auto_run_id=auto_run_id,
-                    started_at=started_at,
-                    stop_reason=AutoStopReason.MULTIPLE_ACTIVE_RUNS,
-                    completed_tasks=completed_tasks,
-                    attempted_tasks=attempted_tasks,
-                    steps=steps,
-                )
+                if stop is not None:
+                    return _finalize(
+                        root,
+                        auto_run_id=auto_run_id,
+                        started_at=started_at,
+                        stop_reason=stop,
+                        completed_tasks=completed_tasks,
+                        attempted_tasks=attempted_tasks,
+                        steps=steps,
+                    )
+                continue
 
             if active:
                 record = active[0]
