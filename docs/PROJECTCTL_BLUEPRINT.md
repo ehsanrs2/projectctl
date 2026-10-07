@@ -105,7 +105,7 @@ Exactly one authority should exist for each mutable concern.
 | Active goal / active milestone | `docs/PROJECT_STATE.yaml` | Structured, human-managed |
 | Requirements / feature specification | Bound project specification sources | Spec Kit when configured; otherwise project bindings |
 | Architecture decisions | `docs/decisions/ADR-*.md` | Newer accepted ADR wins on conflict |
-| Task execution state / dependencies | Configured task authority | Beads/GitHub execution adapters and Linear read adapter implemented; exactly one provider per project |
+| Task execution state / dependencies | Configured task authority | Beads, GitHub Issues, Linear and Jira adapters implemented; exactly one provider per project |
 | Code transport intent | `.projectctl/config.yaml -> code_transport` | Local Git or one explicitly pinned generic network Git remote; independent from task authority |
 | Code delivery intent | `.projectctl/config.yaml -> code_delivery` | Local-only, explicitly authorized direct Git publication, or review-required delivery |
 | Execution ownership | Resolved ownership strategy | Task-native, project-local exact claim, or generic remote Git ref lease |
@@ -114,7 +114,8 @@ Exactly one authority should exist for each mutable concern.
 | Verification result / evidence | ProjectCTL run artifacts and Evidence manifests | Worker result alone is not evidence |
 | Run lifecycle / leases / checkpoints | `.projectctl/state.sqlite` + run artifacts | Operational, project-instance-local |
 | Quota observations / provider selection | `$PROJECTCTL_HOME/state.sqlite` | Account-global |
-| Project quota policy | `.projectctl/config.yaml` | Local policy, not quota observation authority |
+| Account execution admission | Future `$PROJECTCTL_HOME/state.sqlite` admission lease | M4.0a; account-global and distinct from project/task ownership |
+| Project quota policy | `.projectctl/config.yaml` | Local policy, not quota observation/admission authority |
 | Generated status dashboards | `docs/generated/*` | Derived and non-authoritative |
 | Telemetry | `.projectctl/telemetry.sqlite` | Observational only |
 | Graph data | Future derived Graphify integration | Must never become requirements/task authority |
@@ -284,8 +285,8 @@ flowchart TD
 
 The `Publish` stage is selected by Code Delivery policy, not Task Authority. Local delivery can
 complete from verified local integration; `direct_git` requires exact-base remote publication and
-durable observation; `review_required` is modeled but remains fail-closed until a PR/MR adapter
-can produce durable review-delivery evidence.
+durable observation; `review_required` uses supported GitHub PR / GitLab MR adapters and completes
+only after external merge plus independent exact-candidate/ancestry proof.
 
 ---
 
@@ -406,15 +407,18 @@ Current delivery behavior:
 - PublicationRequest/PublicationManifest form the durable direct-publication evidence chain
 - generic Git publication is exact-base and fast-forward-only using force-with-lease semantics
 - remote identity is validated independently from task-provider identity
-- `review_required` is explicit but not execution-ready until a PR/MR adapter exists
-- ProjectCTL never falls back from review-required delivery to direct push
+- `review_required` is implemented for GitHub.com pull requests and GitLab.com merge requests
+- review creation is not completion; ProjectCTL waits for external merge and independently proves
+  exact candidate/ancestry before canonical task completion
+- ProjectCTL never auto-merges or falls back from review-required delivery to direct push
 - ownership release is selected by Execution Ownership rather than provider delivery flags
 - GitHub completion remains additive via `projectctl:completed`
-- Linear completion is additive through reserved team-scoped ProjectCTL lifecycle labels and never
-  overwrites native workflow state or human labels
+- Linear completion is additive through reserved team-scoped ProjectCTL lifecycle labels
+- Jira completion is additive through filtered compare-and-set issue properties
+- none of the remote lifecycle adapters overwrite native human workflow state to express
+  ProjectCTL completion
 
-Repositories whose rules reject direct target publication fail closed. The user must explicitly
-select a supported review-delivery adapter once that capability exists.
+Repositories whose review or branch policy cannot be proven through a supported adapter fail closed.
 
 ### 6.9 Runtime/recovery layer
 
@@ -441,7 +445,7 @@ system and must not be described as one.
 
 ## 7. Runtime lifecycle today
 
-The implemented lifecycle through M3.2c2 is:
+The implemented single-project lifecycle through M3.3c is:
 
 ```text
 fresh state
@@ -479,15 +483,29 @@ execution-readiness gate
          │    ↓
          │  canonical task completion from EvidenceManifest
          │
-         └─ direct_git
+         ├─ direct_git
+         │    ↓
+         │  durable PublicationRequest
+         │    ↓
+         │  exact-base remote publication
+         │    ↓
+         │  remote candidate observation
+         │    ↓
+         │  durable PublicationManifest
+         │    ↓
+         │  canonical task completion
+         │
+         └─ review_required
               ↓
-            durable PublicationRequest
+            durable ReviewRequest
               ↓
-            exact-base remote publication
+            PR/MR open → AWAITING_REVIEW
               ↓
-            remote candidate observation
+            external merge
               ↓
-            durable PublicationManifest
+            exact candidate + ancestry proof
+              ↓
+            durable ReviewReceipt
               ↓
             canonical task completion
              ↓
@@ -496,13 +514,14 @@ execution-readiness gate
            PASSED
 ```
 
-`review_required` currently fails at the execution-readiness gate because no review-delivery
-adapter exists; it never reaches task claim or local integration.
+`review_required` uses durable ReviewRequest/ReviewReceipt artifacts and waits in AWAITING_REVIEW
+until an external GitHub/GitLab review merge can be independently proven.
 
-Beads, GitHub Issues, and Linear may use local or direct-Git delivery where their lifecycle and
-ownership semantics are supported. GitHub completion remains direct-publication-gated today.
-Linear can execute with local or direct-Git delivery using independent ownership and crash-safe
-additive lifecycle markers. Review-required repositories remain fail-closed.
+Beads, GitHub Issues, Linear and Jira may execute when their configured ownership and delivery
+modes are supported. GitHub completion requires remote-visible delivery evidence. Linear uses
+crash-safe additive lifecycle labels; Jira uses crash-safe filtered-CAS lifecycle properties.
+Review-required GitHub.com/GitLab.com repositories wait for external review/merge and remain
+fail-closed on unsupported hosts or unprovable merge transformations.
 
 ---
 
@@ -771,6 +790,12 @@ M2 intentionally stops if multiple active runs exist.
 Parallel execution and multi-agent orchestration are **not** implemented and should not be
 described as current capabilities.
 
+The post-M3 review confirmed this is not merely a loop-policy limitation. Current plans bind the
+whole semantic TaskSnapshot, verified candidates are exact-base, and integration targets are
+serialized. Safe parallelism therefore requires scoped execution inputs, conflict/resource scopes
+and a transformed-candidate reverification contract before the multiple-active-run stop can be
+removed.
+
 ### Finding F — advanced context/skills/graph features are still future work
 
 The architecture anticipated:
@@ -798,6 +823,31 @@ classes the sole implementation authority. Generated schema files are now dispos
 artifacts, `schemas/generated/` is ignored and not versioned, export order is deterministic, and
 CI rejects a checked-in mirror while validating the complete exporter output in a temporary
 directory.
+
+
+### Finding I — account-global quota observation lacks account-global execution admission
+
+Quota provider selection/observations already live in `$PROJECTCTL_HOME/state.sqlite`, but each
+project still performs execution admission independently.
+
+Two project roots sharing one account can therefore evaluate the same fresh quota state and both
+start quota-consuming worker turns.
+
+**Decision:** M4.0a introduces an account-global execution admission lease before portfolio
+scheduling or parallel execution. The first version is exclusive per quota account because
+ProjectCTL does not yet have a trustworthy per-task token-cost estimator.
+
+### Finding J — portfolio/global orchestration groundwork exists but is not yet authoritative
+
+The global DB already contains a stable `project_registry`, but no global scheduler or arbitration
+artifact exists.
+
+Project-local scheduler scores are policy-local and must not be treated as directly comparable
+global utilities.
+
+**Decision:** M4.0b will arbitrate among project-level candidate envelopes after M4.0a provides an
+atomic account admission primitive. Each project's scheduler remains authoritative for task choice
+inside that project.
 
 ---
 
@@ -1280,20 +1330,85 @@ delivery.
 The next numbered milestone is intentionally not frozen here. A new architecture review should
 choose among the post-M3 product directions rather than extending Jira work by default.
 
-### Post-M3 directions — not yet milestone-frozen
+### M4 — Global Orchestration & Safe Concurrency
 
-These are retained product directions, not committed numbered milestones:
+The post-M3 architecture review is recorded in
+`docs/architecture/POST_M3_ARCHITECTURE_REVIEW.md` and ADR-029.
 
-- portfolio scheduling across projects
-- account-level quota allocation across projects
-- safe parallel runs when dependencies/write sets/resources permit
+The sequencing rule is:
+
+> establish account-global execution admission before portfolio arbitration, and establish both
+> before enabling same-project parallel execution.
+
+#### M4.0a — Account-Global Execution Admission
+
+**Next milestone / frozen by the post-M3 architecture review.**
+
+Goal: prevent independent projects sharing one quota account from concurrently admitting
+quota-consuming worker turns against the same account-global quota observation.
+
+Required work:
+
+- global-state DB v2 with explicit migration/backup path
+- authoritative account admission lease table in `$PROJECTCTL_HOME/state.sqlite`
+- admission identity binds account, project instance, project id and run id
+- atomic exclusive acquisition per account in the first version
+- owner/heartbeat/expiry and deterministic stale-lease reclamation
+- fresh quota revalidation while admission is held and before worker-provider contact
+- no quota-consuming worker turn without a valid admission
+- release on turn completion, checkpoint, failure and abort
+- admission not held through verification/integration/publication/external-review waiting
+- crash/recovery and audit events
+- no fabricated token or percentage reservation
+
+Non-goals:
+
+- portfolio ranking
+- multi-slot same-account concurrency
+- token-cost prediction
+- same-project parallel runs
+- background daemon
+
+#### M4.0b — Portfolio Scheduling & Cross-Project Arbitration
+
+**Planned after M4.0a.**
+
+Use the existing global project registry to decide which healthy project receives the next account
+admission while preserving each project's local scheduler as the authority for task choice inside
+that project.
+
+Do not compare raw project-local scheduler scores as if they were globally equivalent.
+
+#### M4.1a — Parallel Planning Safety Contract
+
+**Planned after M4.0b.**
+
+Define scoped execution-input digests, resource/write scopes, dependency/target conflicts and the
+conditions under which two runs can be planned concurrently without invalidating each other's
+proof inputs.
+
+Optional Graphify-derived code relationships may contribute derived evidence here, but may not
+become the sole conflict authority.
+
+#### M4.1b — Safe Parallel Execution & Integration
+
+**Planned after M4.1a.**
+
+Allow bounded concurrent work only after independence is proven. Integration remains deterministic,
+and any transformed/reapplied candidate requires fresh verification rather than reusing evidence
+from the old exact-base candidate.
+
+### Later product directions
+
+Retained after the M4 correctness sequence:
+
 - additional worker providers
 - optional Graphify-derived code/context graph
 - governed skills registry and supply-chain policy
 - first-class Research / Hypothesis / Experiment / Evidence / Decision flows
 - richer evaluation and trace export
 - Obsidian or another human cockpit as a non-authoritative UI
-- multi-agent orchestration only after ownership and publication semantics are proven
+- multi-agent orchestration only after safe concurrency semantics are proven
 
 ---
 
