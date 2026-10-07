@@ -237,7 +237,7 @@ def test_auto_stops_while_external_review_is_pending(
     report = auto_app.run_auto(tmp_path, AutoRunPolicy(max_tasks=3))
 
     assert report.stop_reason == AutoStopReason.REVIEW_PENDING
-    assert report.attempted_tasks == 0
+    assert report.attempted_tasks == 1
     assert report.completed_tasks == 0
 
 
@@ -382,3 +382,60 @@ def test_resumed_run_uses_fair_dispatcher(
 def test_run_auto_cli_is_registered():
     result = runner.invoke(app, ["run", "auto", "--help"])
     assert result.exit_code == 0, result.output
+
+
+
+def test_auto_counts_non_worker_resume_that_finishes_passed(
+    tmp_path: Path,
+    monkeypatch,
+):
+    setup_common(monkeypatch)
+    verifying = record(
+        run_id="run-verify",
+        task_id="task-verify",
+        status=RunStatus.VERIFYING,
+    )
+    FakeStore.active = [verifying]
+    FakeStore.records[verifying.run_id] = verifying
+    monkeypatch.setattr(
+        auto_app,
+        "_execution_plan_state_digest",
+        lambda root, run_id: "state-before",
+    )
+
+    def maintain(root):
+        passed = record(
+            run_id="run-verify",
+            task_id="task-verify",
+            status=RunStatus.PASSED,
+        )
+        FakeStore.records["run-verify"] = passed
+        FakeStore.active = []
+        return maintenance(
+            SimpleNamespace(
+                run_id="run-verify",
+                action="verify",
+                started_status=RunStatus.VERIFYING,
+                final_status=RunStatus.PASSED,
+                detail=None,
+            )
+        )
+
+    monkeypatch.setattr(auto_app, "advance_non_worker_phases", maintain)
+    monkeypatch.setattr(
+        auto_app,
+        "collect_status",
+        lambda root: status_bundle(
+            selected=None,
+            project_state_digest="state-before",
+            total=1,
+            done=1,
+        ),
+    )
+
+    report = auto_app.run_auto(tmp_path, AutoRunPolicy(max_tasks=1))
+
+    assert report.attempted_tasks == 1
+    assert report.completed_tasks == 1
+    assert report.steps[-1].action == "resume_non_worker"
+    assert report.steps[-1].final_status == RunStatus.PASSED
