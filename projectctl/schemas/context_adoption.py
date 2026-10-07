@@ -40,6 +40,7 @@ class ContextScopeReview(ProjectCtlModel):
     added_resources: list[str] = Field(default_factory=list)
     mutation_mode: Literal["additive"] = "additive"
     requires_digest_approval: Literal[True] = True
+    warnings: list[str] = Field(default_factory=list)
 
 
 class ContextScopeAdoptionRequest(ProjectCtlModel):
@@ -54,6 +55,7 @@ class ContextScopeAdoptionRequest(ProjectCtlModel):
     task_id: str = Field(min_length=1)
     review_id: str = Field(min_length=1)
     review_digest: str = Field(min_length=1)
+    request_digest: str = Field(min_length=1)
     approval_digest: str = Field(min_length=1)
     approval_method: Literal["cli_review_digest"] = "cli_review_digest"
     base_commit: str = Field(min_length=7)
