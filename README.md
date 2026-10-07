@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository has completed **M4.0b — Portfolio Scheduling & Cross-Project Arbitration**. The active milestone is now **M4.1a — Parallel Planning Safety Contract**.
+This repository has completed **M4.1a — Parallel Planning Safety Contract**. The active milestone is now **M4.1b — Safe Parallel Execution & Integration**.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -1884,6 +1884,70 @@ $PROJECTCTL_HOME/portfolio/decisions/<decision-id>.json
 These files are audit artifacts, not task or admission authority. Actual worker-turn ownership
 remains the M4.0a account admission lease.
 
+### M4.1a — Parallel Planning Safety Contract
+
+M4.1a defines the proof required before same-project concurrency can be enabled.
+
+Parallel safety is explicit and fail-closed. Tasks that may participate must declare human-managed
+scope in:
+
+```text
+projectctl.parallel.yaml
+```
+
+Example:
+
+```yaml
+schema_kind: projectctl.parallel_scope_catalog
+schema_version: 1
+tasks:
+  TASK-123:
+    task_id: TASK-123
+    inputs:
+      - path: src/parser
+        kind: tree
+    writes:
+      - path: src/parser/new_backend.py
+        kind: exact
+    resources:
+      - parser-registry
+```
+
+The catalog is protected from worker modification by verification policy.
+
+Build one proof artifact:
+
+```bash
+projectctl parallel plan TASK-123 --project /path/to/repo
+```
+
+Assess two tasks:
+
+```bash
+projectctl parallel assess TASK-123 TASK-456 --project /path/to/repo
+projectctl parallel assess TASK-123 TASK-456 --project /path/to/repo --json
+```
+
+The decision is deterministic and checks:
+
+- scoped task/dependency state rather than the whole unrelated task snapshot
+- exact Git-base input digests
+- project-state identity
+- task dependency relations
+- write/write overlap
+- write/input invalidation in both directions
+- exclusive resource overlap
+- shared-target base consistency
+
+No LLM conflict judgment is authoritative.
+
+Two tasks can be execution-independent while sharing one target/base. In that case the decision
+explicitly records that integration requires reapplication/fresh verification after the first
+candidate advances the target. Existing evidence is never valid for transformed code.
+
+M4.1a **does not enable multiple active runs**. It only establishes the proof contract consumed by
+M4.1b.
+
 The M4 sequence is now:
 
 ```text
@@ -1891,16 +1955,16 @@ M4.0a  Account-Global Execution Admission                  completed
    ↓
 M4.0b  Portfolio Scheduling & Cross-Project Arbitration   completed
    ↓
-M4.1a  Parallel Planning Safety Contract                  next
+M4.1a  Parallel Planning Safety Contract                  completed
    ↓
-M4.1b  Safe Parallel Execution & Integration
+M4.1b  Safe Parallel Execution & Integration              next
 ```
 
-Graphify/context discovery remains valuable—especially for later write-scope evidence—but does not
-replace the portfolio, task, or admission authorities.
+Graphify/context discovery may later contribute derived scope evidence, but it is not the sole
+authority that can declare tasks parallel-safe.
 
-See ADR-029, ADR-030 and `docs/PROJECTCTL_BLUEPRINT.md`.
+See ADR-029, ADR-030, ADR-031 and `docs/PROJECTCTL_BLUEPRINT.md`.
 
 Next:
 
-- **M4.1a — Parallel Planning Safety Contract**
+- **M4.1b — Safe Parallel Execution & Integration**

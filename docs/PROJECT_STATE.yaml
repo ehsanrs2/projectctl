@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Define the planning and conflict-safety contract required before two runs may coexist without invalidating task, project-state, base, resource or verification evidence.
+current_goal: Enable bounded same-project concurrency only for M4.1a-proven independent plans, with deterministic integration ordering, crash-safe multiple-run recovery, and fresh verification after any candidate transformation.
 active_milestone:
-  id: M4.1a
-  title: Parallel Planning Safety Contract
+  id: M4.1b
+  title: Safe Parallel Execution & Integration
   aliases:
-    - Parallel Planning Contract
-    - Run Independence Contract
-    - Conflict Scope Contract
+    - Safe Parallel Runs
+    - Bounded Parallel Execution
+    - Deterministic Parallel Integration
 updated_at: null
