@@ -252,13 +252,21 @@ def register_m50(app: typer.Typer) -> None:
             typer.echo(str(exc), err=True)
             raise typer.Exit(EXIT_CONTEXT)
 
-        if json_output:
-            typer.echo(_json(review))
-            return
-
         from projectctl.core.digest import digest
 
         review_digest = digest(review)
+        if json_output:
+            typer.echo(
+                _json(
+                    {
+                        "review_digest": review_digest,
+                        "review": review.model_dump(mode="json"),
+                        "diff": render_review_diff(review),
+                    }
+                )
+            )
+            return
+
         typer.echo(f"Scope review: {review.review_id}")
         typer.echo(f"Task: {review.task_id}")
         typer.echo(f"Base: {review.base_commit[:12]}")
@@ -345,3 +353,7 @@ def register_m50(app: typer.Typer) -> None:
         typer.echo(f"After: {receipt.catalog_after_digest}")
         typer.echo(f"Scope digest: {receipt.scope_after_digest}")
         typer.echo("Applied: true")
+        typer.echo(
+            "Human-managed scope policy changed. Inspect git diff and commit "
+            "projectctl.parallel.yaml before autonomous execution."
+        )
