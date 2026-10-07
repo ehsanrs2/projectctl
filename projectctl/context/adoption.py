@@ -7,7 +7,7 @@ import os
 import socket
 import tempfile
 import uuid
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import yaml
 
@@ -121,12 +121,29 @@ def _scope_key(scope) -> tuple[str, str]:
     return scope.path, scope.kind
 
 
+def _scope_covers(existing: ParallelPathScope, candidate: ParallelPathScope) -> bool:
+    if existing.kind == "exact":
+        return candidate.kind == "exact" and existing.path == candidate.path
+    base = PurePosixPath(existing.path)
+    target = PurePosixPath(candidate.path)
+    try:
+        target.relative_to(base)
+        return True
+    except ValueError:
+        return False
+
+
 def _merge_scopes(existing, selected) -> list[ParallelPathScope]:
-    merged: dict[tuple[str, str], ParallelPathScope] = {}
-    for item in [*existing, *selected]:
-        converted = ParallelPathScope(path=item.path, kind=item.kind)
-        merged[_scope_key(converted)] = converted
-    return sorted(merged.values(), key=lambda item: (item.path, item.kind))
+    merged: list[ParallelPathScope] = [
+        ParallelPathScope(path=item.path, kind=item.kind) for item in existing
+    ]
+    for item in selected:
+        candidate = ParallelPathScope(path=item.path, kind=item.kind)
+        if any(_scope_covers(current, candidate) for current in merged):
+            continue
+        merged.append(candidate)
+    unique = {_scope_key(item): item for item in merged}
+    return sorted(unique.values(), key=lambda item: (item.path, item.kind))
 
 
 def _load_suggestion(path: Path) -> ContextScopeSuggestion:
