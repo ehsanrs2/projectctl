@@ -1,3 +1,9 @@
+from projectctl.quota.admission import (
+    AccountAdmission,
+    AccountAdmissionLease,
+    AccountAdmissionStore,
+    admission_lease_for_project,
+)
 from projectctl.quota.checkpointing import (
     QuotaCheckpointDecision,
     QuotaCheckpointMonitor,
@@ -15,6 +21,10 @@ from projectctl.quota.resolver import (
 )
 
 __all__ = [
+    "AccountAdmission",
+    "AccountAdmissionLease",
+    "AccountAdmissionStore",
+    "admission_lease_for_project",
     "CodexAppServerQuotaProvider",
     "QuotaCheckpointDecision",
     "QuotaCheckpointMonitor",
