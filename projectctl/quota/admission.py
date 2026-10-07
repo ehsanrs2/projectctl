@@ -368,6 +368,30 @@ class AccountAdmissionStore:
         finally:
             conn.close()
 
+    def last_acquired_at_by_project(
+        self,
+        account_id: str,
+    ) -> dict[str, datetime]:
+        conn = connect_db(self.db_path, telemetry=False)
+        try:
+            rows = conn.execute(
+                """
+                SELECT project_instance_id, MAX(observed_at) AS last_acquired_at
+                FROM execution_admission_events
+                WHERE account_id=? AND event_type='acquired'
+                  AND project_instance_id IS NOT NULL
+                GROUP BY project_instance_id
+                """,
+                (account_id,),
+            ).fetchall()
+        finally:
+            conn.close()
+        return {
+            str(row["project_instance_id"]): _parse_time(str(row["last_acquired_at"]))
+            for row in rows
+            if row["last_acquired_at"] is not None
+        }
+
     def events(self, account_id: str) -> list[dict]:
         conn = connect_db(self.db_path, telemetry=False)
         try:
