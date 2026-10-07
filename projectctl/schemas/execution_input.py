@@ -6,6 +6,7 @@ from pydantic import AwareDatetime, Field, model_validator
 
 from projectctl.schemas.base import ProjectCtlModel
 from projectctl.schemas.config import RepoRelativePath
+from projectctl.schemas.task import NormalizedTask
 
 
 ExecutionPathKind = Literal["exact", "tree"]
@@ -48,6 +49,7 @@ class ExecutionInputManifest(ProjectCtlModel):
     preclaim_task_scope_digest: str = Field(min_length=1)
     admitted_task_scope_digest: str = Field(min_length=1)
     scoped_task_ids: list[str] = Field(min_length=1)
+    preclaim_tasks: list[NormalizedTask] = Field(min_length=1)
 
     base_commit: str = Field(min_length=7)
     integration_target_ref: str = Field(min_length=1)
