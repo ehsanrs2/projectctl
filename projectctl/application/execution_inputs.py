@@ -204,6 +204,9 @@ def build_preclaim_execution_input(
     base_commit: str,
     integration_target_ref: str,
     scheduler_task_snapshot_digest: str,
+    project_id: str | None = None,
+    project_state_digest: str | None = None,
+    scope_override: ParallelTaskScope | None = None,
     now: datetime | None = None,
 ) -> ExecutionInputManifest:
     root = project_root.resolve()
@@ -211,8 +214,12 @@ def build_preclaim_execution_input(
     if now.tzinfo is None:
         raise ValueError("Execution-input time must be timezone-aware.")
 
-    config = load_project_config(root)
-    state = load_project_state(root, allow_missing=True)
+    config = load_project_config(root) if project_id is None else None
+    state = (
+        load_project_state(root, allow_missing=True)
+        if project_state_digest is None
+        else None
+    )
     scoped_digest, scoped_ids = semantic_task_scope_digest(tasks, task_id)
     task = next((item for item in tasks.tasks if item.id == task_id), None)
     if task is None:
@@ -220,17 +227,40 @@ def build_preclaim_execution_input(
             f"Execution input cannot find selected task {task_id!r}."
         )
 
-    scope_digest, inputs, writes, resources = _execution_scope_material(
-        root,
-        task_id=task_id,
-        base_commit=base_commit,
-    )
+    if scope_override is None:
+        scope_digest, inputs, writes, resources = _execution_scope_material(
+            root,
+            task_id=task_id,
+            base_commit=base_commit,
+        )
+    else:
+        scope_digest = digest(scope_override)
+        inputs = [
+            ExecutionInputEvidence(
+                scope=ExecutionPathScope(path=item.path, kind=item.kind),
+                digest=input_scope_digest(
+                    root,
+                    base_commit,
+                    ExecutionPathScope(path=item.path, kind=item.kind),
+                ),
+            )
+            for item in scope_override.inputs
+        ]
+        writes = [
+            ExecutionPathScope(path=item.path, kind=item.kind)
+            for item in scope_override.writes
+        ]
+        resources = sorted(scope_override.resources)
     return ExecutionInputManifest(
-        project_id=config.project.id,
+        project_id=project_id or config.project.id,
         task_id=task_id,
         task_provider=tasks.provider,
         scheduler_task_snapshot_digest=scheduler_task_snapshot_digest,
-        project_state_digest=semantic_project_state_digest(state),
+        project_state_digest=(
+            project_state_digest
+            if project_state_digest is not None
+            else semantic_project_state_digest(state)
+        ),
         preclaim_task_scope_digest=scoped_digest,
         admitted_task_scope_digest=scoped_digest,
         scoped_task_ids=scoped_ids,
