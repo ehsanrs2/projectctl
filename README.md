@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-The **Post-M4 Architecture Review** is complete. **M4.2a — Execution Input Contract Unification** is implemented, and the active milestone is now **M4.2b — Unified Turn Orchestration**.
+The **Post-M4 Architecture Review** contract-closure sequence is complete through **M4.2b — Unified Turn Orchestration**. The active milestone is now **M5.0 — Context Discovery & Scope Assistance**.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -1995,8 +1995,7 @@ fresh VerificationManifest / EvidenceManifest
 
 Ambiguous crash states fail closed rather than guessing.
 
-The legacy `projectctl run auto` remains a serial orchestrator and intentionally still stops on a
-multiple-active-run set. Parallel orchestration is explicit.
+M4.2b removes the old autonomous-orchestrator split. `projectctl run auto`, `projectctl parallel run`, and account-global portfolio execution all request quota-consuming worker turns through the same portfolio fairness dispatcher. A project-local command yields rather than silently executing another project's selected work.
 
 ### Post-M4 Architecture Review
 
@@ -2031,7 +2030,9 @@ M4.1b  Bounded Parallel Active-Set & Safe Integration     implemented
    ↓
 M4.2a  Execution Input Contract Unification               completed
    ↓
-M4.2b  Unified Turn Orchestration                           next
+M4.2b  Unified Turn Orchestration                           completed
+   ↓
+M5.0   Context Discovery & Scope Assistance                next
 ```
 
 M4.2a now separates full scheduler observation from execution validity through
@@ -2054,15 +2055,28 @@ Reapplication now persists the exact patch, archives source proof artifacts, cre
 execution-plan/input lineage, chooses recovery requests by durable time, and persists ambiguous
 recovery as NEEDS_DECISION when lifecycle state allows.
 
-M4.2b will make portfolio arbitration aware of parallel active sets and route automated worker
-turns through one account-global dispatcher.
+M4.2b now makes portfolio arbitration active-set aware and routes autonomous worker turns through one account-global fairness dispatcher. The durable project config owns automated active-set capacity through `orchestration.max_active_runs`; verification/integration/recovery stay outside the quota-consuming turn slot.
 
-Graphify/context discovery remains a strong candidate for **M5**, but only after these M4 contract
-closure steps.
+The main user-facing surfaces are:
+
+```bash
+projectctl portfolio next --account ACCOUNT
+projectctl portfolio run --account ACCOUNT
+projectctl portfolio maintain --account ACCOUNT
+projectctl portfolio cycle --account ACCOUNT
+
+projectctl parallel status --project /path/to/repo
+projectctl parallel maintain --project /path/to/repo
+projectctl parallel run --project /path/to/repo
+```
+
+`projectctl parallel run` is now a bounded fair wave rather than a local bypass. `--max-runs` is compatibility/assertion only; configured `orchestration.max_active_runs` is the capacity authority.
+
+With M4.2a/b complete, the M4 global/parallel contract closure is complete. The next milestone is **M5.0 — Context Discovery & Scope Assistance**. Derived AST/Graphify relationships may suggest scope, but never replace explicit human/control-plane authority.
 
 See ADR-029 through ADR-033, `docs/architecture/POST_M4_ARCHITECTURE_REVIEW.md`, and
 `docs/PROJECTCTL_BLUEPRINT.md`.
 
 Next:
 
-- **M4.2b — Unified Turn Orchestration**
+- **M5.0 — Context Discovery & Scope Assistance**
