@@ -90,7 +90,7 @@ class ExecutionPlan(ProjectCtlModel):
     task_source_revision: str | None = None
     scheduler_decision_digest: str = Field(min_length=1)
     task_snapshot_digest: str = Field(min_length=1)
-    execution_input_digest: str = Field(min_length=1)
+    execution_input_digest: str | None = None
     project_state_digest: str = Field(min_length=1)
     quota_snapshot_digest: str = Field(min_length=1)
     capability_snapshot_digest: str = Field(min_length=1)
@@ -175,8 +175,8 @@ class WorkerRequest(ProjectCtlModel):
     branch_name: str = Field(min_length=1)
     worktree_id: str = Field(min_length=1)
     execution_plan_digest: str = Field(min_length=1)
-    execution_input_digest: str = Field(min_length=1)
-    claim_transition_digest: str = Field(min_length=1)
+    execution_input_digest: str | None = None
+    claim_transition_digest: str | None = None
     capability_snapshot_digest: str = Field(min_length=1)
     strategy_decision_digest: str = Field(min_length=1)
     strategy: WorkerStrategyKind
