@@ -254,6 +254,9 @@ def build_parallel_plan(
         base_commit=base_commit,
         integration_target_ref=target_ref,
         scheduler_task_snapshot_digest=semantic_task_snapshot_digest(tasks),
+        project_id=config.project.id,
+        project_state_digest=project_state_digest,
+        scope_override=scope,
         now=now,
     )
     input_evidence = [
