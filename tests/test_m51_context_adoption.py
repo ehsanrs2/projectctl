@@ -417,3 +417,101 @@ def test_m51_public_schema_and_cli_surface():
     assert result.exit_code == 0, result.output
     assert "review-scope" in result.output
     assert "adopt-scope" in result.output
+
+
+def test_existing_tree_scope_covers_exact_suggestion_without_redundant_addition(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _repo(tmp_path)
+    (root / "projectctl.parallel.yaml").write_text(
+        "schema_kind: projectctl.parallel_scope_catalog\n"
+        "schema_version: 1\n"
+        "tasks:\n"
+        "  TASK-1:\n"
+        "    task_id: TASK-1\n"
+        "    inputs:\n"
+        "      - path: src\n"
+        "        kind: tree\n"
+        "    writes:\n"
+        "      - path: src\n"
+        "        kind: tree\n"
+        "    resources: []\n",
+        encoding="utf-8",
+    )
+    _patch_project(monkeypatch)
+    _, suggestion = _seed_suggestion(root)
+
+    review = adoption.create_scope_review(
+        root,
+        "TASK-1",
+        suggestion_id=suggestion.suggestion_id,
+        input_paths=["tests/test_service.py"],
+        write_paths=["tests/test_service.py"],
+    )
+
+    assert review.added_inputs == ["tests/test_service.py"]
+    assert review.added_writes == ["tests/test_service.py"]
+    assert not any(
+        item.path == "src/service.py" and item.kind == "exact"
+        for item in review.proposed_scope.inputs
+    )
+
+
+def test_review_rejects_noop_selection(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _repo(tmp_path)
+    (root / "projectctl.parallel.yaml").write_text(
+        "schema_kind: projectctl.parallel_scope_catalog\n"
+        "schema_version: 1\n"
+        "tasks:\n"
+        "  TASK-1:\n"
+        "    task_id: TASK-1\n"
+        "    inputs:\n"
+        "      - path: src\n"
+        "        kind: tree\n"
+        "      - path: tests\n"
+        "        kind: tree\n"
+        "    writes:\n"
+        "      - path: src\n"
+        "        kind: tree\n"
+        "      - path: tests\n"
+        "        kind: tree\n"
+        "    resources: []\n",
+        encoding="utf-8",
+    )
+    _patch_project(monkeypatch)
+    _, suggestion = _seed_suggestion(root)
+
+    with pytest.raises(ConfigurationError, match="adds nothing"):
+        adoption.create_scope_review(
+            root,
+            "TASK-1",
+            suggestion_id=suggestion.suggestion_id,
+        )
+
+
+def test_adoption_refuses_scope_authority_symlink(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _repo(tmp_path)
+    target = root / "actual-scope.yaml"
+    target.write_text(
+        "schema_kind: projectctl.parallel_scope_catalog\n"
+        "schema_version: 1\n"
+        "tasks: {}\n",
+        encoding="utf-8",
+    )
+    (root / "projectctl.parallel.yaml").symlink_to(target.name)
+    _patch_project(monkeypatch)
+    _, suggestion = _seed_suggestion(root)
+
+    with pytest.raises(ConfigurationError, match="symlink"):
+        adoption.create_scope_review(
+            root,
+            "TASK-1",
+            suggestion_id=suggestion.suggestion_id,
+        )
