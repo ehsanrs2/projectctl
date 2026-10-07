@@ -4,6 +4,8 @@ import hashlib
 import json
 import subprocess
 from datetime import datetime
+
+import yaml
 from pathlib import Path
 
 from projectctl.application.tasks import capture_task_snapshot
@@ -11,7 +13,6 @@ from projectctl.core.digest import digest
 from projectctl.core.errors import ConfigurationError, RunStoreError, StaleSnapshotError
 from projectctl.core.time import utc_now
 from projectctl.git import resolve_commit
-from projectctl.parallel.catalog import PARALLEL_SCOPE_PATH, load_parallel_scope_catalog
 from projectctl.project.loader import load_project_config
 from projectctl.project.state import load_project_state, semantic_project_state_digest
 from projectctl.scheduler.digests import (
@@ -24,7 +25,7 @@ from projectctl.schemas.execution_input import (
     ExecutionInputManifest,
     ExecutionPathScope,
 )
-from projectctl.schemas.parallel import ParallelTaskScope
+from projectctl.schemas.parallel import ParallelScopeCatalog, ParallelTaskScope
 from projectctl.schemas.task import NormalizedTask, TaskSnapshot
 from projectctl.schemas.task_claim import TaskClaim
 
@@ -143,11 +144,22 @@ def input_scope_digest(
     )
 
 
+PARALLEL_SCOPE_PATH = "projectctl.parallel.yaml"
+
+
 def _optional_task_scope(root: Path, task_id: str) -> ParallelTaskScope | None:
     path = root / PARALLEL_SCOPE_PATH
     if not path.exists():
         return None
-    catalog = load_parallel_scope_catalog(root)
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise ConfigurationError("Parallel scope catalog must be a YAML mapping.")
+        catalog = ParallelScopeCatalog.model_validate(raw)
+    except Exception as exc:
+        if isinstance(exc, ConfigurationError):
+            raise
+        raise ConfigurationError(f"Invalid parallel scope catalog: {exc}") from exc
     return catalog.tasks.get(task_id)
 
 
