@@ -100,7 +100,10 @@ def _continuation(active, *, now):
     non_worker = []
     for record in active:
         if _live_lease(record, now):
-            blockers.append((record, "active_run_leased"))
+            if record.status in _NON_WORKER:
+                non_worker.append(record)
+            else:
+                blockers.append((record, "active_run_leased"))
             continue
         if record.status == RunStatus.RUNNING and record.checkpoint_ref:
             candidates.append(("resume_run", record))
@@ -187,6 +190,15 @@ def collect_project_turn_envelope(
         return _excluded(base, "quota_stale")
 
     continuation, blockers, _ = _continuation(active, now=now)
+    if blockers:
+        return _excluded(
+            base,
+            "active_set_recovery_required",
+            ",".join(
+                f"{record.run_id}:{reason}" for record, reason in blockers
+            ),
+        )
+
     if continuation is not None:
         action, record = continuation
         task = next(
@@ -211,15 +223,6 @@ def collect_project_turn_envelope(
                 "task_id": record.task_id,
                 "resource_class": task.resource_class,
             }
-        )
-
-    if blockers:
-        return _excluded(
-            base,
-            "active_set_recovery_required",
-            ",".join(
-                f"{record.run_id}:{reason}" for record, reason in blockers
-            ),
         )
 
     if len(active) >= effective_max:
