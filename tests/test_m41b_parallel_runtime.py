@@ -393,5 +393,12 @@ def test_parallel_integrate_reapplies_and_reverifies_before_integration(
 def test_parallel_cli_exposes_runtime_commands():
     result = runner.invoke(app, ["parallel", "--help"])
     assert result.exit_code == 0, result.output
-    for command in ("run", "queue", "integrate", "recover"):
+    for command in (
+        "run",
+        "queue",
+        "integrate",
+        "recover",
+        "status",
+        "maintain",
+    ):
         assert command in result.output
