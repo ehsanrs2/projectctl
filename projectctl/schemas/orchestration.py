@@ -73,3 +73,34 @@ class OrchestrationStatus(ProjectCtlModel):
     account_admission_run_id: str | None = None
     account_admission_project_instance_id: str | None = None
     account_busy: bool = False
+
+
+
+class NonWorkerPhaseStep(ProjectCtlModel):
+    run_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    started_status: RunStatus
+    final_status: RunStatus
+    action: Literal[
+        "recover_prepare",
+        "recover_running",
+        "verify",
+        "integrate",
+        "recover_delivery",
+        "skip_worker_turn",
+        "unsafe_planned",
+        "phase_wait",
+    ]
+    detail: str | None = None
+
+
+class ProjectMaintenanceResult(ProjectCtlModel):
+    schema_kind: Literal["projectctl.project_maintenance_result"] = (
+        "projectctl.project_maintenance_result"
+    )
+    schema_version: Literal[1] = 1
+    generated_at: AwareDatetime
+    project_id: str
+    project_root: str
+    steps: list[NonWorkerPhaseStep] = Field(default_factory=list)
+    active_run_ids_after: list[str] = Field(default_factory=list)
