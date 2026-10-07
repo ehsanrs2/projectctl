@@ -682,6 +682,40 @@ def _validate_durable_task_claim(
     )
 
 
+def _load_admitted_execution_contract(
+    project_root: Path,
+    run_dir: Path,
+    plan,
+    *,
+    require_target_at_base: bool = True,
+):
+    expected = getattr(plan, "execution_input_digest", None)
+    if not expected:
+        # Legacy pre-M4.2a run. Existing durable plan/claim checks remain
+        # audit/recovery compatible, but new runs never use this path.
+        return None, None
+
+    input_path = run_dir / "execution-input-manifest.json"
+    transition_path = run_dir / "claim-transition.json"
+    if not input_path.exists() or not transition_path.exists():
+        raise RunStoreError(
+            "M4.2a run is missing execution input or claim-transition evidence."
+        )
+    execution_input = load_execution_input(input_path)
+    transition = load_claim_transition(transition_path)
+    if execution_input_semantic_digest(execution_input) != expected:
+        raise RunStoreError(
+            "ExecutionInputManifest semantic digest no longer matches ExecutionPlan."
+        )
+    validate_admitted_execution_input(
+        project_root,
+        execution_input,
+        transition,
+        require_target_at_base=require_target_at_base,
+    )
+    return execution_input, transition
+
+
 def _quota_monitor(project_root: Path, task) -> QuotaCheckpointMonitor:
     config = load_project_config(project_root)
     return QuotaCheckpointMonitor(
@@ -1067,6 +1101,22 @@ def start_prepared_run(project_root: Path, run_id: str) -> StartedRun:
             run_id=run_id,
             expected_status=RunStatus.CLAIMED,
         )
+        try:
+            execution_input, claim_transition = _load_admitted_execution_contract(
+                root,
+                run_dir,
+                plan,
+                require_target_at_base=True,
+            )
+        except (RunStoreError, StaleSnapshotError):
+            _mark_start_failure(
+                store,
+                run_id,
+                expected=RunStatus.CLAIMED,
+                status=RunStatus.FAILED,
+                reason=RunTerminalReason.CONTEXT_INVALID,
+            )
+            raise
 
         manager = WorktreeManager(root)
         expected_worktree = manager.path_for(record.worktree_id)
@@ -1217,6 +1267,8 @@ def start_prepared_run(project_root: Path, run_id: str) -> StartedRun:
                         plan=plan,
                         strategy=stored_strategy,
                         context_manifest_path=context_rel,
+                        execution_input=execution_input,
+                        claim_transition=claim_transition,
                     )
                     _atomic_json(run_dir / "context-manifest.json", context.manifest)
                     _atomic_json(run_dir / "worker-request.json", context.request)
@@ -1331,6 +1383,22 @@ def resume_checkpointed_run(project_root: Path, run_id: str) -> StartedRun:
             run_id=run_id,
             expected_status=RunStatus.RUNNING,
         )
+        try:
+            execution_input, claim_transition = _load_admitted_execution_contract(
+                root,
+                run_dir,
+                plan,
+                require_target_at_base=True,
+            )
+        except (RunStoreError, StaleSnapshotError):
+            _mark_start_failure(
+                store,
+                run_id,
+                expected=RunStatus.RUNNING,
+                status=RunStatus.NEEDS_DECISION,
+                reason=RunTerminalReason.CONTEXT_INVALID,
+            )
+            raise
         if digest(plan) != record.execution_plan_digest:
             _mark_start_failure(
                 store,
@@ -1411,6 +1479,19 @@ def resume_checkpointed_run(project_root: Path, run_id: str) -> StartedRun:
             or request.context_manifest_digest != checkpoint.context_manifest_digest
             or request.run_id != run_id
             or request.task_id != record.task_id
+            or (
+                getattr(plan, "execution_input_digest", None) is not None
+                and (
+                    getattr(request, "execution_input_digest", None)
+                    != plan.execution_input_digest
+                    or getattr(request, "claim_transition_digest", None)
+                    != digest(claim_transition)
+                    or getattr(context_manifest, "execution_input_digest", None)
+                    != plan.execution_input_digest
+                    or getattr(context_manifest, "claim_transition_digest", None)
+                    != digest(claim_transition)
+                )
+            )
         ):
             _mark_start_failure(
                 store,
