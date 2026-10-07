@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository has completed **M4.1a — Parallel Planning Safety Contract**. The active milestone is now **M4.1b — Safe Parallel Execution & Integration**.
+This repository has completed **M4.1b — Safe Parallel Execution & Integration**. The active milestone is now **Post-M4 Architecture Review**.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -1948,7 +1948,57 @@ candidate advances the target. Existing evidence is never valid for transformed 
 M4.1a **does not enable multiple active runs**. It only establishes the proof contract consumed by
 M4.1b.
 
-The M4 sequence is now:
+### M4.1b — Safe Parallel Execution & Integration
+
+M4.1b consumes the M4.1a proof and enables a bounded same-project active set.
+
+The explicit runtime is:
+
+```bash
+projectctl parallel run --max-runs 2 --project /path/to/repo
+projectctl parallel queue --project /path/to/repo
+projectctl parallel integrate RUN_ID --project /path/to/repo
+projectctl parallel recover --project /path/to/repo
+```
+
+A new run is admitted only when it is pairwise independent from every currently active
+parallel-bound run and the configured active-set bound is not exceeded.
+
+Important: M4.0a remains authoritative. Multiple isolated runs may be active, but one quota account
+still permits at most one quota-consuming worker turn at a time. ProjectCTL does not invent a
+token-cost model merely to increase concurrency.
+
+Each admitted run receives a durable `ParallelRunBinding` after task claim. Its verified changed
+paths must remain inside the human-managed `projectctl.parallel.yaml` write scope.
+
+Integration order is deterministic by run creation time plus run id, rather than worker finish
+time. Earlier unfinished/review-waiting runs remain ahead of later candidates.
+
+When an earlier integration advances the shared target, a later candidate is never accepted under
+its old evidence. ProjectCTL proves that the target advancement did not touch the later run's
+declared inputs/writes, archives the old proof chain, reapplies the exact verified patch onto the
+new base, returns the run to `VERIFYING`, and only then creates fresh candidate/evidence.
+
+Crash evidence for this transformation is recorded as:
+
+```text
+ParallelReapplicationRequest v1
+        ↓
+workspace transformation
+        ↓
+durable run rebind -> VERIFYING
+        ↓
+ParallelReapplicationManifest v1
+        ↓
+fresh VerificationManifest / EvidenceManifest
+```
+
+Ambiguous crash states fail closed rather than guessing.
+
+The legacy `projectctl run auto` remains a serial orchestrator and intentionally still stops on a
+multiple-active-run set. Parallel orchestration is explicit.
+
+The M4 correctness sequence is now complete:
 
 ```text
 M4.0a  Account-Global Execution Admission                  completed
@@ -1957,14 +2007,12 @@ M4.0b  Portfolio Scheduling & Cross-Project Arbitration   completed
    ↓
 M4.1a  Parallel Planning Safety Contract                  completed
    ↓
-M4.1b  Safe Parallel Execution & Integration              next
+M4.1b  Safe Parallel Execution & Integration              completed
 ```
 
-Graphify/context discovery may later contribute derived scope evidence, but it is not the sole
-authority that can declare tasks parallel-safe.
-
-See ADR-029, ADR-030, ADR-031 and `docs/PROJECTCTL_BLUEPRINT.md`.
+See ADR-029, ADR-030, ADR-031, ADR-032 and `docs/PROJECTCTL_BLUEPRINT.md`.
 
 Next:
 
-- **M4.1b — Safe Parallel Execution & Integration**
+- **Post-M4 Architecture Review** — reassess the complete control plane before selecting the next
+  implementation milestone.
