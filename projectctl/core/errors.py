@@ -50,6 +50,10 @@ class QuotaError(ProjectCtlError):
     pass
 
 
+class QuotaAdmissionError(QuotaError):
+    pass
+
+
 class ProviderUnavailableError(ProjectCtlError):
     pass
 
