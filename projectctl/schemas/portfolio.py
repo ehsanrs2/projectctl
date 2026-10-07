@@ -26,7 +26,7 @@ class PortfolioCandidateV1(ProjectCtlModel):
     observed_at: AwareDatetime
     account_id: str | None = None
     eligible: bool = False
-    action: PortfolioActionV1V1 | None = None
+    action: PortfolioActionV1 | None = None
     run_id: str | None = None
     run_status: RunStatus | None = None
     selected_task_id: str | None = None
@@ -75,7 +75,7 @@ class PortfolioTurnResultV1(ProjectCtlModel):
     project_instance_id: str
     project_id: str
     project_root: str
-    action: PortfolioAction
+    action: PortfolioActionV1
     run_id: str
     run_status: RunStatus
 
