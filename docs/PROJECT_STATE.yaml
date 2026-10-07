@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Establish account-global execution admission so independent projects sharing one quota account cannot concurrently over-admit quota-consuming worker turns.
+current_goal: Arbitrate which registered healthy project receives the next account admission while preserving each project's local scheduler as the authority for task choice inside that project.
 active_milestone:
-  id: M4.0a
-  title: Account-Global Execution Admission
+  id: M4.0b
+  title: Portfolio Scheduling & Cross-Project Arbitration
   aliases:
-    - Global Quota Admission Lease
-    - Cross-Project Execution Gate
-    - Account Worker-Turn Admission
+    - Portfolio Arbitration
+    - Cross-Project Project Selection
+    - Global Project Admission Scheduling
 updated_at: null

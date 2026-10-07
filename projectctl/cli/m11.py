@@ -17,12 +17,13 @@ from projectctl.application.integration import integrate_run
 from projectctl.application.recovery import recover_run
 from projectctl.core.enums import AutoStopReason, WorkerStrategyKind
 from projectctl.core.errors import ProjectCtlError
+from projectctl.project.bootstrap import projectctl_home
 from projectctl.project.root import find_project_root
 from projectctl.schemas.capabilities import StrategyFallbackPolicy
 from projectctl.schemas.auto import AutoRunPolicy
 from projectctl.project.locking import project_lock
 from projectctl.storage.runs import RunStore
-from projectctl.storage.sqlite import migrate_project_state_db
+from projectctl.storage.sqlite import migrate_global_state_db, migrate_project_state_db
 
 EXIT_REPOSITORY = 11
 EXIT_RUN = 17
@@ -48,6 +49,7 @@ def register_m11(app: typer.Typer) -> None:
     ) -> None:
         try:
             root = find_project_root(project)
+            global_result = migrate_global_state_db(projectctl_home() / "state.sqlite")
             with project_lock(root, "db-migrate"):
                 result = migrate_project_state_db(root / ".projectctl" / "state.sqlite")
         except ProjectCtlError as exc:
@@ -60,18 +62,43 @@ def register_m11(app: typer.Typer) -> None:
             "to_version": result.to_version,
             "applied": result.applied,
             "backup_path": str(result.backup_path) if result.backup_path else None,
+            "global_state": {
+                "path": str(global_result.path),
+                "from_version": global_result.from_version,
+                "to_version": global_result.to_version,
+                "applied": global_result.applied,
+                "backup_path": (
+                    str(global_result.backup_path)
+                    if global_result.backup_path
+                    else None
+                ),
+            },
         }
         if json_output:
             typer.echo(_json(payload))
-        elif result.applied:
-            typer.echo(
-                f"Migrated project state database v{result.from_version} -> v{result.to_version}."
-            )
-            typer.echo(f"Backup: {result.backup_path}")
         else:
-            typer.echo(
-                f"Project state database is already at v{result.to_version}; no migration needed."
-            )
+            if global_result.applied:
+                typer.echo(
+                    "Migrated global state database "
+                    f"v{global_result.from_version} -> v{global_result.to_version}."
+                )
+                typer.echo(f"Global backup: {global_result.backup_path}")
+            else:
+                typer.echo(
+                    "Global state database is already at "
+                    f"v{global_result.to_version}; no migration needed."
+                )
+
+            if result.applied:
+                typer.echo(
+                    f"Migrated project state database v{result.from_version} -> v{result.to_version}."
+                )
+                typer.echo(f"Backup: {result.backup_path}")
+            else:
+                typer.echo(
+                    f"Project state database is already at v{result.to_version}; "
+                    "no migration needed."
+                )
 
     @run_app.command("auto")
     def auto_command(

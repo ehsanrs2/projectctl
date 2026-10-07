@@ -2,7 +2,7 @@
 
 Status: **Canonical high-level product, architecture, and roadmap reference**
 
-Last architecture review: **2026-10-04**
+Last architecture review: **2026-10-05**
 
 This document answers four questions:
 
@@ -57,7 +57,13 @@ create isolated worktree
         ↓
 assemble bounded context
         ↓
+acquire account-global execution admission
+        ↓
+revalidate current account quota
+        ↓
 run worker
+        ↓
+release account admission
         ↓
 checkpoint safely if quota requires it
         ↓
@@ -114,7 +120,7 @@ Exactly one authority should exist for each mutable concern.
 | Verification result / evidence | ProjectCTL run artifacts and Evidence manifests | Worker result alone is not evidence |
 | Run lifecycle / leases / checkpoints | `.projectctl/state.sqlite` + run artifacts | Operational, project-instance-local |
 | Quota observations / provider selection | `$PROJECTCTL_HOME/state.sqlite` | Account-global |
-| Account execution admission | Future `$PROJECTCTL_HOME/state.sqlite` admission lease | M4.0a; account-global and distinct from project/task ownership |
+| Account execution admission | `$PROJECTCTL_HOME/state.sqlite -> execution_admissions` | Implemented in M4.0a; exclusive per quota account, expiring, and distinct from project/task ownership |
 | Project quota policy | `.projectctl/config.yaml` | Local policy, not quota observation/admission authority |
 | Generated status dashboards | `docs/generated/*` | Derived and non-authoritative |
 | Telemetry | `.projectctl/telemetry.sqlite` | Observational only |
@@ -825,17 +831,19 @@ CI rejects a checked-in mirror while validating the complete exporter output in 
 directory.
 
 
-### Finding I — account-global quota observation lacks account-global execution admission
+### Finding I — account-global execution admission is now authoritative (resolved in M4.0a)
 
-Quota provider selection/observations already live in `$PROJECTCTL_HOME/state.sqlite`, but each
-project still performs execution admission independently.
+Quota provider selection/observations and worker-turn admission now share the account-global
+authority boundary in `$PROJECTCTL_HOME/state.sqlite`.
 
-Two project roots sharing one account can therefore evaluate the same fresh quota state and both
-start quota-consuming worker turns.
+**Resolution:** M4.0a adds global-state DB v2 and an exclusive, expiring admission lease per quota
+account. Acquisition is atomic, stale leases are auditable/reclaimable, and both worker start and
+checkpoint resume must acquire admission before provider contact. Quota is re-read and evaluated
+while admission is held. The lease is released after the quota-consuming worker turn and is not
+held through verification, integration, publication or review waiting.
 
-**Decision:** M4.0a introduces an account-global execution admission lease before portfolio
-scheduling or parallel execution. The first version is exclusive per quota account because
-ProjectCTL does not yet have a trustworthy per-task token-cost estimator.
+The first version deliberately serializes worker turns per quota account. ProjectCTL still does not
+invent token or percentage reservations without a trustworthy per-task cost estimator.
 
 ### Finding J — portfolio/global orchestration groundwork exists but is not yet authoritative
 
@@ -845,9 +853,9 @@ artifact exists.
 Project-local scheduler scores are policy-local and must not be treated as directly comparable
 global utilities.
 
-**Decision:** M4.0b will arbitrate among project-level candidate envelopes after M4.0a provides an
-atomic account admission primitive. Each project's scheduler remains authoritative for task choice
-inside that project.
+**Decision:** M4.0b is now the active milestone. It will arbitrate among project-level candidate
+envelopes on top of the M4.0a atomic admission primitive. Each project's scheduler remains
+authoritative for task choice inside that project.
 
 ---
 
@@ -1327,8 +1335,8 @@ With M3.3c, Jira has completed the minimum execution proof sequence: read author
 eligibility/dependencies, additive lifecycle writes, independent ownership, and provider-neutral
 delivery.
 
-The next numbered milestone is intentionally not frozen here. A new architecture review should
-choose among the post-M3 product directions rather than extending Jira work by default.
+The post-M3 architecture review selected the M4 global-orchestration sequence rather than
+extending provider-specific work. M4.0a is complete and M4.0b is now active.
 
 ### M4 — Global Orchestration & Safe Concurrency
 
@@ -1342,26 +1350,30 @@ The sequencing rule is:
 
 #### M4.0a — Account-Global Execution Admission
 
-**Next milestone / frozen by the post-M3 architecture review.**
+**Completed.**
 
 Goal: prevent independent projects sharing one quota account from concurrently admitting
 quota-consuming worker turns against the same account-global quota observation.
 
-Required work:
+Implemented:
 
-- global-state DB v2 with explicit migration/backup path
-- authoritative account admission lease table in `$PROJECTCTL_HOME/state.sqlite`
-- admission identity binds account, project instance, project id and run id
-- atomic exclusive acquisition per account in the first version
-- owner/heartbeat/expiry and deterministic stale-lease reclamation
+- global-state DB v2 with explicit, backup-producing v1 → v2 migration
+- authoritative `execution_admissions` state in `$PROJECTCTL_HOME/state.sqlite`
+- admission identity binding account, project instance, project id, run id and lease owner
+- atomic exclusive acquisition per account through SQLite `BEGIN IMMEDIATE` and uniqueness
+- owner heartbeat/expiry, exact-owner release and deterministic stale-lease reclamation
+- durable admission audit events
 - fresh quota revalidation while admission is held and before worker-provider contact
-- no quota-consuming worker turn without a valid admission
-- release on turn completion, checkpoint, failure and abort
-- admission not held through verification/integration/publication/external-review waiting
-- crash/recovery and audit events
+- admission enforcement for worker start and checkpoint resume
+- retryable busy-account/quota-denied states without silently failing the durable run
+- release after worker completion, checkpoint and provider failure
+- no admission held through verification/integration/publication/external-review waiting
 - no fabricated token or percentage reservation
 
-Non-goals:
+The existing `projectctl migrate` command now migrates both project-local state and the
+account-global state database when a supported upgrade is required.
+
+Non-goals remain:
 
 - portfolio ranking
 - multi-slot same-account concurrency
@@ -1371,7 +1383,7 @@ Non-goals:
 
 #### M4.0b — Portfolio Scheduling & Cross-Project Arbitration
 
-**Planned after M4.0a.**
+**Active milestone.**
 
 Use the existing global project registry to decide which healthy project receives the next account
 admission while preserving each project's local scheduler as the authority for task choice inside

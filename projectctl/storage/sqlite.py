@@ -11,7 +11,7 @@ from projectctl.core.errors import DatabaseVersionError
 APPLICATION_ID = 0x50544354  # "PTCT"
 PROJECT_STATE_DB_VERSION = 2
 TELEMETRY_DB_VERSION = 1
-GLOBAL_STATE_DB_VERSION = 1
+GLOBAL_STATE_DB_VERSION = 2
 DATABASE_VERSION = PROJECT_STATE_DB_VERSION
 
 
@@ -168,6 +168,25 @@ def _assert_expected_tables(conn: sqlite3.Connection, path: Path, expected: set[
         )
 
 
+def _assert_expected_indexes(
+    conn: sqlite3.Connection,
+    path: Path,
+    expected: set[str],
+) -> None:
+    indexes = {
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_autoindex_%'"
+        )
+    }
+    missing = expected - indexes
+    if missing:
+        raise DatabaseVersionError(
+            f"Database {path} claims the current version but is missing indexes: "
+            f"{sorted(missing)}"
+        )
+
+
 def initialize_project_state_db(path: Path) -> None:
     existed = path.exists()
     conn = connect_db(path, telemetry=False)
@@ -257,55 +276,144 @@ def initialize_telemetry_db(path: Path) -> None:
     )
 
 
-def initialize_global_state_db(path: Path) -> None:
-    def create(conn: sqlite3.Connection) -> None:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS accounts (
-                account_id TEXT PRIMARY KEY,
-                provider TEXT NOT NULL,
-                config_json TEXT NOT NULL DEFAULT '{}'
-            )
-            """
+def _create_global_v1(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS accounts (
+            account_id TEXT PRIMARY KEY,
+            provider TEXT NOT NULL,
+            config_json TEXT NOT NULL DEFAULT '{}'
         )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS quota_observations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                account_id TEXT NOT NULL,
-                observed_at TEXT NOT NULL,
-                snapshot_json TEXT NOT NULL,
-                FOREIGN KEY(account_id) REFERENCES accounts(account_id)
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS project_registry (
-                project_instance_id TEXT PRIMARY KEY,
-                project_id TEXT NOT NULL,
-                project_root TEXT NOT NULL,
-                registered_at TEXT NOT NULL,
-                last_seen_at TEXT NOT NULL
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS provider_status (
-                provider TEXT PRIMARY KEY,
-                observed_at TEXT NOT NULL,
-                status_json TEXT NOT NULL
-            )
-            """
-        )
-
-    _initialize_v1_database(
-        path,
-        telemetry=False,
-        create_schema=create,
-        migration_name="global-state-baseline",
+        """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS quota_observations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            snapshot_json TEXT NOT NULL,
+            FOREIGN KEY(account_id) REFERENCES accounts(account_id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS project_registry (
+            project_instance_id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            project_root TEXT NOT NULL,
+            registered_at TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS provider_status (
+            provider TEXT PRIMARY KEY,
+            observed_at TEXT NOT NULL,
+            status_json TEXT NOT NULL
+        )
+        """
+    )
+
+
+def _create_global_v2(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS execution_admissions (
+            account_id TEXT PRIMARY KEY,
+            project_instance_id TEXT NOT NULL,
+            project_id TEXT NOT NULL,
+            run_id TEXT NOT NULL,
+            lease_owner TEXT NOT NULL,
+            acquired_at TEXT NOT NULL,
+            heartbeat_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            FOREIGN KEY(account_id) REFERENCES accounts(account_id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_execution_admissions_run
+        ON execution_admissions(run_id)
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS execution_admission_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            project_instance_id TEXT,
+            project_id TEXT,
+            run_id TEXT,
+            lease_owner TEXT,
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            FOREIGN KEY(account_id) REFERENCES accounts(account_id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_execution_admission_events_account
+        ON execution_admission_events(account_id, id)
+        """
+    )
+
+
+def initialize_global_state_db(path: Path) -> None:
+    existed = path.exists()
+    conn = connect_db(path, telemetry=False)
+    try:
+        version = _validate_application_id(conn, path)
+        if existed and version not in (0, GLOBAL_STATE_DB_VERSION):
+            if version < GLOBAL_STATE_DB_VERSION:
+                raise DatabaseVersionError(
+                    f"Database {path} is v{version}; explicit migration to "
+                    f"v{GLOBAL_STATE_DB_VERSION} is required. Run projectctl migrate."
+                )
+            raise DatabaseVersionError(
+                f"Database {path} is newer than this ProjectCTL version: {version}"
+            )
+
+        if version == 0:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(f"PRAGMA application_id = {APPLICATION_ID}")
+            _create_migrations_table(conn)
+            _create_global_v1(conn)
+            _record_migration(conn, 1, "global-state-baseline")
+            _create_global_v2(conn)
+            _record_migration(conn, 2, "m4-global-execution-admission")
+            conn.execute(f"PRAGMA user_version = {GLOBAL_STATE_DB_VERSION}")
+            conn.commit()
+        else:
+            _assert_expected_tables(
+                conn,
+                path,
+                {
+                    "schema_migrations",
+                    "accounts",
+                    "quota_observations",
+                    "project_registry",
+                    "provider_status",
+                    "execution_admissions",
+                    "execution_admission_events",
+                },
+            )
+            _assert_expected_indexes(
+                conn,
+                path,
+                {
+                    "idx_execution_admissions_run",
+                    "idx_execution_admission_events_account",
+                },
+            )
+    finally:
+        conn.close()
 
 
 def _sqlite_backup(source_path: Path, destination: Path) -> None:
@@ -362,6 +470,72 @@ def migrate_project_state_db(path: Path) -> MigrationResult:
         conn.close()
 
     return MigrationResult(path, current, PROJECT_STATE_DB_VERSION, backup, True)
+
+
+def migrate_global_state_db(path: Path) -> MigrationResult:
+    if not path.exists():
+        raise DatabaseVersionError(f"Missing SQLite database: {path}")
+
+    app_id, current = inspect_db(path)
+    if app_id != APPLICATION_ID:
+        raise DatabaseVersionError(f"Unexpected application_id in {path}: {app_id}")
+    if current > GLOBAL_STATE_DB_VERSION:
+        raise DatabaseVersionError(
+            f"Database {path} is newer than this ProjectCTL version: {current}"
+        )
+    if current == GLOBAL_STATE_DB_VERSION:
+        return MigrationResult(path, current, current, None, False)
+    if current != 1:
+        raise DatabaseVersionError(
+            f"No supported migration path for global state database v{current}."
+        )
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup = path.parent / "backups" / f"{path.name}.v{current}.{stamp}.bak"
+    _sqlite_backup(path, backup)
+
+    conn = connect_db(path, telemetry=False)
+    try:
+        version = _validate_application_id(conn, path)
+        if version != current:
+            raise DatabaseVersionError(
+                f"Database version changed during migration: expected {current}, found {version}."
+            )
+        conn.execute("BEGIN IMMEDIATE")
+        _create_migrations_table(conn)
+        _record_migration(conn, 1, "global-state-baseline")
+        _create_global_v2(conn)
+        _assert_expected_tables(
+            conn,
+            path,
+            {
+                "schema_migrations",
+                "accounts",
+                "quota_observations",
+                "project_registry",
+                "provider_status",
+                "execution_admissions",
+                "execution_admission_events",
+            },
+        )
+        _assert_expected_indexes(
+            conn,
+            path,
+            {
+                "idx_execution_admissions_run",
+                "idx_execution_admission_events_account",
+            },
+        )
+        _record_migration(conn, 2, "m4-global-execution-admission")
+        conn.execute(f"PRAGMA user_version = {GLOBAL_STATE_DB_VERSION}")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    return MigrationResult(path, current, GLOBAL_STATE_DB_VERSION, backup, True)
 
 
 def inspect_db(path: Path) -> tuple[int, int]:
