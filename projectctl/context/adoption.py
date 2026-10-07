@@ -320,6 +320,19 @@ def create_scope_review(
         if _scope_key(item) not in existing_write_keys
     ]
     added_resources = sorted(set(proposed_resources) - set(existing_resources))
+    if not added_inputs and not added_writes and not added_resources:
+        raise ConfigurationError(
+            "Selected discovery evidence adds nothing to the existing human-managed scope."
+        )
+
+    warnings: list[str] = []
+    if raw is not None:
+        canonical_before = _render_catalog(catalog)
+        if canonical_before.encode("utf-8") != raw:
+            warnings.append(
+                "Applying this review will normalize YAML formatting/comments in "
+                "projectctl.parallel.yaml; inspect the rendered diff before approval."
+            )
 
     review = ContextScopeReview(
         review_id=f"context-review-{uuid.uuid4().hex}",
@@ -345,6 +358,7 @@ def create_scope_review(
         added_inputs=added_inputs,
         added_writes=added_writes,
         added_resources=added_resources,
+        warnings=warnings,
     )
     _atomic_json(_review_path(root, task_id, review.review_id), review)
     return review
@@ -504,6 +518,7 @@ def _make_receipt(
         task_id=request.task_id,
         review_id=request.review_id,
         review_digest=request.review_digest,
+        request_digest=digest(request),
         approval_digest=request.approval_digest,
         base_commit=request.base_commit,
         task_digest=request.task_digest,
