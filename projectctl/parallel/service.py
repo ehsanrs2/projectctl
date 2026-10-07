@@ -10,6 +10,10 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 
 from projectctl.application.tasks import capture_task_snapshot
+from projectctl.application.execution_inputs import (
+    build_execution_input_manifest,
+    execution_input_semantic_digest,
+)
 from projectctl.core.digest import digest
 from projectctl.core.enums import TaskStatus
 from projectctl.core.errors import ConfigurationError, StaleSnapshotError
@@ -21,7 +25,10 @@ from projectctl.project.state import (
     load_project_state,
     semantic_project_state_digest,
 )
-from projectctl.scheduler.digests import semantic_task_scope_digest
+from projectctl.scheduler.digests import (
+    semantic_task_scope_digest,
+    semantic_task_snapshot_digest,
+)
 from projectctl.schemas.parallel import (
     ParallelConflict,
     ParallelInputEvidence,
@@ -238,14 +245,26 @@ def build_parallel_plan(
     scope = task_parallel_scope(root, task_id)
     target_ref = integration_target_ref or current_branch(root)
     base_commit = resolve_commit(root, target_ref)
-    scoped_task_digest, scoped_task_ids = semantic_task_scope_digest(tasks, task_id)
     project_state_digest = semantic_project_state_digest(state)
+    execution_input = build_execution_input_manifest(
+        root,
+        task_id=task_id,
+        tasks=tasks,
+        scheduler_task_snapshot_digest=semantic_task_snapshot_digest(tasks),
+        project_state_digest=project_state_digest,
+        integration_target_ref=target_ref,
+        base_commit=base_commit,
+        now=now,
+    )
     input_evidence = [
         ParallelInputEvidence(
-            scope=item,
-            digest=_input_scope_digest(root, base_commit, item),
+            scope=ParallelPathScope(
+                path=item.scope.path,
+                kind=item.scope.kind,
+            ),
+            digest=item.digest,
         )
-        for item in scope.inputs
+        for item in execution_input.code_inputs
     ]
 
     plan = ParallelPlan(
@@ -255,12 +274,16 @@ def build_parallel_plan(
         integration_target_ref=target_ref,
         base_commit=base_commit,
         project_state_digest=project_state_digest,
-        scoped_task_digest=scoped_task_digest,
-        scoped_task_ids=scoped_task_ids,
-        scope_digest=digest(scope),
+        execution_input_digest=execution_input_semantic_digest(execution_input),
+        scoped_task_digest=execution_input.task_scope_digest,
+        scoped_task_ids=execution_input.task_scope_ids,
+        scope_digest=execution_input.scope_policy_digest or digest(scope),
         inputs=input_evidence,
-        writes=scope.writes,
-        resources=sorted(scope.resources),
+        writes=[
+            ParallelPathScope(path=item.path, kind=item.kind)
+            for item in execution_input.write_scopes
+        ],
+        resources=execution_input.resources,
         created_at=now,
     )
     if persist:
@@ -302,6 +325,21 @@ def revalidate_parallel_plan(
         raise StaleSnapshotError(
             "Parallel plan scoped task/dependency input changed."
         )
+
+    if getattr(plan, "execution_input_digest", None):
+        current_input = build_execution_input_manifest(
+            root,
+            task_id=plan.task_id,
+            tasks=tasks,
+            scheduler_task_snapshot_digest=semantic_task_snapshot_digest(tasks),
+            project_state_digest=plan.project_state_digest,
+            integration_target_ref=plan.integration_target_ref,
+            base_commit=plan.base_commit,
+        )
+        if execution_input_semantic_digest(current_input) != plan.execution_input_digest:
+            raise StaleSnapshotError(
+                "Parallel plan unified execution input changed."
+            )
 
     scope = task_parallel_scope(root, plan.task_id)
     if digest(scope) != plan.scope_digest:
