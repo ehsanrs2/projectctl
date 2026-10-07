@@ -42,6 +42,11 @@ from projectctl.schemas.onboarding import (
     ProjectInspectionV1,
     ProjectInspectionV2,
 )
+from projectctl.schemas.parallel import (
+    ParallelPlan,
+    ParallelSafetyDecision,
+    ParallelScopeCatalog,
+)
 from projectctl.schemas.portfolio import PortfolioDecision, PortfolioTurnResult
 from projectctl.schemas.project_state import ProjectState
 from projectctl.schemas.quota import QuotaSnapshot, QuotaSnapshotV1
@@ -86,6 +91,9 @@ PUBLIC_SCHEMAS = {
     "project-status.v1.schema.json": ProjectStatus,
     "portfolio-decision.v1.schema.json": PortfolioDecision,
     "portfolio-turn-result.v1.schema.json": PortfolioTurnResult,
+    "parallel-scope-catalog.v1.schema.json": ParallelScopeCatalog,
+    "parallel-plan.v1.schema.json": ParallelPlan,
+    "parallel-safety-decision.v1.schema.json": ParallelSafetyDecision,
     "run-manifest.v1.schema.json": RunManifestV1,
     "run-manifest.v2.schema.json": RunManifest,
     "context-manifest.v1.schema.json": ContextManifestV1,
