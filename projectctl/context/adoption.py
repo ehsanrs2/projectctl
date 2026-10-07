@@ -602,8 +602,13 @@ def adopt_scope_review(
 
         # Revalidate immediately before the authoritative write. This also
         # covers retry of a durable request that remained in before-state.
-        _validate_review_before_apply(root, review)
-        before_bytes = raw
+        validated_path, before_bytes, validated_digest, _ = (
+            _validate_review_before_apply(root, review)
+        )
+        if validated_path != path or validated_digest != request.catalog_before_digest:
+            raise StaleSnapshotError(
+                "Scope catalog changed between adoption validation snapshots."
+            )
         try:
             _atomic_bytes(path, review.proposed_catalog_yaml.encode("utf-8"))
             adopted = load_parallel_scope_catalog(root)
