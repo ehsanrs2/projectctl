@@ -10,6 +10,8 @@ from projectctl.core.time import utc_now
 from projectctl.git.ref_lease import RemoteRefLease
 from projectctl.git.remote import normalize_git_remote_identity
 from projectctl.schemas.task_claim import TaskClaim, TaskClaimRequest
+from projectctl.schemas.task import NormalizedTask
+from projectctl.scheduler.digests import semantic_task_digest
 
 
 _SAFE = re.compile(r"[^a-zA-Z0-9._-]+")
@@ -164,6 +166,16 @@ class GitRemoteTaskClaimer:
             return False
         self._assert_remote_identity()
         return self.lease.observe(claim.ownership_ref) == claim.ownership_sha
+
+    def validate_transition(
+        self,
+        claim: TaskClaim,
+        before: NormalizedTask,
+        after: NormalizedTask,
+    ) -> bool:
+        if not self.validate(claim):
+            return False
+        return semantic_task_digest(before) == semantic_task_digest(after)
 
     def release(self, claim: TaskClaim) -> None:
         if not claim.acquired:
