@@ -215,16 +215,16 @@ def register_m50(app: typer.Typer) -> None:
             file_okay=False,
             resolve_path=True,
         ),
-        input_path: list[str] | None = typer.Option(
-            None,
+        input_path: list[str] = typer.Option(
+            [],
             "--input",
             help=(
                 "Accept only this suggested input path. Repeatable. "
                 "Omit to accept all suggested inputs."
             ),
         ),
-        write_path: list[str] | None = typer.Option(
-            None,
+        write_path: list[str] = typer.Option(
+            [],
             "--write",
             help=(
                 "Accept only this suggested write path. Repeatable. "
@@ -244,8 +244,8 @@ def register_m50(app: typer.Typer) -> None:
                 root,
                 task_id,
                 suggestion_id=suggestion_id,
-                input_paths=input_path,
-                write_paths=write_path,
+                input_paths=input_path or None,
+                write_paths=write_path or None,
                 resources=resource,
             )
         except (ProjectCtlError, ValueError) as exc:
