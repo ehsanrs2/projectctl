@@ -274,8 +274,9 @@ See ADR-033 and `docs/architecture/POST_M4_ARCHITECTURE_REVIEW.md`.
 
 ## 5. Current architecture
 
-The post-M4 review records the **current** architecture with two known closure gaps rather than
-drawing the intended M4.2 end state as if it already existed.
+M4.2a has closed the execution-input authority split. One orchestration gap remains active:
+portfolio arbitration and the parallel active-set runtime still select automated worker turns
+through separate paths; M4.2b unifies that decision.
 
 ```mermaid
 flowchart TD
@@ -289,18 +290,17 @@ flowchart TD
 
     S --> EP[Execution Planner]
     WCap[Worker Capability Probe] --> EP
-    EP --> EPlan[ExecutionPlan v2<br/>whole TaskSnapshot digest]
-
-    PS[projectctl.parallel.yaml] --> PP[Parallel Planning Proof]
-    N --> PP
-    PP --> PPlan[ParallelPlan / ParallelRunBinding<br/>scoped task + code/resource proof]
-
-    EPlan -. M4.2a: unify execution input authority .- PPlan
+    EP --> EI[ExecutionInputManifest v1<br/>scoped execution authority]
+    EI --> EPlan[ExecutionPlan v3]
 
     EPlan --> Claim[Task / Execution Claim]
-    PPlan --> Active[Bounded Parallel Active Set]
-    Claim --> WT[Isolated Worktree]
-    Active --> WT
+    Claim --> CT[ClaimTransitionEvidence v1]
+    CT --> WT[Isolated Worktree]
+
+    PS[projectctl.parallel.yaml] --> PP[Parallel Conflict / Resource Proof]
+    EI --> PP
+    CT --> PP
+    PP --> Active[Bounded Parallel Active Set]
 
     PORT --> PTurn[Portfolio-selected Worker Turn]
     Active --> LTurn[Parallel-runtime Worker Turn]
@@ -310,24 +310,25 @@ flowchart TD
 
     PORT -. M4.2b: unify automated turn arbitration .-> Active
 
-    WT --> Ctx[Context Assembly]
+    WT --> Ctx[ContextManifest v3 / WorkerRequest v3]
     Ctx --> Worker
     Worker --> CP{Quota boundary?}
     CP -->|checkpoint| Checkpoint[Durable WorkerCheckpoint]
     Checkpoint --> PTurn
     Checkpoint --> LTurn
-    CP -->|completed| Verify[Independent Verification]
+    CP -->|completed| Verify[Independent Verification<br/>including execution-write-scope]
 
     Verify --> Evidence[Evidence + Candidate Commit]
     Evidence --> IQ[Deterministic Integration Queue]
     IQ --> Drift{Target advanced?}
     Drift -->|no| Integrate[Exact-base Integration]
-    Drift -->|yes, safe| Reapply[Archive + Reapply]
+    Drift -->|yes, safe| Reapply[Patch artifact + explicit lineage]
     Reapply --> Verify
     Integrate --> Publish[Remote Publication / Review when required]
     Publish --> Complete[Canonical Task Completion]
 
     RunDB[(Project Run Store)] --- Claim
+    RunDB --- CT
     RunDB --- Active
     RunDB --- Checkpoint
     RunDB --- Verify
