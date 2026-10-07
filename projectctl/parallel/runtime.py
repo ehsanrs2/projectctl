@@ -1045,85 +1045,127 @@ def _advance_parallel_run(root: Path, run_id: str):
 def run_parallel_batch(
     project_root: Path,
     *,
-    max_parallel_runs: int = 2,
+    max_parallel_runs: int | None = None,
     requested_strategy=None,
     fallback: StrategyFallbackPolicy | None = None,
 ) -> ParallelBatchResult:
-    if max_parallel_runs < 2 or max_parallel_runs > 8:
-        raise ValueError("max_parallel_runs must be between 2 and 8.")
+    """Run one bounded fair parallel wave.
 
+    Worker turns are selected by the account-global portfolio dispatcher.
+    Verification/recovery/integration are advanced separately and never consume
+    a portfolio worker-turn slot.
+    """
     root = project_root.resolve()
+    config = load_project_config(root)
+    configured_max = config.orchestration.max_active_runs
+    if configured_max < 2:
+        raise ConfigurationError(
+            "Parallel autonomous mode requires "
+            "orchestration.max_active_runs >= 2 in project config."
+        )
+    if (
+        max_parallel_runs is not None
+        and max_parallel_runs != configured_max
+    ):
+        raise ConfigurationError(
+            "--max-runs is no longer an independent capacity authority; "
+            f"it must equal configured orchestration.max_active_runs={configured_max}."
+        )
+    effective_max = configured_max
+
+    # Local imports avoid creating a module cycle:
+    # turns -> parallel.runtime and portfolio -> turns.
+    from projectctl.application.portfolio import request_fair_project_turn
+    from projectctl.application.turns import advance_non_worker_phases
+
     started_at = utc_now()
     prepared_ids: list[str] = []
     completed_ids: list[str] = []
     details: list[str] = []
+    touched_ids = {
+        record.run_id for record in _active_records(root)
+    }
 
-    recover_parallel_project(root)
+    # Validate/recover the existing parallel active-set before requesting turns.
+    if touched_ids:
+        recover_parallel_project(root)
 
-    while len(_active_records(root)) < max_parallel_runs:
-        try:
-            prepared = prepare_parallel_run(
-                root,
-                max_parallel_runs=max_parallel_runs,
-                requested_strategy=requested_strategy,
-                fallback=fallback,
-            )
-        except ConfigurationError as exc:
-            details.append(f"fill_stopped:{exc}")
-            break
-        prepared_ids.append(prepared.record.run_id)
-
-    active = _active_bindings(root)
-    for record, _ in active:
-        try:
-            _advance_parallel_run(root, record.run_id)
-        except ProjectCtlError as exc:
-            details.append(f"{record.run_id}:advance_stopped:{exc}")
-
-    while True:
-        queue = build_parallel_integration_queue(root, persist=True)
-        if not queue.entries:
-            break
-        head = queue.entries[0]
-        current = RunStore(root).get(head.run_id)
-
-        if current.status == RunStatus.READY_TO_INTEGRATE:
-            try:
-                integrated = integrate_parallel_run(root, head.run_id)
-            except ProjectCtlError as exc:
-                details.append(f"{head.run_id}:integration_stopped:{exc}")
-                break
-            if integrated.record.status == RunStatus.PASSED:
-                completed_ids.append(head.run_id)
-                continue
-            details.append(
-                f"{head.run_id}:integration_wait:{integrated.record.status.value}"
-            )
-            break
-
-        if current.status in {RunStatus.INTEGRATING, RunStatus.AWAITING_REVIEW}:
-            try:
-                action = recover_run(root, head.run_id)
+    turn_budget = effective_max
+    for _ in range(turn_budget):
+        decision, turn = request_fair_project_turn(
+            root,
+            requested_strategy=requested_strategy,
+            fallback=fallback,
+        )
+        if turn is None:
+            if decision.account_busy:
                 details.append(
-                    f"{head.run_id}:recover:{action.action}:{action.resolved_status}"
+                    "portfolio_yield:account_busy:"
+                    f"{decision.active_project_instance_id}:"
+                    f"{decision.active_run_id}"
                 )
-            except ProjectCtlError as exc:
-                details.append(f"{head.run_id}:recover_stopped:{exc}")
-                break
-            if RunStore(root).get(head.run_id).status == RunStatus.PASSED:
-                completed_ids.append(head.run_id)
-                continue
+            elif decision.selected_project_instance_id is not None:
+                details.append(
+                    "portfolio_yield:selected_other_project:"
+                    f"{decision.selected_project_id}/"
+                    f"{decision.selected_project_instance_id}"
+                )
+            else:
+                details.append("portfolio_yield:no_eligible_worker_turn")
             break
 
+        touched_ids.add(turn.run_id)
+        if turn.project_turn.prepared_new_run:
+            prepared_ids.append(turn.run_id)
+        details.append(
+            f"worker_turn:{turn.action}:{turn.run_id}:"
+            f"{turn.run_status.value}"
+        )
+
+        # Stop filling once configured active capacity is reached. A completed
+        # run may disappear from the active-set, allowing another fair turn.
+        active_count = len(_active_records(root))
+        if active_count >= effective_max:
+            break
+
+    # Drain non-quota phases deterministically. Multiple passes are bounded
+    # because one maintenance pass intentionally advances at most one phase per
+    # run, preserving phase-specific evidence/recovery boundaries.
+    max_passes = max(2, effective_max * 4)
+    previous = None
+    for _ in range(max_passes):
+        before = tuple(
+            (item.run_id, item.status.value)
+            for item in _active_records(root)
+        )
+        if before == previous:
+            break
+        previous = before
+        maintenance = advance_non_worker_phases(root)
+        for step in maintenance.steps:
+            touched_ids.add(step.run_id)
+            text = (
+                f"maintenance:{step.run_id}:{step.action}:"
+                f"{step.started_status.value}->{step.final_status.value}"
+            )
+            if step.detail:
+                text += f":{step.detail}"
+            details.append(text)
+        after = tuple(
+            (item.run_id, item.status.value)
+            for item in _active_records(root)
+        )
+        if after == before:
+            break
+
+    store = RunStore(root)
+    for run_id in sorted(touched_ids):
         try:
-            _advance_parallel_run(root, head.run_id)
-        except ProjectCtlError as exc:
-            details.append(f"{head.run_id}:advance_stopped:{exc}")
-            break
-        current = RunStore(root).get(head.run_id)
-        if current.status not in {RunStatus.READY_TO_INTEGRATE, RunStatus.PASSED}:
-            details.append(f"{head.run_id}:waiting:{current.status.value}")
-            break
+            record = store.get(run_id)
+        except Exception:
+            continue
+        if record.status == RunStatus.PASSED:
+            completed_ids.append(run_id)
 
     remaining = [
         record.run_id
@@ -1132,7 +1174,7 @@ def run_parallel_batch(
     return ParallelBatchResult(
         started_at=started_at,
         completed_at=utc_now(),
-        max_parallel_runs=max_parallel_runs,
+        max_parallel_runs=effective_max,
         prepared_run_ids=prepared_ids,
         completed_run_ids=completed_ids,
         remaining_run_ids=remaining,
