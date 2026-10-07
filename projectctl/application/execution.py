@@ -78,8 +78,14 @@ from projectctl.schemas.execution import (
     WorkerResult,
     parse_execution_plan,
     parse_worker_checkpoint,
+    parse_worker_request,
 )
-from projectctl.schemas.run import ContextManifest, RunManifest, WorkerDescriptor
+from projectctl.schemas.run import (
+    ContextManifest,
+    RunManifest,
+    WorkerDescriptor,
+    parse_context_manifest,
+)
 from projectctl.schemas.task_claim import TaskClaimRequest
 from projectctl.schemas.task import TaskSnapshot
 from projectctl.schemas.run_store import RunRecord
@@ -160,6 +166,10 @@ def _load_json_model(path: Path, model):
         raw = json.loads(path.read_text(encoding="utf-8"))
         if model is ExecutionPlan:
             return parse_execution_plan(raw)
+        if model is WorkerRequest:
+            return parse_worker_request(raw)
+        if model is ContextManifest:
+            return parse_context_manifest(raw)
         return model.model_validate(raw)
     except Exception as exc:
         raise RunStoreError(f"Invalid run artifact {path.name}: {exc}") from exc
