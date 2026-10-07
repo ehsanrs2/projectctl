@@ -326,6 +326,7 @@ def build_next_execution_plan(
 
 
 def _validate_plan_inputs(project_root: Path, plan: ExecutionPlan) -> RunTerminalReason | None:
+    """Legacy v1/v2 whole-snapshot validation for pre-M4.2a/custom plans."""
     if resolve_commit(project_root, plan.integration_target_ref) != plan.base_commit:
         return RunTerminalReason.STALE_BASE
 
