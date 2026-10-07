@@ -17,6 +17,7 @@ from projectctl.schemas.execution import ExecutionPlanV1, ExecutionPolicy, Worke
 from projectctl.schemas.run import (
     ContextManifest,
     ContextManifestV1,
+    ContextManifestV2,
     RunManifest,
     RunManifestV1,
     WorkerDescriptor,
@@ -94,7 +95,8 @@ def test_run_and_context_legacy_contracts_are_retained():
     assert RunManifestV1.model_fields["schema_version"].default == 1
     assert RunManifest.model_fields["schema_version"].default == 2
     assert ContextManifestV1.model_fields["schema_version"].default == 1
-    assert ContextManifest.model_fields["schema_version"].default == 2
+    assert ContextManifestV2.model_fields["schema_version"].default == 2
+    assert ContextManifest.model_fields["schema_version"].default == 3
 
 
 def test_failed_run_requires_terminal_reason():
