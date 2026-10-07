@@ -191,8 +191,12 @@ A task is not complete until the required evidence chain is valid.
 
 A verified candidate is bound to its exact base and exact diff.
 
-Integration is fast-forward-only today. If the target advances, ProjectCTL does not silently
-rebase/cherry-pick the candidate and pretend the old evidence still applies.
+Final integration remains exact-base / ancestry-proven. If the target advances, ProjectCTL does
+not silently rebase/cherry-pick the candidate and pretend the old evidence still applies.
+
+M4.1b may perform a control-plane reapplication only when scope evidence proves the target advance
+is unrelated; the transformed workspace must then receive fresh verification and a new candidate
+before integration.
 
 ### 4.7 Worker Git authority is intentionally narrow
 
@@ -298,18 +302,20 @@ flowchart TD
     Claim --> WT[Isolated Worktree]
     Active --> WT
 
-    PORT --> Turn[Worker Turn Request]
-    Active --> Turn
-    Turn --> ADM
+    PORT --> PTurn[Portfolio-selected Worker Turn]
+    Active --> LTurn[Parallel-runtime Worker Turn]
+    PTurn --> ADM
+    LTurn --> ADM
     ADM --> Worker[Worker Adapter]
 
-    PORT -. M4.2b: active-set-aware turn arbitration .- Active
+    PORT -. M4.2b: unify automated turn arbitration .-> Active
 
     WT --> Ctx[Context Assembly]
     Ctx --> Worker
     Worker --> CP{Quota boundary?}
     CP -->|checkpoint| Checkpoint[Durable WorkerCheckpoint]
-    Checkpoint --> Turn
+    Checkpoint --> PTurn
+    Checkpoint --> LTurn
     CP -->|completed| Verify[Independent Verification]
 
     Verify --> Evidence[Evidence + Candidate Commit]
@@ -1478,14 +1484,15 @@ See ADR-031.
 
 **Completed.**
 
-M4.1b adds an explicit bounded parallel runtime on top of M4.1a proof artifacts:
+M4.1b adds an explicit bounded **parallel active-set / concurrent-WIP runtime** on top of M4.1a
+proof artifacts. Worker turns for one quota account remain serialized by M4.0a:
 
 - active-set capacity is explicit (2–8)
 - every additional run is pairwise admitted against all existing parallel bindings
 - declared exclusive resources act as active-set reservations
 - M4.0a still serializes quota-consuming worker turns per account
-- post-claim `ParallelRunBinding v1` avoids confusing a run's own READY → RUNNING claim with
-  external task drift
+- post-claim `ParallelRunBinding v1` gives the parallel proof a claim-aware scoped task state,
+  but the post-M4 review found that ExecutionPlan v2 still has a separate whole-snapshot contract
 - verified candidate paths must stay inside declared write scopes
 - integration order is deterministic by run creation time/run id
 - earlier review-waiting runs remain queue head
