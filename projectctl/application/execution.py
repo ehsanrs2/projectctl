@@ -360,6 +360,20 @@ def _validate_plan_inputs(project_root: Path, plan: ExecutionPlan) -> RunTermina
     return None
 
 
+def _prepare_quota_reason(
+    project_root: Path,
+    task_id: str,
+) -> RunTerminalReason | None:
+    task = task_store_for_project(project_root).get(task_id)
+    config = load_project_config(project_root)
+    quota = read_current_quota(config.quota.account)
+    manager = QuotaManager(config.quota)
+    state = manager.state(quota, now=utc_now())
+    if state.stale or not manager.eligible_for_resource(task.resource_class, state):
+        return RunTerminalReason.QUOTA_EXHAUSTED
+    return None
+
+
 def _claimer(project_root: Path):
     authority = resolve_task_authority(project_root)
     return resolve_execution_ownership(
@@ -480,6 +494,19 @@ def prepare_next_run(
                     f"Execution plan became stale during legacy preflight: "
                     f"{stale_reason.value}"
                 )
+
+        quota_reason = _prepare_quota_reason(root, plan.task_id)
+        if quota_reason is not None:
+            store.transition(
+                run_id,
+                expected={RunStatus.PREPARING},
+                status=RunStatus.FAILED,
+                terminal_reason=quota_reason,
+            )
+            store.release_lease(run_id, owner=actor)
+            raise StaleSnapshotError(
+                "Execution quota policy changed before task claim acquisition."
+            )
 
         claimer = _claimer(root)
         claim_request = TaskClaimRequest(
@@ -607,6 +634,33 @@ def prepare_next_run(
                     "Legacy execution inputs changed after task claim acquisition: "
                     f"{stale_after_claim.value}"
                 )
+
+        quota_reason = _prepare_quota_reason(root, plan.task_id)
+        if quota_reason is not None:
+            release_ok = True
+            try:
+                claimer.release(claim)
+                record_claim_release(store, claim)
+            except Exception:
+                release_ok = False
+            store.transition(
+                run_id,
+                expected={RunStatus.PREPARING},
+                status=(
+                    RunStatus.FAILED
+                    if release_ok
+                    else RunStatus.NEEDS_DECISION
+                ),
+                terminal_reason=(
+                    quota_reason
+                    if release_ok
+                    else RunTerminalReason.RECOVERY_UNSAFE
+                ),
+            )
+            store.release_lease(run_id, owner=actor)
+            raise StaleSnapshotError(
+                "Execution quota policy changed during task claim acquisition."
+            )
 
         try:
             # Keep PREPARING until both remote ownership and the isolated
