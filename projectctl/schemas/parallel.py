@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import AwareDatetime, Field, model_validator
 
 from projectctl.schemas.base import ProjectCtlModel
+from projectctl.core.enums import RunStatus
 from projectctl.schemas.config import RepoRelativePath
 
 
@@ -107,3 +108,89 @@ class ParallelSafetyDecision(ProjectCtlModel):
     shared_base: bool
     integration_requires_reverification: bool
     conflicts: list[ParallelConflict] = Field(default_factory=list)
+
+
+class ParallelRunBinding(ProjectCtlModel):
+    schema_kind: Literal["projectctl.parallel_run_binding"] = (
+        "projectctl.parallel_run_binding"
+    )
+    schema_version: Literal[1] = 1
+    run_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    preclaim_plan_digest: str = Field(min_length=1)
+    admitted_plan: ParallelPlan
+    peer_plan_digests: list[str] = Field(default_factory=list)
+    peer_decision_digests: list[str] = Field(default_factory=list)
+    bound_at: AwareDatetime
+
+
+class ParallelQueueEntry(ProjectCtlModel):
+    position: int = Field(ge=1)
+    run_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    status: RunStatus
+    created_at: AwareDatetime
+    base_commit: str = Field(min_length=7)
+    target_ref: str = Field(min_length=1)
+
+
+class ParallelIntegrationQueue(ProjectCtlModel):
+    schema_kind: Literal["projectctl.parallel_integration_queue"] = (
+        "projectctl.parallel_integration_queue"
+    )
+    schema_version: Literal[1] = 1
+    generated_at: AwareDatetime
+    project_id: str = Field(min_length=1)
+    target_ref: str = Field(min_length=1)
+    entries: list[ParallelQueueEntry] = Field(default_factory=list)
+
+
+class ParallelReapplicationRequest(ProjectCtlModel):
+    schema_kind: Literal["projectctl.parallel_reapplication_request"] = (
+        "projectctl.parallel_reapplication_request"
+    )
+    schema_version: Literal[1] = 1
+    reapplication_id: str = Field(min_length=1)
+    run_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    source_base_commit: str = Field(min_length=7)
+    source_candidate_commit: str = Field(min_length=7)
+    source_execution_plan_digest: str = Field(min_length=1)
+    source_evidence_digest: str = Field(min_length=1)
+    target_base_commit: str = Field(min_length=7)
+    target_advance_changed_paths: list[RepoRelativePath] = Field(default_factory=list)
+    patch_digest: str = Field(min_length=1)
+    requested_at: AwareDatetime
+
+
+class ParallelReapplicationManifest(ProjectCtlModel):
+    schema_kind: Literal["projectctl.parallel_reapplication"] = (
+        "projectctl.parallel_reapplication"
+    )
+    schema_version: Literal[1] = 1
+    reapplication_id: str = Field(min_length=1)
+    run_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    source_base_commit: str = Field(min_length=7)
+    source_candidate_commit: str = Field(min_length=7)
+    source_execution_plan_digest: str = Field(min_length=1)
+    source_evidence_digest: str = Field(min_length=1)
+    target_base_commit: str = Field(min_length=7)
+    target_advance_changed_paths: list[RepoRelativePath] = Field(default_factory=list)
+    patch_digest: str = Field(min_length=1)
+    updated_execution_plan_digest: str = Field(min_length=1)
+    reapplied_at: AwareDatetime
+
+
+class ParallelBatchResult(ProjectCtlModel):
+    schema_kind: Literal["projectctl.parallel_batch_result"] = (
+        "projectctl.parallel_batch_result"
+    )
+    schema_version: Literal[1] = 1
+    started_at: AwareDatetime
+    completed_at: AwareDatetime
+    max_parallel_runs: int = Field(ge=2, le=8)
+    prepared_run_ids: list[str] = Field(default_factory=list)
+    completed_run_ids: list[str] = Field(default_factory=list)
+    remaining_run_ids: list[str] = Field(default_factory=list)
+    details: list[str] = Field(default_factory=list)

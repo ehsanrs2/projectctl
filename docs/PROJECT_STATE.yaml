@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Enable bounded same-project concurrency only for M4.1a-proven independent plans, with deterministic integration ordering, crash-safe multiple-run recovery, and fresh verification after any candidate transformation.
+current_goal: Re-evaluate the complete post-M4 control plane, identify remaining correctness or product bottlenecks, and freeze the next milestone only after an architecture review.
 active_milestone:
-  id: M4.1b
-  title: Safe Parallel Execution & Integration
+  id: POST-M4-ARCH
+  title: Post-M4 Architecture Review
   aliases:
-    - Safe Parallel Runs
-    - Bounded Parallel Execution
-    - Deterministic Parallel Integration
+    - Post-M4 Review
+    - M4 Architecture Review
+    - Next-Milestone Review
 updated_at: null

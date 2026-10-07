@@ -1431,11 +1431,36 @@ See ADR-031.
 
 #### M4.1b — Safe Parallel Execution & Integration
 
+**Completed.**
+
+M4.1b adds an explicit bounded parallel runtime on top of M4.1a proof artifacts:
+
+- active-set capacity is explicit (2–8)
+- every additional run is pairwise admitted against all existing parallel bindings
+- declared exclusive resources act as active-set reservations
+- M4.0a still serializes quota-consuming worker turns per account
+- post-claim `ParallelRunBinding v1` avoids confusing a run's own READY → RUNNING claim with
+  external task drift
+- verified candidate paths must stay inside declared write scopes
+- integration order is deterministic by run creation time/run id
+- earlier review-waiting runs remain queue head
+- target advancement must be ancestry-preserving and disjoint from the later run's inputs/writes
+- stale candidates are transformed only through a durable reapplication request
+- source plan/evidence/verification are archived before transformation
+- the run is rebound to the new base and returned to VERIFYING
+- transformed candidates receive fresh verification/evidence before integration
+- ambiguous reapplication crash states fail closed
+- multi-run recovery validates the active proof set and reconciles each run independently
+- the legacy serial auto loop remains intentionally separate and fail-closed on multiple active runs
+
+See ADR-032.
+
+### Post-M4 Architecture Review
+
 **Active milestone.**
 
-Allow bounded concurrent work only after independence is proven. Integration remains deterministic,
-and any transformed/reapplied candidate requires fresh verification rather than reusing evidence
-from the old exact-base candidate.
+The M4 correctness sequence identified by the post-M3 review is complete. Re-evaluate authority,
+recovery, throughput and product priorities before selecting the next feature milestone.
 
 ### Later product directions
 
