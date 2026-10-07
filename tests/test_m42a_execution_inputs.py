@@ -421,7 +421,7 @@ def test_beads_claim_transition_accepts_only_expected_lifecycle_mutation():
         actor="projectctl:test",
         base_commit="a" * 40,
         integration_target_ref="main",
-        claim_token="token",
+        claim_token="token-000000000000",
         request_digest="request",
         acquired=True,
         observed_at=NOW,
