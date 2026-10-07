@@ -310,7 +310,6 @@ def _turn_key(value: ProjectTurnEnvelope):
         value.task_id,
         value.project_state_digest,
         value.task_snapshot_digest,
-        value.quota_snapshot_digest,
         tuple(value.active_run_ids),
         value.max_active_runs,
         value.parallel_admission,
