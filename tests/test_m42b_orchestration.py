@@ -9,6 +9,8 @@ import pytest
 from projectctl.application import turns
 from projectctl.core.enums import QuotaMode, ResourceClass, RunStatus, TaskStatus
 from projectctl.core.errors import ConfigurationError
+from projectctl.application import portfolio as portfolio_app
+from projectctl.application import turns as turns_app
 from projectctl.parallel import runtime
 from projectctl.schemas.orchestration import ProjectTurnEnvelope
 from projectctl.schemas.task import NormalizedTask, TaskSource
@@ -327,3 +329,72 @@ def test_first_slot_is_parallel_bound_when_project_capacity_exceeds_one(
     assert envelope.action == "admit_task"
     assert envelope.parallel_admission is True
     assert envelope.active_run_count == 0
+
+
+
+def test_parallel_batch_requests_global_fair_turns(
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        runtime,
+        "load_project_config",
+        lambda root: SimpleNamespace(
+            orchestration=SimpleNamespace(max_active_runs=2)
+        ),
+    )
+    monkeypatch.setattr(runtime, "_active_records", lambda root: [])
+    calls = []
+
+    def fair_turn(root, **kwargs):
+        calls.append(str(root))
+        if len(calls) == 1:
+            return (
+                SimpleNamespace(
+                    account_busy=False,
+                    selected_project_instance_id="instance",
+                    selected_project_id="repo",
+                ),
+                SimpleNamespace(
+                    run_id="run-new",
+                    run_status=RunStatus.VERIFYING,
+                    action="admit_task",
+                    project_turn=SimpleNamespace(prepared_new_run=True),
+                ),
+            )
+        return (
+            SimpleNamespace(
+                account_busy=False,
+                selected_project_instance_id="other-instance",
+                selected_project_id="other",
+            ),
+            None,
+        )
+
+    monkeypatch.setattr(
+        portfolio_app,
+        "request_fair_project_turn",
+        fair_turn,
+    )
+    monkeypatch.setattr(
+        turns_app,
+        "advance_non_worker_phases",
+        lambda root: SimpleNamespace(steps=[]),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "RunStore",
+        lambda root: SimpleNamespace(
+            get=lambda run_id: SimpleNamespace(status=RunStatus.PASSED)
+        ),
+    )
+
+    result = runtime.run_parallel_batch(tmp_path)
+
+    assert len(calls) == 2
+    assert result.prepared_run_ids == ["run-new"]
+    assert result.completed_run_ids == ["run-new"]
+    assert any(
+        item.startswith("portfolio_yield:selected_other_project")
+        for item in result.details
+    )
