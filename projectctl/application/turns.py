@@ -426,8 +426,18 @@ def advance_non_worker_phases(
     root = project_root.resolve()
     config = load_project_config(root)
     steps: list[NonWorkerPhaseStep] = []
+    active_snapshot = _active_records(root)
+    worker_phase_ids = {
+        item.run_id
+        for item in active_snapshot
+        if item.status in {
+            RunStatus.PREPARING,
+            RunStatus.CLAIMED,
+            RunStatus.RUNNING,
+        }
+    }
 
-    for record in _active_records(root):
+    for record in active_snapshot:
         started = record.status
         action = "phase_wait"
         detail = None
