@@ -1505,7 +1505,7 @@ proof artifacts. Worker turns for one quota account remain serialized by M4.0a:
 - transformed candidates receive fresh verification/evidence before integration
 - ambiguous reapplication crash states fail closed
 - multi-run recovery validates the active proof set and reconciles each run independently
-- the legacy serial auto loop remains intentionally separate and fail-closed on multiple active runs
+- M4.2b supersedes the legacy autonomous split: serial auto and parallel batch now use one fair worker-turn dispatcher
 
 See ADR-032.
 
@@ -1554,20 +1554,40 @@ See ADR-033.
 
 #### M4.2b — Unified Turn Orchestration
 
+**Completed.**
+
+M4.2b closes the remaining post-M4 orchestration split:
+
+- `ProjectTurnEnvelope v1` is the project-local worker-turn offer; it exports no local scheduler score
+- portfolio v2 accepts valid multi-run active sets rather than rejecting `multiple_active_runs`
+- continuation order is deterministic: checkpoint resume, claimed start, then new admission
+- least-recently-admitted account fairness remains the cross-project policy inside an action class
+- `orchestration.max_active_runs` in ProjectConfig v9 is the durable automated active-set capacity authority
+- when capacity exceeds one, automated first-slot admission is parallel-bound from the beginning
+- autonomous `run auto`, `parallel run`, and portfolio execution all request worker turns through the same account-global dispatcher
+- project-local autonomous commands yield when another registered project wins fairness; they do not execute foreign project work
+- M4.0a remains the final atomic account admission boundary before provider contact
+- verification, integration, review reconciliation and deterministic recovery are separate non-worker maintenance phases
+- maintenance respects live run leases and does not steal lifecycle ownership
+- target-changing integration/review reconciliation waits while another exact-base worker phase remains
+- `portfolio cycle` performs account-scoped maintenance then at most one fair worker turn
+- `parallel run` is a bounded fair wave; its CLI max value cannot override durable project capacity
+- orchestration status exposes active-set capacity, run ids, integration queue head, local next turn and account admission owner
+- PortfolioDecision v1 / PortfolioTurnResult v1 remain public; v2 adds active-set-aware envelopes
+
+See ADR-034.
+
+### M5.0 — Context Discovery & Scope Assistance
+
 **Active milestone.**
 
-Make portfolio arbitration aware of parallel active sets and route automated worker turns through
-one account-global dispatcher while M4.0a remains the final atomic admission authority.
-
-Non-quota phases such as verification, recovery and integration remain separate from quota-consuming
-worker-turn arbitration.
+Add derived repository/code-relationship discovery that helps author and explain execution input/write scope without becoming execution authority. Repository structure, AST relationships and optional Graphify-derived evidence may propose scope; human/control-plane policy remains authoritative.
 
 ### Later product directions
 
 Retained after M4.2 contract closure:
 
-- **leading M5 candidate:** context discovery / scope assistance with optional Graphify-derived
-  relationships
+- **active M5.0:** context discovery / scope assistance with optional Graphify-derived relationships
 - additional worker providers
 - governed skills registry and supply-chain policy
 - first-class Research / Hypothesis / Experiment / Evidence / Decision flows
