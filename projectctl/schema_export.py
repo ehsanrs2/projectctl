@@ -15,7 +15,7 @@ from projectctl.schemas.delivery import (
     ReviewRequest,
     TaskDeliveryPolicy,
 )
-from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
+from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1, EvidenceManifestV2
 from projectctl.schemas.github_cache import GitHubCacheEntry, GitHubCacheRequest
 from projectctl.schemas.execution import (
     ExecutionPlan,
@@ -81,7 +81,12 @@ from projectctl.schemas.status import ProjectStatus
 from projectctl.schemas.task import TaskSnapshot, TaskSnapshotV1, TaskSnapshotV2
 from projectctl.schemas.task_authority import TaskAuthorityCapabilities
 from projectctl.schemas.task_claim import TaskClaim, TaskClaimRequest
-from projectctl.schemas.verification import VerificationCatalog, VerificationManifest, VerificationManifestV1
+from projectctl.schemas.verification import (
+    VerificationCatalog,
+    VerificationManifest,
+    VerificationManifestV1,
+    VerificationManifestV2,
+)
 
 PUBLIC_SCHEMAS = {
     "project-config.v1.schema.json": ProjectConfigV1,
@@ -144,9 +149,11 @@ PUBLIC_SCHEMAS = {
     "worker-checkpoint.v2.schema.json": WorkerCheckpoint,
     "verification-catalog.v1.schema.json": VerificationCatalog,
     "verification-manifest.v1.schema.json": VerificationManifestV1,
-    "verification-manifest.v2.schema.json": VerificationManifest,
+    "verification-manifest.v2.schema.json": VerificationManifestV2,
+    "verification-manifest.v3.schema.json": VerificationManifest,
     "evidence-manifest.v1.schema.json": EvidenceManifestV1,
-    "evidence-manifest.v2.schema.json": EvidenceManifest,
+    "evidence-manifest.v2.schema.json": EvidenceManifestV2,
+    "evidence-manifest.v3.schema.json": EvidenceManifest,
     "github-cache-request.v1.schema.json": GitHubCacheRequest,
     "github-cache-entry.v1.schema.json": GitHubCacheEntry,
     "jira-lifecycle-marker.v1.schema.json": JiraLifecycleMarker,
