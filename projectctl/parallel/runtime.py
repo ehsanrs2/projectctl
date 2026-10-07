@@ -505,6 +505,35 @@ def _assert_runtime_inputs_stable(
     new_base: str,
 ) -> None:
     plan = binding.admitted_plan
+    if getattr(binding, "execution_input_digest", None):
+        run_dir = root / ".projectctl" / "runs" / binding.run_id
+        execution_input = load_execution_input(
+            run_dir / "execution-input-manifest.json"
+        )
+        transition = load_claim_transition(
+            run_dir / "claim-transition.json"
+        )
+        if (
+            execution_input_semantic_digest(execution_input)
+            != binding.execution_input_digest
+        ):
+            raise StaleSnapshotError(
+                "Parallel binding execution-input identity changed."
+            )
+        if (
+            getattr(binding, "claim_transition_digest", None) is not None
+            and digest(transition) != binding.claim_transition_digest
+        ):
+            raise StaleSnapshotError(
+                "Parallel binding claim-transition identity changed."
+            )
+        validate_admitted_execution_input(
+            root,
+            execution_input,
+            transition,
+            require_target_at_base=False,
+        )
+
     config = load_project_config(root)
     if config.project.id != plan.project_id:
         raise StaleSnapshotError("Parallel run project identity changed.")
