@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository has completed the **M3 provider/task-authority sequence through M3.3c**. The post-M3 architecture review now freezes **M4.0a — Account-Global Execution Admission** as the next implementation milestone.
+This repository has completed **M4.0a — Account-Global Execution Admission**. The active milestone is now **M4.0b — Portfolio Scheduling & Cross-Project Arbitration**.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -1791,46 +1791,60 @@ than changing project intent/config.
 
 See ADR-028 and `docs/PROJECTCTL_BLUEPRINT.md`.
 
-### Post-M3 architecture review
+### Post-M3 architecture review and M4.0a implementation
 
-The review is recorded in:
+The post-M3 review is recorded in:
 
 ```text
 docs/architecture/POST_M3_ARCHITECTURE_REVIEW.md
 docs/decisions/ADR-029-global-admission-before-parallelism.md
 ```
 
-The main finding is that **quota observation is already account-global, but execution admission is
-still project-local**.
+It identified the correctness gap between account-global quota observation and project-local
+execution admission. **M4.0a now closes that gap.**
 
-Two independent ProjectCTL projects sharing one Codex account can currently read the same quota
-state and both decide that a quota-consuming worker turn is allowed.
+Implemented:
 
-Therefore the next sequence is:
+- global-state DB **v2** with an explicit backup-producing v1 → v2 migration
+- authoritative `execution_admissions` state in `$PROJECTCTL_HOME/state.sqlite`
+- at most one active quota-consuming worker turn per quota account
+- admission identity bound to quota account, project instance, logical project, run and lease owner
+- atomic acquisition with SQLite `BEGIN IMMEDIATE` plus per-account uniqueness
+- owner heartbeat/expiry and deterministic stale-lease reclamation
+- durable admission audit events for acquire, reconcile, stale reclaim and release
+- fresh quota revalidation **after admission acquisition** and before worker-provider contact
+- admission enforcement on both `run start` and checkpoint `run resume`
+- busy-account and quota-denied starts remain retryable instead of corrupting run state
+- release after worker completion, checkpoint or provider failure
+- no admission held through verification, integration, publication or external review waiting
+- no fabricated token/percentage reservation or task-cost estimator
+
+Existing installations with global-state DB v1 must run:
+
+```bash
+projectctl migrate
+```
+
+The command now migrates the account-global state database as well as the project-local state
+database and creates backups before applying supported migrations.
+
+The M4 architecture sequence remains:
 
 ```text
-M4.0a  Account-Global Execution Admission
+M4.0a  Account-Global Execution Admission                  completed
    ↓
-M4.0b  Portfolio Scheduling & Cross-Project Arbitration
+M4.0b  Portfolio Scheduling & Cross-Project Arbitration   next
    ↓
 M4.1a  Parallel Planning Safety Contract
    ↓
 M4.1b  Safe Parallel Execution & Integration
 ```
 
-M4.0a intentionally does **not** estimate or reserve fictional token percentages. Until ProjectCTL
-has a trustworthy per-task cost model, the safe first primitive is an exclusive account-global
-lease for quota-consuming worker turns.
-
-The lease will live in `$PROJECTCTL_HOME/state.sqlite`, bind account/project-instance/run identity,
-use atomic SQLite ownership with heartbeat/expiry, and require a fresh quota check while ownership
-is held before contacting the worker provider.
-
-Graphify/context discovery remains valuable—especially later for write-scope evidence—but it does
-not precede this correctness boundary.
+Graphify/context discovery remains valuable—especially later for write-scope evidence—but does not
+replace portfolio arbitration or the account admission authority.
 
 See ADR-029 and `docs/PROJECTCTL_BLUEPRINT.md`.
 
 Next:
 
-- **M4.0a — Account-Global Execution Admission**
+- **M4.0b — Portfolio Scheduling & Cross-Project Arbitration**
