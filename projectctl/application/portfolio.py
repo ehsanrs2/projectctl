@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from projectctl.application.turns import (
+    advance_non_worker_phases,
     collect_project_turn_envelope,
     execute_project_turn,
 )
@@ -23,6 +24,7 @@ from projectctl.quota.admission import AccountAdmissionStore, project_instance_i
 from projectctl.schemas.capabilities import StrategyFallbackPolicy
 from projectctl.schemas.portfolio import (
     PortfolioCandidate,
+    PortfolioCycleResult,
     PortfolioDecision,
     PortfolioTurnResult,
 )
@@ -470,4 +472,99 @@ def request_fair_project_turn(
             requested_strategy=requested_strategy,
             fallback=fallback,
         ),
+    )
+
+
+
+def maintain_portfolio_projects(
+    account_id: str,
+    *,
+    home: Path | None = None,
+    now: datetime | None = None,
+) -> tuple[list, list[str]]:
+    """Advance non-worker phases for every registered project on one account."""
+    if not account_id.strip():
+        raise PortfolioError(
+            "Portfolio maintenance requires a non-empty quota account id."
+        )
+    account_id = account_id.strip()
+    now = now or utc_now()
+    home = (home or projectctl_home()).resolve()
+    results = []
+    errors: list[str] = []
+
+    for registration in _registrations(home):
+        root = registration.project_root
+        try:
+            if not root.exists() or not root.is_dir():
+                continue
+            if git_root(root) != root:
+                continue
+            if project_instance_id(root) != registration.project_instance_id:
+                continue
+            config = load_project_config(root)
+            if (
+                config.project.id != registration.project_id
+                or config.quota.account != account_id
+            ):
+                continue
+            require_project_execution_ready(root)
+            results.append(advance_non_worker_phases(root))
+            _touch_registration(home, registration, observed_at=now)
+        except ProjectCtlError as exc:
+            errors.append(
+                f"{registration.project_id}/"
+                f"{registration.project_instance_id}: {exc}"
+            )
+        except Exception as exc:
+            errors.append(
+                f"{registration.project_id}/"
+                f"{registration.project_instance_id}: "
+                f"{type(exc).__name__}: {exc}"
+            )
+    return results, errors
+
+
+def run_portfolio_cycle(
+    account_id: str,
+    *,
+    now: datetime | None = None,
+    home: Path | None = None,
+    requested_strategy=None,
+    fallback: StrategyFallbackPolicy | None = None,
+) -> PortfolioCycleResult:
+    """Advance all non-worker phases, then execute at most one fair worker turn."""
+    now = now or utc_now()
+    home = (home or projectctl_home()).resolve()
+    maintenance, errors = maintain_portfolio_projects(
+        account_id,
+        home=home,
+        now=now,
+    )
+    decision = collect_portfolio_decision(
+        account_id,
+        now=now,
+        home=home,
+        persist=True,
+    )
+    turn = None
+    if (
+        not decision.account_busy
+        and decision.selected_project_instance_id is not None
+    ):
+        candidate = _selected_candidate(decision)
+        turn = _execute_selected(
+            decision,
+            candidate,
+            requested_strategy=requested_strategy,
+            fallback=fallback,
+        )
+
+    return PortfolioCycleResult(
+        generated_at=utc_now(),
+        account_id=account_id.strip(),
+        maintenance=maintenance,
+        maintenance_errors=errors,
+        decision=decision,
+        turn=turn,
     )
