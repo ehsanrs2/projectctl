@@ -282,6 +282,10 @@ def register_m50(app: typer.Typer) -> None:
                 else "none"
             )
         )
+        if review.warnings:
+            typer.echo("\nWarnings")
+            for warning in review.warnings:
+                typer.echo(f"  - {warning}")
         typer.echo("\nReviewed policy diff")
         diff_text = render_review_diff(review)
         typer.echo(diff_text or "  no byte-level policy change")
