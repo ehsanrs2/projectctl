@@ -43,7 +43,12 @@ from projectctl.schemas.onboarding import (
     ProjectInspectionV2,
 )
 from projectctl.schemas.parallel import (
+    ParallelBatchResult,
+    ParallelIntegrationQueue,
     ParallelPlan,
+    ParallelReapplicationManifest,
+    ParallelReapplicationRequest,
+    ParallelRunBinding,
     ParallelSafetyDecision,
     ParallelScopeCatalog,
 )
@@ -94,6 +99,11 @@ PUBLIC_SCHEMAS = {
     "parallel-scope-catalog.v1.schema.json": ParallelScopeCatalog,
     "parallel-plan.v1.schema.json": ParallelPlan,
     "parallel-safety-decision.v1.schema.json": ParallelSafetyDecision,
+    "parallel-run-binding.v1.schema.json": ParallelRunBinding,
+    "parallel-integration-queue.v1.schema.json": ParallelIntegrationQueue,
+    "parallel-reapplication-request.v1.schema.json": ParallelReapplicationRequest,
+    "parallel-reapplication.v1.schema.json": ParallelReapplicationManifest,
+    "parallel-batch-result.v1.schema.json": ParallelBatchResult,
     "run-manifest.v1.schema.json": RunManifestV1,
     "run-manifest.v2.schema.json": RunManifest,
     "context-manifest.v1.schema.json": ContextManifestV1,
