@@ -142,7 +142,7 @@ Exactly one execution-state authority should be configured per project.
 
 Beads is currently a full execution-capable task authority.
 
-GitHub Issues now implements the current full task lifecycle under ProjectCTL's direct-publication policy: read, claim/release, decision blocking, publication-gated completion, and recovery. Repositories that require PR-only delivery remain fail-closed until an explicit PR publication mode is implemented.
+GitHub Issues implements the current full task lifecycle: read, claim/release, decision blocking, evidence-gated completion, and recovery. Code delivery is configured independently; supported GitHub/GitLab review-required delivery uses durable PR/MR evidence rather than silently degrading to direct publication.
 
 Inspect the configured adapter capability surface with:
 
