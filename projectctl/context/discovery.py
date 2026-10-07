@@ -442,7 +442,8 @@ def discover_context(
     title_text = task.title
     combined_text = "\n".join([title_text, *task.tags, *[text for _, text in reference_texts]])
     query_terms = _terms(combined_text)
-    title_terms = _terms(title_text)
+    semantic_terms = query_terms - _ACTION_WORDS
+    title_terms = _terms(title_text) - _ACTION_WORDS
 
     mention_sources = [("task title", title_text, None)]
     mention_sources.extend(
@@ -480,8 +481,13 @@ def discover_context(
     normalized_title_words = {word.casefold() for word in _WORD_RE.findall(title_text)}
     for symbol, paths in sorted(symbols.items()):
         symbol_terms = set(_split_identifier(symbol))
-        exact_symbol = symbol.casefold() in normalized_title_words
-        term_match = bool(symbol_terms) and symbol_terms <= query_terms
+        if not symbol_terms or symbol_terms <= _ACTION_WORDS:
+            continue
+        exact_symbol = (
+            symbol.casefold() in normalized_title_words
+            and symbol.casefold() not in _ACTION_WORDS
+        )
+        term_match = symbol_terms <= semantic_terms
         if not exact_symbol and not term_match:
             continue
         for path in sorted(paths):
@@ -507,9 +513,10 @@ def discover_context(
 
     for path in sorted(source_files):
         stem_terms = set(_split_identifier(PurePosixPath(path).stem))
-        if not stem_terms or not (stem_terms & query_terms):
+        overlap_terms = stem_terms - _ACTION_WORDS
+        if not overlap_terms or not (overlap_terms & semantic_terms):
             continue
-        overlap = sorted(stem_terms & query_terms)
+        overlap = sorted(overlap_terms & semantic_terms)
         ev = add_evidence(
             provider="builtin",
             kind="filename_token",
@@ -596,7 +603,11 @@ def discover_context(
             label_terms = _terms(str(node.get("label") or ""))
             if (
                 path in primary_paths
-                or (label_terms and label_terms <= query_terms)
+                or (
+                    label_terms
+                    and not label_terms <= _ACTION_WORDS
+                    and label_terms <= semantic_terms
+                )
             ):
                 seed_ids.add(node_id)
                 if path in tracked and path in source_files:
