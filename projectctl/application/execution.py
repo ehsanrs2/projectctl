@@ -19,6 +19,17 @@ from projectctl.application.claims import (
     record_claim_release,
 )
 from projectctl.application.scheduling import collect_scheduling_bundle
+from projectctl.application.execution_inputs import (
+    build_claim_transition_evidence,
+    build_execution_input_manifest,
+    execution_input_semantic_digest,
+    load_claim_transition,
+    load_execution_input,
+    persist_claim_transition,
+    persist_execution_input,
+    validate_admitted_execution_input,
+    validate_preclaim_execution_input,
+)
 from projectctl.application.tasks import capture_task_snapshot, task_store_for_project
 from projectctl.application.task_lifecycle import reconcile_terminal_task
 from projectctl.context import ContextBundle, assemble_context
@@ -69,9 +80,17 @@ from projectctl.schemas.execution import (
     WorkerCheckpoint,
     WorkerRequest,
     WorkerResult,
+    parse_execution_plan,
     parse_worker_checkpoint,
+    parse_worker_request,
 )
-from projectctl.schemas.run import ContextManifest, RunManifest, WorkerDescriptor
+from projectctl.schemas.run import (
+    ContextManifest,
+    RunManifest,
+    WorkerDescriptor,
+    parse_context_manifest,
+)
+from projectctl.schemas.execution_input import ExecutionInputManifest
 from projectctl.schemas.task_claim import TaskClaimRequest
 from projectctl.schemas.run_store import RunRecord
 from projectctl.storage.runs import RunStore
@@ -86,6 +105,7 @@ class ExecutionPlanningBundle:
     plan: ExecutionPlan
     capabilities: WorkerCapabilities
     strategy: WorkerStrategyDecision
+    execution_input: ExecutionInputManifest | None = None
 
 
 @dataclass(frozen=True)
@@ -148,6 +168,12 @@ def _load_json_model(path: Path, model):
         raise RunStoreError(f"Missing run artifact: {path}")
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
+        if model is ExecutionPlan:
+            return parse_execution_plan(raw)
+        if model is WorkerRequest:
+            return parse_worker_request(raw)
+        if model is ContextManifest:
+            return parse_context_manifest(raw)
         return model.model_validate(raw)
     except Exception as exc:
         raise RunStoreError(f"Invalid run artifact {path.name}: {exc}") from exc
@@ -241,6 +267,15 @@ def build_next_execution_bundle(
         approval=phase.approval,
     )
 
+    execution_input = build_execution_input_manifest(
+        project_root,
+        task_id=decision.selected_task_id,
+        tasks=bundle.tasks,
+        scheduler_task_snapshot_digest=decision.task_snapshot_digest,
+        project_state_digest=decision.project_state_digest,
+        integration_target_ref=target_ref,
+        base_commit=base_commit,
+    )
     plan = ExecutionPlan(
         plan_id=f"ep-{uuid.uuid4().hex}",
         project_id=bundle.config.project.id,
@@ -248,6 +283,7 @@ def build_next_execution_bundle(
         task_source_revision=bundle.tasks.source_revision,
         scheduler_decision_digest=digest(decision),
         task_snapshot_digest=decision.task_snapshot_digest,
+        execution_input_digest=execution_input_semantic_digest(execution_input),
         project_state_digest=decision.project_state_digest,
         quota_snapshot_digest=decision.quota_snapshot_digest,
         capability_snapshot_digest=effective_capability_digest(capabilities),
@@ -263,6 +299,7 @@ def build_next_execution_bundle(
         plan=plan,
         capabilities=capabilities,
         strategy=strategy,
+        execution_input=execution_input,
     )
 
 
@@ -378,8 +415,44 @@ def prepare_next_run(
             worker=plan.worker,
         )
         store = RunStore(root)
+        execution_input = planning.execution_input
+        if execution_input is None:
+            # Compatibility for tests/custom planners that still construct the
+            # planning bundle directly. Runtime-generated plans always carry
+            # the first-class M4.2a execution input.
+            scheduling = collect_scheduling_bundle(root)
+            execution_input = build_execution_input_manifest(
+                root,
+                task_id=plan.task_id,
+                tasks=scheduling.tasks,
+                scheduler_task_snapshot_digest=plan.task_snapshot_digest,
+                project_state_digest=plan.project_state_digest,
+                integration_target_ref=plan.integration_target_ref,
+                base_commit=plan.base_commit,
+            )
+            if plan.execution_input_digest is None:
+                plan = plan.model_copy(
+                    update={
+                        "execution_input_digest": execution_input_semantic_digest(
+                            execution_input
+                        )
+                    }
+                )
+                manifest = manifest.model_copy(
+                    update={"execution_plan_digest": digest(plan)}
+                )
+
+        if plan.execution_input_digest != execution_input_semantic_digest(execution_input):
+            raise RunStoreError(
+                "ExecutionPlan is not bound to its ExecutionInputManifest."
+            )
+
         try:
             _atomic_json(run_dir / "execution-plan.json", plan)
+            persist_execution_input(
+                run_dir / "execution-input-manifest.json",
+                execution_input,
+            )
             _atomic_json(run_dir / "worker-capabilities.json", planning.capabilities)
             _atomic_json(run_dir / "worker-strategy.json", planning.strategy)
             store.create(
@@ -397,18 +470,17 @@ def prepare_next_run(
             status=RunStatus.PREPARING,
         )
 
-        stale_reason = _validate_plan_inputs(root, plan)
-        if stale_reason is not None:
+        try:
+            validate_preclaim_execution_input(root, execution_input)
+        except StaleSnapshotError:
             store.transition(
                 run_id,
                 expected={RunStatus.PREPARING},
                 status=RunStatus.FAILED,
-                terminal_reason=stale_reason,
+                terminal_reason=RunTerminalReason.CONTEXT_INVALID,
             )
             store.release_lease(run_id, owner=actor)
-            raise StaleSnapshotError(
-                f"Execution plan became stale during preflight: {stale_reason.value}"
-            )
+            raise
 
         claimer = _claimer(root)
         claim_request = TaskClaimRequest(
@@ -457,11 +529,34 @@ def prepare_next_run(
                 claim.reason or f"Task {plan.task_id} could not be claimed."
             )
 
-        # Close the distributed race between the pre-claim snapshot check and
-        # provider ownership acquisition. Human/task/quota/Git inputs may have
-        # changed while the remote claim was being acquired.
-        stale_after_claim = _validate_plan_inputs(root, plan)
-        if stale_after_claim is not None:
+        # The claim itself may intentionally mutate canonical task state.
+        # Validate that exact provider-specific transition while requiring all
+        # relevant dependencies/project/base/scope inputs to remain stable.
+        try:
+            claim_transition = build_claim_transition_evidence(
+                root,
+                run_id=run_id,
+                manifest=execution_input,
+                request=claim_request,
+                claim=claim,
+                claimer=claimer,
+            )
+            persist_claim_transition(
+                run_dir / "claim-transition.json",
+                claim_transition,
+            )
+            store.append_event(
+                run_id,
+                "task.claim.transition_validated",
+                {
+                    "execution_input_digest": plan.execution_input_digest,
+                    "claim_transition_digest": digest(claim_transition),
+                    "postclaim_task_scope_digest": (
+                        claim_transition.postclaim_task_scope_digest
+                    ),
+                },
+            )
+        except StaleSnapshotError:
             release_ok = True
             try:
                 claimer.release(claim)
@@ -473,16 +568,13 @@ def prepare_next_run(
                 expected={RunStatus.PREPARING},
                 status=RunStatus.FAILED if release_ok else RunStatus.NEEDS_DECISION,
                 terminal_reason=(
-                    stale_after_claim
+                    RunTerminalReason.CONTEXT_INVALID
                     if release_ok
                     else RunTerminalReason.RECOVERY_UNSAFE
                 ),
             )
             store.release_lease(run_id, owner=actor)
-            raise StaleSnapshotError(
-                "Execution inputs changed after task claim acquisition: "
-                f"{stale_after_claim.value}"
-            )
+            raise
 
         try:
             # Keep PREPARING until both remote ownership and the isolated
