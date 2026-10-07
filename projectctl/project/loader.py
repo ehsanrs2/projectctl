@@ -45,7 +45,6 @@ def load_project_config(project_root: Path) -> ProjectConfig:
             upgraded = legacy.model_dump(mode="python")
             upgraded["schema_version"] = 9
             upgraded["orchestration"] = {"max_active_runs": 1}
-            upgraded.setdefault("orchestration", {"max_active_runs": 1})
             return ProjectConfig.model_validate(upgraded)
         if version == 7:
             legacy = ProjectConfigV7.model_validate(raw)
