@@ -123,7 +123,7 @@ Exactly one authority should exist for each mutable concern.
 | Account execution admission | `$PROJECTCTL_HOME/state.sqlite -> execution_admissions` | Implemented in M4.0a; exclusive per quota account, expiring, and distinct from project/task ownership |
 | Cross-project portfolio arbitration | Registered projects + project-local scheduler envelopes + admission history | Implemented in M4.0b; chooses project/action, never raw cross-project task scores |
 | Parallel execution scope | `projectctl.parallel.yaml` | Human-managed input/write/resource authorization used by M4.1 proofs |
-| Execution input validity | **Currently split:** `ExecutionPlan v2` + `ParallelPlan/ParallelRunBinding` | Post-M4 review found this authority split; M4.2a is active to unify it |
+| Execution input validity | `ExecutionInputManifest v1` + `ClaimTransitionEvidence v1` | Unified in M4.2a; scheduler full-snapshot digest is audit/ranking evidence, not execution invalidation authority |
 | Project quota policy | `.projectctl/config.yaml` | Local policy, not quota observation/admission authority |
 | Generated status dashboards | `docs/generated/*` | Derived and non-authoritative |
 | Telemetry | `.projectctl/telemetry.sqlite` | Observational only |
@@ -1522,21 +1522,38 @@ close before the global/parallel control plane is considered architecturally com
 
 #### M4.2a — Execution Input Contract Unification
 
-**Active milestone.**
+**Completed.**
 
-Separate scheduler observation from execution invalidation authority, model provider-native claim
-mutation explicitly, and make serial execution, parallel proof, context assembly, verification and
-reapplication consume one scoped execution-input contract.
+M4.2a establishes one execution-input authority shared by serial and parallel execution:
 
-Required closure includes claim-aware Beads semantics, additive persisted schemas, code-scope
-context, verification-time write authorization, reapplication lineage and cross-layer scenario
-tests.
+- `ExecutionInputManifest v1` binds project/base identity, selected task + relevant dependency
+  semantics, execution references and optional explicit code/resource scopes
+- the complete scheduler TaskSnapshot digest remains in the artifact for audit but is intentionally
+  excluded from the execution semantic digest
+- `ClaimTransitionEvidence v1` separates ProjectCTL's expected claim mutation from external drift
+- claim adapters own provider-specific transition rules; generic execution does not inspect Beads,
+  GitHub, Linear or Jira lifecycle strings
+- Beads READY → RUNNING plus provider revision movement is accepted only under the exact live claim
+- unrelated relevant dependency mutation during claim fails closed
+- `ExecutionPlan v3`, `ContextManifest v3` and `WorkerRequest v3` reference the same input and
+  claim-transition evidence
+- explicit input/write scopes are surfaced to worker context; code input paths populate
+  `ContextManifest.code_paths`
+- verification has an independent reserved `execution-write-scope` check and cannot produce
+  passing evidence for unauthorized writes
+- `ParallelPlan v2` / `ParallelRunBinding v2` reference the same execution-input authority
+- reapplication request/manifest v2 archive source proof, persist the exact candidate patch, record
+  source/derived execution-input lineage and require fresh verification
+- recovery chooses reapplication requests by durable `requested_at` + id ordering and persists
+  ambiguous transform state as NEEDS_DECISION when possible
+- PREPARING/CLAIMED crash recovery reconstructs or revalidates claim-transition evidence
+- v1/v2 public contracts remain exported/readable; new contracts are additive
 
 See ADR-033.
 
 #### M4.2b — Unified Turn Orchestration
 
-**Planned after M4.2a.**
+**Active milestone.**
 
 Make portfolio arbitration aware of parallel active sets and route automated worker turns through
 one account-global dispatcher while M4.0a remains the final atomic admission authority.
