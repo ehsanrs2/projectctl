@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository has completed **M4.1b — Safe Parallel Execution & Integration**. The active milestone is now **Post-M4 Architecture Review**.
+The **Post-M4 Architecture Review** is complete. M4.0–M4.1 safety primitives are implemented, and the active milestone is now **M4.2a — Execution Input Contract Unification**.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -1998,7 +1998,27 @@ Ambiguous crash states fail closed rather than guessing.
 The legacy `projectctl run auto` remains a serial orchestrator and intentionally still stops on a
 multiple-active-run set. Parallel orchestration is explicit.
 
-The M4 correctness sequence is now complete:
+### Post-M4 Architecture Review
+
+The review found that the M4 safety primitives are real, but they are not yet one unified execution
+contract.
+
+Two concrete composition gaps were found:
+
+- `ExecutionPlan v2` / `ContextManifest v2` still carry whole-task-snapshot execution inputs,
+  while parallel safety uses a scoped task/dependency proof.
+- portfolio arbitration excludes projects with multiple active runs, while M4.1b intentionally
+  creates bounded multi-run active sets.
+
+A provider-native claim edge case makes the first gap immediately important. Beads claim ownership
+moves the selected task to `in_progress`, while current prepare logic rechecks the pre-claim whole
+TaskSnapshot digest. The claim transition must be modeled as an expected control-plane mutation,
+not confused with external stale context.
+
+The current "parallel runtime" should also be read precisely as **bounded concurrent work-in-progress
+/ active runs**. M4.0a still allows only one quota-consuming worker turn per account at a time.
+
+The remediation sequence is now:
 
 ```text
 M4.0a  Account-Global Execution Admission                  completed
@@ -2007,12 +2027,26 @@ M4.0b  Portfolio Scheduling & Cross-Project Arbitration   completed
    ↓
 M4.1a  Parallel Planning Safety Contract                  completed
    ↓
-M4.1b  Safe Parallel Execution & Integration              completed
+M4.1b  Bounded Parallel Active-Set & Safe Integration     implemented
+   ↓
+M4.2a  Execution Input Contract Unification               next
+   ↓
+M4.2b  Unified Turn Orchestration
 ```
 
-See ADR-029, ADR-030, ADR-031, ADR-032 and `docs/PROJECTCTL_BLUEPRINT.md`.
+M4.2a will separate full scheduler observation from scoped execution validity, make claims
+transition-aware, connect code scopes to context/verification, clean up reapplication provenance,
+and add cross-layer scenario tests.
+
+M4.2b will make portfolio arbitration aware of parallel active sets and route automated worker
+turns through one account-global dispatcher.
+
+Graphify/context discovery remains a strong candidate for **M5**, but only after these M4 contract
+closure steps.
+
+See ADR-029 through ADR-033, `docs/architecture/POST_M4_ARCHITECTURE_REVIEW.md`, and
+`docs/PROJECTCTL_BLUEPRINT.md`.
 
 Next:
 
-- **Post-M4 Architecture Review** — reassess the complete control plane before selecting the next
-  implementation milestone.
+- **M4.2a — Execution Input Contract Unification**
