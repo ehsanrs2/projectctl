@@ -151,6 +151,32 @@ def _maintenance_details(result) -> list[str]:
     return details
 
 
+def _drain_non_worker_phases(
+    project_root: Path,
+    *,
+    max_passes: int = 8,
+) -> list[str]:
+    details: list[str] = []
+    previous = None
+    for _ in range(max_passes):
+        before = tuple(
+            (item.run_id, item.status.value)
+            for item in _active_runs(RunStore(project_root))
+        )
+        if before == previous:
+            break
+        previous = before
+        result = advance_non_worker_phases(project_root)
+        details.extend(_maintenance_details(result))
+        after = tuple(
+            (item.run_id, item.status.value)
+            for item in _active_runs(RunStore(project_root))
+        )
+        if after == before or not after:
+            break
+    return details
+
+
 def _finalize(
     project_root: Path,
     *,
@@ -231,8 +257,7 @@ def run_auto(
 
     with project_lock(root, "auto-loop"):
         while attempted_tasks < policy.max_tasks:
-            maintenance = advance_non_worker_phases(root)
-            maintenance_details = _maintenance_details(maintenance)
+            maintenance_details = _drain_non_worker_phases(root)
             store = RunStore(root)
             active = _active_runs(store)
 
@@ -443,10 +468,9 @@ def run_auto(
                         steps=steps,
                     )
 
-                after = advance_non_worker_phases(root)
                 details = [
                     *maintenance_details,
-                    *_maintenance_details(after),
+                    *_drain_non_worker_phases(root),
                 ]
                 final = RunStore(root).get(record.run_id)
                 stop = _classify_terminal(
@@ -619,7 +643,7 @@ def run_auto(
                     steps=steps,
                 )
 
-            after = advance_non_worker_phases(root)
+            after_details = _drain_non_worker_phases(root)
             final = RunStore(root).get(turn.run_id)
             stop = _classify_terminal(
                 final,
@@ -643,7 +667,7 @@ def run_auto(
                     ),
                     quota_mode=status_after.quota_state.mode,
                     quota_stale=status_after.quota_state.stale,
-                    details=_maintenance_details(after),
+                    details=after_details,
                 )
             )
             if final.status == RunStatus.PASSED:
