@@ -12,7 +12,6 @@ from projectctl.application.tasks import capture_task_snapshot
 from projectctl.core.digest import digest
 from projectctl.core.errors import ConfigurationError, RunStoreError, StaleSnapshotError
 from projectctl.core.time import utc_now
-from projectctl.git import resolve_commit
 from projectctl.project.loader import load_project_config
 from projectctl.project.state import load_project_state, semantic_project_state_digest
 from projectctl.scheduler.digests import (
@@ -427,10 +426,9 @@ def revalidate_execution_input(
     config = load_project_config(root)
     if config.project.id != manifest.project_id:
         raise StaleSnapshotError("Execution-input project identity changed.")
-    if resolve_commit(root, manifest.integration_target_ref) != manifest.base_commit:
-        raise StaleSnapshotError(
-            "Execution-input base is stale relative to its integration target."
-        )
+    # The manifest binds the run's exact execution base, not the current target HEAD.
+    # In a valid parallel active set another independent run may advance the target
+    # after admission. Integration/reapplication owns target-drift reconciliation.
     state = load_project_state(root, allow_missing=True)
     if semantic_project_state_digest(state) != manifest.project_state_digest:
         raise StaleSnapshotError("Execution-input project state changed.")
