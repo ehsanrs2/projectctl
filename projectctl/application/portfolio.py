@@ -469,6 +469,13 @@ def run_portfolio_turn(
             raise PortfolioError("Start candidate is missing run identity.")
         started = start_prepared_run(root, candidate.run_id)
     else:
+        if (
+            candidate.task_snapshot_digest is None
+            or candidate.project_state_digest is None
+        ):
+            raise PortfolioError(
+                "New-task portfolio candidate is missing scheduler input digests."
+            )
         prepared = prepare_next_run(
             root,
             expected_task_id=candidate.selected_task_id,
