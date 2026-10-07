@@ -4,12 +4,14 @@ from projectctl.cli.m05 import register_m05
 from projectctl.cli.m11 import register_m11
 from projectctl.cli.m12a import register_m12a
 from projectctl.cli.m13 import register_m13
+from projectctl.cli.m40b import register_m40b
 
 register_m04(app)
 register_m05(app)
 register_m11(app)
 register_m12a(app)
 register_m13(app)
+register_m40b(app)
 
 
 def main() -> None:
