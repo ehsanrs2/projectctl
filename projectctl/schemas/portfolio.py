@@ -7,6 +7,7 @@ from pydantic import AwareDatetime, Field
 from projectctl.core.enums import QuotaMode, ResourceClass, RunStatus
 from projectctl.schemas.base import ProjectCtlModel
 from projectctl.schemas.orchestration import (
+    ProjectMaintenanceResult,
     ProjectTurnEnvelope,
     ProjectTurnResult,
     WorkerTurnAction,
@@ -150,3 +151,17 @@ class PortfolioTurnResult(ProjectCtlModel):
     run_id: str
     run_status: RunStatus
     project_turn: ProjectTurnResult
+
+
+
+class PortfolioCycleResult(ProjectCtlModel):
+    schema_kind: Literal["projectctl.portfolio_cycle_result"] = (
+        "projectctl.portfolio_cycle_result"
+    )
+    schema_version: Literal[1] = 1
+    generated_at: AwareDatetime
+    account_id: str
+    maintenance: list[ProjectMaintenanceResult] = Field(default_factory=list)
+    maintenance_errors: list[str] = Field(default_factory=list)
+    decision: PortfolioDecision
+    turn: PortfolioTurnResult | None = None
