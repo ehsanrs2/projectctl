@@ -10,6 +10,13 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+from projectctl.application.execution_inputs import (
+    load_execution_input,
+    rebind_execution_input_base,
+    revalidate_execution_input,
+    semantic_execution_input_digest,
+    input_scope_digest,
+)
 from projectctl.application.execution import (
     PreparedRun,
     _actor,
@@ -42,7 +49,6 @@ from projectctl.git import WorktreeManager, current_branch, resolve_commit
 from projectctl.parallel.catalog import task_parallel_scope
 from projectctl.parallel.service import (
     _atomic_json,
-    _input_scope_digest,
     _path_scopes_overlap,
     assess_parallel_safety,
     build_parallel_plan,
@@ -62,6 +68,7 @@ from projectctl.schemas.parallel import (
     ParallelQueueEntry,
     ParallelReapplicationManifest,
     ParallelReapplicationRequest,
+    ParallelReapplicationRequestV1,
     ParallelRunBinding,
 )
 from projectctl.storage.runs import RunStore
@@ -142,21 +149,26 @@ def _active_bindings(root: Path) -> list[tuple[object, ParallelRunBinding]]:
     return result
 
 
-def _postclaim_parallel_plan(root: Path, preclaim: ParallelPlan) -> ParallelPlan:
-    snapshot = capture_task_snapshot(
-        root,
-        state="all",
-        read_cache_max_age_seconds=0,
+def _postclaim_parallel_plan(
+    root: Path,
+    preclaim: ParallelPlan,
+    run_id: str,
+) -> ParallelPlan:
+    execution_input = load_execution_input(
+        root / ".projectctl" / "runs" / run_id
     )
-    scoped_digest, scoped_ids = semantic_task_scope_digest(
-        snapshot,
-        preclaim.task_id,
-    )
+    if execution_input.phase != "admitted":
+        raise ConfigurationError(
+            f"Run {run_id} has no admitted execution-input proof."
+        )
     return preclaim.model_copy(
         update={
             "plan_id": f"parallel-admitted-{uuid.uuid4().hex}",
-            "scoped_task_digest": scoped_digest,
-            "scoped_task_ids": scoped_ids,
+            "scoped_task_digest": execution_input.admitted_task_scope_digest,
+            "scoped_task_ids": execution_input.scoped_task_ids,
+            "execution_input_digest": semantic_execution_input_digest(
+                execution_input
+            ),
             "created_at": utc_now(),
         }
     )
@@ -226,7 +238,11 @@ def prepare_parallel_run(
                 "Prepared execution base differs from the admitted parallel proof."
             )
 
-        admitted = _postclaim_parallel_plan(root, preclaim)
+        admitted = _postclaim_parallel_plan(
+            root,
+            preclaim,
+            prepared.record.run_id,
+        )
         binding = ParallelRunBinding(
             run_id=prepared.record.run_id,
             task_id=prepared.record.task_id,
@@ -492,7 +508,17 @@ def _assert_runtime_inputs_stable(
     new_inputs = [
         ParallelInputEvidence(
             scope=item.scope,
-            digest=_input_scope_digest(root, new_base, item.scope),
+            digest=input_scope_digest(
+                root,
+                new_base,
+                __import__(
+                    "projectctl.schemas.execution_input",
+                    fromlist=["ExecutionPathScope"],
+                ).ExecutionPathScope(
+                    path=item.scope.path,
+                    kind=item.scope.kind,
+                ),
+            ),
         )
         for item in plan.inputs
     ]
@@ -551,16 +577,31 @@ def _latest_reapplication_request(run_dir: Path):
     root = run_dir / "reapplications"
     if not root.exists():
         return None
-    requests = sorted(root.glob("*/request.json"))
-    if not requests:
+    parsed = []
+    for path in root.glob("*/request.json"):
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            version = raw.get("schema_version", 1)
+            if version == 2:
+                request = ParallelReapplicationRequest.model_validate(raw)
+            elif version == 1:
+                request = ParallelReapplicationRequestV1.model_validate(raw)
+            else:
+                raise ValueError(
+                    f"Unsupported reapplication request schema version: {version}"
+                )
+            parsed.append((request.requested_at, request.reapplication_id, path.parent, request))
+        except Exception as exc:
+            raise RecoveryError(
+                f"Invalid parallel reapplication request {path}: {exc}"
+            ) from exc
+    if not parsed:
         return None
-    path = requests[-1]
-    try:
-        return path.parent, ParallelReapplicationRequest.model_validate(
-            json.loads(path.read_text(encoding="utf-8"))
-        )
-    except Exception as exc:
-        raise RecoveryError(f"Invalid parallel reapplication request {path}: {exc}") from exc
+    _, _, directory, request = max(
+        parsed,
+        key=lambda item: (item[0], item[1]),
+    )
+    return directory, request
 
 
 def _reapply_locked(root: Path, run_id: str) -> ParallelReapplicationManifest:
@@ -611,8 +652,28 @@ def _reapply_locked(root: Path, run_id: str) -> ParallelReapplicationManifest:
         patch_digest = "sha256:" + hashlib.sha256(patch).hexdigest()
         _preflight_patch(root, target_base=target_base, patch=patch)
 
+        source_execution_input = load_execution_input(
+            run_dir,
+            expected_digest=getattr(plan, "execution_input_digest", None),
+        )
+        source_execution_input_digest = semantic_execution_input_digest(
+            source_execution_input
+        )
+        updated_execution_input = rebind_execution_input_base(
+            root,
+            source_execution_input,
+            new_base=target_base,
+        )
+        updated_execution_input_digest = semantic_execution_input_digest(
+            updated_execution_input
+        )
+
         reapplication_id = f"reapply-{uuid.uuid4().hex}"
         reapply_dir = run_dir / "reapplications" / reapplication_id
+        patch_artifact = (
+            f".projectctl/runs/{run_id}/reapplications/"
+            f"{reapplication_id}/candidate.patch"
+        )
         request = ParallelReapplicationRequest(
             reapplication_id=reapplication_id,
             run_id=run_id,
@@ -621,13 +682,18 @@ def _reapply_locked(root: Path, run_id: str) -> ParallelReapplicationManifest:
             source_candidate_commit=record.candidate_commit,
             source_execution_plan_digest=digest(plan),
             source_evidence_digest=digest(evidence),
+            source_execution_input_digest=source_execution_input_digest,
             target_base_commit=target_base,
             target_advance_changed_paths=changed_paths,
             patch_digest=patch_digest,
+            patch_artifact=patch_artifact,
             requested_at=utc_now(),
         )
         _atomic_json(reapply_dir / "request.json", request)
+        reapply_dir.mkdir(parents=True, exist_ok=True)
+        (reapply_dir / "candidate.patch").write_bytes(patch)
         shutil.copy2(run_dir / "execution-plan.json", reapply_dir / "source-execution-plan.json")
+        shutil.copy2(run_dir / "execution-input.json", reapply_dir / "source-execution-input.json")
         shutil.copy2(run_dir / "evidence-manifest.json", reapply_dir / "source-evidence-manifest.json")
         verification_path = run_dir / "verification-manifest.json"
         if verification_path.exists():
@@ -654,10 +720,14 @@ def _reapply_locked(root: Path, run_id: str) -> ParallelReapplicationManifest:
         new_plan = plan.model_copy(
             update={
                 "base_commit": target_base,
+                "execution_input_digest": updated_execution_input_digest,
+                "lineage_parent_plan_digest": digest(plan),
+                "lineage_kind": "reapplication",
                 "created_at": utc_now(),
             }
         )
         new_plan_digest = digest(new_plan)
+        _atomic_json(run_dir / "execution-input.json", updated_execution_input)
         _atomic_json(run_dir / "execution-plan.json", new_plan)
         for stale_name in ("verification-manifest.json", "evidence-manifest.json"):
             stale_path = run_dir / stale_name
@@ -678,10 +748,13 @@ def _reapply_locked(root: Path, run_id: str) -> ParallelReapplicationManifest:
             source_candidate_commit=request.source_candidate_commit,
             source_execution_plan_digest=request.source_execution_plan_digest,
             source_evidence_digest=request.source_evidence_digest,
+            source_execution_input_digest=source_execution_input_digest,
             target_base_commit=target_base,
             target_advance_changed_paths=changed_paths,
             patch_digest=patch_digest,
+            patch_artifact=patch_artifact,
             updated_execution_plan_digest=new_plan_digest,
+            updated_execution_input_digest=updated_execution_input_digest,
             reapplied_at=utc_now(),
         )
         _atomic_json(reapply_dir / "manifest.json", manifest)
@@ -693,6 +766,8 @@ def _reapply_locked(root: Path, run_id: str) -> ParallelReapplicationManifest:
                 "manifest_digest": digest(manifest),
                 "source_candidate_commit": request.source_candidate_commit,
                 "target_base_commit": target_base,
+                "source_execution_input_digest": source_execution_input_digest,
+                "updated_execution_input_digest": updated_execution_input_digest,
                 "fresh_verification_required": True,
             },
         )
@@ -734,8 +809,29 @@ def recover_parallel_reapplication(
         if plan.base_commit == request.target_base_commit and record.status == RunStatus.VERIFYING:
             return "reverification_required"
 
+    if record.status in _ACTIVE:
+        final = store.transition(
+            run_id,
+            expected={record.status},
+            status=RunStatus.NEEDS_DECISION,
+            terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
+        )
+        try:
+            reconcile_terminal_task(
+                root,
+                store=store,
+                run_id=final.run_id,
+                actor=_actor(),
+            )
+        except Exception as exc:
+            store.append_event(
+                run_id,
+                "parallel.reapplication_reconcile_failed",
+                {"error": str(exc)},
+            )
     raise RecoveryError(
-        "Parallel reapplication is in an ambiguous crash state; human decision is required."
+        "Parallel reapplication is in an ambiguous crash state; "
+        "run was persisted as needs_decision."
     )
 
 
