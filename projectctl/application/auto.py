@@ -17,6 +17,7 @@ from projectctl.core.enums import (
     RunStatus,
     RunTerminalReason,
 )
+from projectctl.core.errors import ProjectCtlError
 from projectctl.core.time import utc_now
 from projectctl.project.locking import project_lock
 from projectctl.schemas.auto import AutoRunPolicy, AutoRunReport, AutoRunStep
@@ -446,11 +447,33 @@ def run_auto(
                         )
                     record = final
 
-                decision, turn = request_fair_project_turn(
-                    root,
-                    requested_strategy=policy.requested_strategy,
-                    fallback=fallback,
-                )
+                try:
+                    decision, turn = request_fair_project_turn(
+                        root,
+                        requested_strategy=policy.requested_strategy,
+                        fallback=fallback,
+                    )
+                except ProjectCtlError as exc:
+                    steps.append(
+                        AutoRunStep(
+                            iteration=len(steps) + 1,
+                            task_id=record.task_id,
+                            run_id=record.run_id,
+                            started_status=started_status,
+                            final_status=record.status,
+                            action="worker_turn_failed",
+                            details=[*maintenance_details, str(exc)],
+                        )
+                    )
+                    return _finalize(
+                        root,
+                        auto_run_id=auto_run_id,
+                        started_at=started_at,
+                        stop_reason=AutoStopReason.RECOVERY_REQUIRED,
+                        completed_tasks=completed_tasks,
+                        attempted_tasks=attempted_tasks,
+                        steps=steps,
+                    )
                 if turn is None:
                     steps.append(
                         _portfolio_yield_step(
@@ -648,11 +671,35 @@ def run_auto(
 
             attempted_tasks += 1
             attempts_by_task[task_id] += 1
-            decision, turn = request_fair_project_turn(
-                root,
-                requested_strategy=policy.requested_strategy,
-                fallback=fallback,
-            )
+            try:
+                decision, turn = request_fair_project_turn(
+                    root,
+                    requested_strategy=policy.requested_strategy,
+                    fallback=fallback,
+                )
+            except ProjectCtlError as exc:
+                steps.append(
+                    AutoRunStep(
+                        iteration=len(steps) + 1,
+                        task_id=task_id,
+                        action="worker_turn_failed",
+                        project_state_digest_before=(
+                            status_before.decision.project_state_digest
+                        ),
+                        quota_mode=status_before.quota_state.mode,
+                        quota_stale=status_before.quota_state.stale,
+                        details=[str(exc)],
+                    )
+                )
+                return _finalize(
+                    root,
+                    auto_run_id=auto_run_id,
+                    started_at=started_at,
+                    stop_reason=AutoStopReason.RUN_FAILED,
+                    completed_tasks=completed_tasks,
+                    attempted_tasks=attempted_tasks,
+                    steps=steps,
+                )
             if turn is None:
                 steps.append(
                     _portfolio_yield_step(
