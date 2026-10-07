@@ -35,6 +35,7 @@ from projectctl.core.errors import (
     ConfigurationError,
     RunStoreError,
     RunLeaseError,
+    QuotaAdmissionError,
     QuotaError,
     StaleSnapshotError,
     WorkerError,
@@ -50,7 +51,12 @@ from projectctl.integrations.task_authority import resolve_task_authority
 from projectctl.project.loader import load_project_config
 from projectctl.project.locking import project_lock
 from projectctl.project.state import load_project_state, semantic_project_state_digest
-from projectctl.quota import QuotaCheckpointMonitor, QuotaManager, read_current_quota
+from projectctl.quota import (
+    QuotaCheckpointMonitor,
+    QuotaManager,
+    admission_lease_for_project,
+    read_current_quota,
+)
 from projectctl.scheduler.digests import semantic_task_snapshot_digest
 from projectctl.schemas.capabilities import (
     StrategyFallbackPolicy,
@@ -556,6 +562,15 @@ def _quota_monitor(project_root: Path, task) -> QuotaCheckpointMonitor:
     )
 
 
+def _evaluate_current_worker_quota(project_root: Path, task):
+    config = load_project_config(project_root)
+    quota = read_current_quota(config.quota.account)
+    manager = QuotaManager(config.quota)
+    state = manager.state(quota, now=utc_now())
+    eligible = manager.eligible_for_resource(task.resource_class, state)
+    return config, quota, state, eligible
+
+
 def _load_worker_checkpoint(path: Path) -> WorkerCheckpoint:
     if not path.exists():
         raise RunStoreError(f"Missing worker checkpoint: {path}")
@@ -864,6 +879,7 @@ def start_prepared_run(project_root: Path, run_id: str) -> StartedRun:
     store = RunStore(root)
     record = store.acquire_lease(run_id, owner=actor)
     run_dir = root / ".projectctl" / "runs" / run_id
+    preserve_claimed_on_error = False
 
     try:
         if record.status != RunStatus.CLAIMED:
@@ -961,109 +977,184 @@ def start_prepared_run(project_root: Path, run_id: str) -> StartedRun:
             )
             raise WorktreeError("Prepared worktree must be clean before worker start.")
 
-        adapter = _adapter_for_provider(plan.worker.provider)
-        try:
-            live_capabilities = adapter.probe()
-        except WorkerError:
-            _mark_start_failure(
-                store,
-                run_id,
-                expected=RunStatus.CLAIMED,
-                status=RunStatus.FAILED,
-                reason=RunTerminalReason.INFRASTRUCTURE_ERROR,
-            )
-            raise
-
-        live_digest = effective_capability_digest(live_capabilities)
-        if live_digest != plan.capability_snapshot_digest:
-            _atomic_json(run_dir / "worker-capabilities-live.json", live_capabilities)
-            _mark_start_failure(
-                store,
-                run_id,
-                expected=RunStatus.CLAIMED,
-                status=RunStatus.NEEDS_DECISION,
-                reason=RunTerminalReason.CAPABILITY_CHANGED,
-            )
-            raise CapabilityMismatchError(
-                "Worker capability surface changed between prepare and start."
-            )
-
         current_task = task_store_for_project(root).get(plan.task_id)
-        live_strategy = negotiate_strategy(
-            current_task,
-            live_capabilities,
-            requested=plan.strategy,
-        )
-        if not live_strategy.compatible or live_strategy.resolved != plan.strategy:
-            _mark_start_failure(
-                store,
-                run_id,
-                expected=RunStatus.CLAIMED,
-                status=RunStatus.NEEDS_DECISION,
-                reason=RunTerminalReason.CAPABILITY_CHANGED,
-            )
-            raise CapabilityMismatchError(
-                "Prepared worker strategy is no longer compatible with the live capability surface."
-            )
+        config = load_project_config(root)
 
-        context_rel = f".projectctl/runs/{run_id}/context-manifest.json"
         try:
-            context = assemble_context(
+            with admission_lease_for_project(
                 root,
-                worktree=actual_worktree,
+                account_id=config.quota.account,
                 run_id=run_id,
-                plan=plan,
-                strategy=stored_strategy,
-                context_manifest_path=context_rel,
-            )
-            _atomic_json(run_dir / "context-manifest.json", context.manifest)
-            _atomic_json(run_dir / "worker-request.json", context.request)
-            _atomic_json(run_dir / "worker-capabilities-live.json", live_capabilities)
-        except Exception:
-            _mark_start_failure(
-                store,
+                lease_owner=actor,
+            ) as admission_lease:
+                admission = admission_lease.admission
+                assert admission is not None
+                store.append_event(
+                    run_id,
+                    "worker.admission_acquired",
+                    {
+                        "account": admission.account_id,
+                        "project_instance_id": admission.project_instance_id,
+                        "expires_at": admission.expires_at.isoformat(),
+                    },
+                )
+
+                _, quota, quota_state, quota_eligible = _evaluate_current_worker_quota(
+                    root, current_task
+                )
+                store.append_event(
+                    run_id,
+                    "worker.quota_revalidated",
+                    {
+                        "account": config.quota.account,
+                        "quota_mode": quota_state.mode.value,
+                        "quota_stale": quota_state.stale,
+                        "quota_snapshot_digest": digest(quota),
+                        "eligible": quota_eligible,
+                    },
+                )
+                if not quota_eligible:
+                    preserve_claimed_on_error = True
+                    store.append_event(
+                        run_id,
+                        "worker.start_deferred",
+                        {
+                            "reason": "quota_insufficient",
+                            "quota_mode": quota_state.mode.value,
+                            "quota_stale": quota_state.stale,
+                            "quota_snapshot_digest": digest(quota),
+                        },
+                    )
+                    raise QuotaError(
+                        "Worker start deferred because current account quota is "
+                        "insufficient for this task resource class."
+                    )
+
+                adapter = _adapter_for_provider(plan.worker.provider)
+                try:
+                    live_capabilities = adapter.probe()
+                except WorkerError:
+                    _mark_start_failure(
+                        store,
+                        run_id,
+                        expected=RunStatus.CLAIMED,
+                        status=RunStatus.FAILED,
+                        reason=RunTerminalReason.INFRASTRUCTURE_ERROR,
+                    )
+                    raise
+
+                live_digest = effective_capability_digest(live_capabilities)
+                if live_digest != plan.capability_snapshot_digest:
+                    _atomic_json(run_dir / "worker-capabilities-live.json", live_capabilities)
+                    _mark_start_failure(
+                        store,
+                        run_id,
+                        expected=RunStatus.CLAIMED,
+                        status=RunStatus.NEEDS_DECISION,
+                        reason=RunTerminalReason.CAPABILITY_CHANGED,
+                    )
+                    raise CapabilityMismatchError(
+                        "Worker capability surface changed between prepare and start."
+                    )
+
+                live_strategy = negotiate_strategy(
+                    current_task,
+                    live_capabilities,
+                    requested=plan.strategy,
+                )
+                if not live_strategy.compatible or live_strategy.resolved != plan.strategy:
+                    _mark_start_failure(
+                        store,
+                        run_id,
+                        expected=RunStatus.CLAIMED,
+                        status=RunStatus.NEEDS_DECISION,
+                        reason=RunTerminalReason.CAPABILITY_CHANGED,
+                    )
+                    raise CapabilityMismatchError(
+                        "Prepared worker strategy is no longer compatible with the live "
+                        "capability surface."
+                    )
+
+                context_rel = f".projectctl/runs/{run_id}/context-manifest.json"
+                try:
+                    context = assemble_context(
+                        root,
+                        worktree=actual_worktree,
+                        run_id=run_id,
+                        plan=plan,
+                        strategy=stored_strategy,
+                        context_manifest_path=context_rel,
+                    )
+                    _atomic_json(run_dir / "context-manifest.json", context.manifest)
+                    _atomic_json(run_dir / "worker-request.json", context.request)
+                    _atomic_json(
+                        run_dir / "worker-capabilities-live.json", live_capabilities
+                    )
+                except Exception:
+                    _mark_start_failure(
+                        store,
+                        run_id,
+                        expected=RunStatus.CLAIMED,
+                        status=RunStatus.FAILED,
+                        reason=RunTerminalReason.CONTEXT_INVALID,
+                    )
+                    raise
+
+                store.transition(
+                    run_id,
+                    expected={RunStatus.CLAIMED},
+                    status=RunStatus.RUNNING,
+                    context_manifest=context_rel,
+                )
+                store.append_event(
+                    run_id,
+                    "worker.started",
+                    {
+                        "strategy": plan.strategy.value,
+                        "context_manifest_digest": digest(context.manifest),
+                    },
+                )
+
+                monitor = _quota_monitor(root, current_task)
+                started = _run_worker_operation(
+                    root,
+                    store=store,
+                    run_id=run_id,
+                    run_dir=run_dir,
+                    actor=actor,
+                    actual_worktree=actual_worktree,
+                    context=context,
+                    operation=lambda: adapter.start(
+                        context.request,
+                        workspace=actual_worktree,
+                        checkpoint_monitor=monitor,
+                    ),
+                )
+            store.append_event(
                 run_id,
-                expected=RunStatus.CLAIMED,
-                status=RunStatus.FAILED,
-                reason=RunTerminalReason.CONTEXT_INVALID,
+                "worker.admission_released",
+                {"account": config.quota.account},
             )
+            return started
+        except QuotaAdmissionError as exc:
+            current = store.get(run_id)
+            if current.status == RunStatus.CLAIMED:
+                preserve_claimed_on_error = True
+                store.append_event(
+                    run_id,
+                    "worker.start_deferred",
+                    {
+                        "reason": "account_admission_unavailable",
+                        "account": config.quota.account,
+                        "message": str(exc),
+                    },
+                )
             raise
-
-        store.transition(
-            run_id,
-            expected={RunStatus.CLAIMED},
-            status=RunStatus.RUNNING,
-            context_manifest=context_rel,
-        )
-        store.append_event(
-            run_id,
-            "worker.started",
-            {
-                "strategy": plan.strategy.value,
-                "context_manifest_digest": digest(context.manifest),
-            },
-        )
-
-        monitor = _quota_monitor(root, current_task)
-        return _run_worker_operation(
-            root,
-            store=store,
-            run_id=run_id,
-            run_dir=run_dir,
-            actor=actor,
-            actual_worktree=actual_worktree,
-            context=context,
-            operation=lambda: adapter.start(
-                context.request,
-                workspace=actual_worktree,
-                checkpoint_monitor=monitor,
-            ),
-        )
     finally:
         if sys.exc_info()[0] is not None:
             try:
                 current = store.get(run_id)
-                if current.status == RunStatus.CLAIMED:
+                if current.status == RunStatus.CLAIMED and not preserve_claimed_on_error:
                     store.transition(
                         run_id,
                         expected={RunStatus.CLAIMED},
@@ -1199,89 +1290,139 @@ def resume_checkpointed_run(project_root: Path, run_id: str) -> StartedRun:
 
         current_task = task_store_for_project(root).get(plan.task_id)
         config = load_project_config(root)
-        quota = read_current_quota(config.quota.account)
-        manager_quota = QuotaManager(config.quota)
-        quota_state = manager_quota.state(quota, now=utc_now())
-        if quota_state.stale or not manager_quota.eligible_for_resource(
-            current_task.resource_class, quota_state
-        ):
+
+        try:
+            with admission_lease_for_project(
+                root,
+                account_id=config.quota.account,
+                run_id=run_id,
+                lease_owner=actor,
+            ) as admission_lease:
+                admission = admission_lease.admission
+                assert admission is not None
+                store.append_event(
+                    run_id,
+                    "worker.admission_acquired",
+                    {
+                        "account": admission.account_id,
+                        "project_instance_id": admission.project_instance_id,
+                        "expires_at": admission.expires_at.isoformat(),
+                        "resume": True,
+                    },
+                )
+
+                _, quota, quota_state, quota_eligible = _evaluate_current_worker_quota(
+                    root, current_task
+                )
+                store.append_event(
+                    run_id,
+                    "worker.quota_revalidated",
+                    {
+                        "account": config.quota.account,
+                        "quota_mode": quota_state.mode.value,
+                        "quota_stale": quota_state.stale,
+                        "quota_snapshot_digest": digest(quota),
+                        "eligible": quota_eligible,
+                        "resume": True,
+                    },
+                )
+                if quota_state.stale or not quota_eligible:
+                    store.append_event(
+                        run_id,
+                        "worker.resume_deferred",
+                        {
+                            "checkpoint_ref": record.checkpoint_ref,
+                            "reason": "quota_stale_or_insufficient",
+                            "quota_mode": quota_state.mode.value,
+                            "quota_stale": quota_state.stale,
+                            "quota_snapshot_digest": digest(quota),
+                        },
+                    )
+                    raise QuotaError(
+                        "Checkpoint resume deferred because current quota is stale or "
+                        "insufficient for this task resource class."
+                    )
+
+                adapter = _adapter_for_provider(plan.worker.provider)
+                live_capabilities = adapter.probe()
+                if effective_capability_digest(live_capabilities) != plan.capability_snapshot_digest:
+                    _atomic_json(run_dir / "worker-capabilities-live.json", live_capabilities)
+                    _mark_start_failure(
+                        store,
+                        run_id,
+                        expected=RunStatus.RUNNING,
+                        status=RunStatus.NEEDS_DECISION,
+                        reason=RunTerminalReason.CAPABILITY_CHANGED,
+                    )
+                    raise CapabilityMismatchError(
+                        "Worker capability surface changed before checkpoint resume."
+                    )
+
+                live_strategy = negotiate_strategy(
+                    current_task,
+                    live_capabilities,
+                    requested=plan.strategy,
+                )
+                if not live_strategy.compatible or live_strategy.resolved != plan.strategy:
+                    _mark_start_failure(
+                        store,
+                        run_id,
+                        expected=RunStatus.RUNNING,
+                        status=RunStatus.NEEDS_DECISION,
+                        reason=RunTerminalReason.CAPABILITY_CHANGED,
+                    )
+                    raise CapabilityMismatchError(
+                        "Checkpointed worker strategy is no longer compatible."
+                    )
+
+                context = ContextBundle(
+                    task=current_task,
+                    manifest=context_manifest,
+                    request=request,
+                )
+                store.append_event(
+                    run_id,
+                    "worker.resumed",
+                    {
+                        "checkpoint_ref": record.checkpoint_ref,
+                        "worker_thread_id": checkpoint.worker_thread_id,
+                    },
+                )
+
+                monitor = _quota_monitor(root, current_task)
+                resumed = _run_worker_operation(
+                    root,
+                    store=store,
+                    run_id=run_id,
+                    run_dir=run_dir,
+                    actor=actor,
+                    actual_worktree=actual_worktree,
+                    context=context,
+                    operation=lambda: adapter.resume(
+                        checkpoint,
+                        request,
+                        workspace=actual_worktree,
+                        checkpoint_monitor=monitor,
+                    ),
+                )
+            store.append_event(
+                run_id,
+                "worker.admission_released",
+                {"account": config.quota.account, "resume": True},
+            )
+            return resumed
+        except QuotaAdmissionError as exc:
             store.append_event(
                 run_id,
                 "worker.resume_deferred",
                 {
                     "checkpoint_ref": record.checkpoint_ref,
-                    "quota_mode": quota_state.mode.value,
-                    "quota_stale": quota_state.stale,
-                    "quota_snapshot_digest": digest(quota),
+                    "reason": "account_admission_unavailable",
+                    "account": config.quota.account,
+                    "message": str(exc),
                 },
             )
-            raise QuotaError(
-                "Checkpoint resume deferred because current quota is stale or "
-                "insufficient for this task resource class."
-            )
-
-        adapter = _adapter_for_provider(plan.worker.provider)
-        live_capabilities = adapter.probe()
-        if effective_capability_digest(live_capabilities) != plan.capability_snapshot_digest:
-            _atomic_json(run_dir / "worker-capabilities-live.json", live_capabilities)
-            _mark_start_failure(
-                store,
-                run_id,
-                expected=RunStatus.RUNNING,
-                status=RunStatus.NEEDS_DECISION,
-                reason=RunTerminalReason.CAPABILITY_CHANGED,
-            )
-            raise CapabilityMismatchError(
-                "Worker capability surface changed before checkpoint resume."
-            )
-
-        live_strategy = negotiate_strategy(
-            current_task,
-            live_capabilities,
-            requested=plan.strategy,
-        )
-        if not live_strategy.compatible or live_strategy.resolved != plan.strategy:
-            _mark_start_failure(
-                store,
-                run_id,
-                expected=RunStatus.RUNNING,
-                status=RunStatus.NEEDS_DECISION,
-                reason=RunTerminalReason.CAPABILITY_CHANGED,
-            )
-            raise CapabilityMismatchError(
-                "Checkpointed worker strategy is no longer compatible."
-            )
-
-        context = ContextBundle(
-            task=current_task,
-            manifest=context_manifest,
-            request=request,
-        )
-        store.append_event(
-            run_id,
-            "worker.resumed",
-            {
-                "checkpoint_ref": record.checkpoint_ref,
-                "worker_thread_id": checkpoint.worker_thread_id,
-            },
-        )
-
-        monitor = _quota_monitor(root, current_task)
-        return _run_worker_operation(
-            root,
-            store=store,
-            run_id=run_id,
-            run_dir=run_dir,
-            actor=actor,
-            actual_worktree=actual_worktree,
-            context=context,
-            operation=lambda: adapter.resume(
-                checkpoint,
-                request,
-                workspace=actual_worktree,
-                checkpoint_monitor=monitor,
-            ),
-        )
+            raise
     finally:
         if sys.exc_info()[0] is not None:
             try:
