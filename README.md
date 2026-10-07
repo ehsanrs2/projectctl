@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-The **Post-M4 Architecture Review** contract-closure sequence is complete through **M4.2b — Unified Turn Orchestration**. **M5.0 — Context Discovery & Scope Assistance** is implemented, and the active milestone is now **M5.1 — Context Review & Adoption Workflow**.
+The **Post-M4 Architecture Review** contract-closure sequence is complete through **M4.2b — Unified Turn Orchestration**. **M5.0** and **M5.1** now complete the first context-discovery/reviewed-adoption vertical slice. The active milestone is **Post-M5 Architecture Review**.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -2034,7 +2034,9 @@ M4.2b  Unified Turn Orchestration                           completed
    ↓
 M5.0   Context Discovery & Scope Assistance                completed
    ↓
-M5.1   Context Review & Adoption Workflow                   next
+M5.1   Context Review & Adoption Workflow                   completed
+   ↓
+POST-M5 Post-M5 Architecture Review                         next
 ```
 
 M4.2a now separates full scheduler observation from execution validity through
@@ -2112,11 +2114,103 @@ Scope comparison reports suggested-vs-declared differences, but the human-manage
 
 See ADR-035.
 
-The next milestone is **M5.1 — Context Review & Adoption Workflow**, which will define an explicit approval boundary for turning accepted suggestions into human-managed scope policy.
+### M5.1 — Context Review & Adoption Workflow
 
-See ADR-029 through ADR-035, `docs/architecture/POST_M4_ARCHITECTURE_REVIEW.md`, and
+M5.1 provides the only ProjectCTL-managed path from M5.0 derived evidence into human-managed execution scope.
+
+The workflow is intentionally explicit:
+
+```text
+ContextDiscoveryReport / ContextScopeSuggestion
+        ↓
+review-scope
+        ↓
+ContextScopeReview + exact policy diff + review digest
+        ↓
+human copies/approves that exact digest
+        ↓
+ContextScopeAdoptionRequest
+        ↓
+atomic projectctl.parallel.yaml mutation
+        ↓
+ContextScopeAdoptionReceipt
+        ↓
+human inspects Git diff and commits policy
+```
+
+Create an exact review from a persisted suggestion:
+
+```bash
+projectctl context review-scope TASK_ID \
+  --suggestion SUGGESTION_ID \
+  --project /path/to/repo
+```
+
+Optionally select only specific suggested paths and add human resource keys:
+
+```bash
+projectctl context review-scope TASK_ID \
+  --suggestion SUGGESTION_ID \
+  --input src/parser.py \
+  --write src/parser.py \
+  --resource parser-registry \
+  --project /path/to/repo
+```
+
+The command prints the exact unified policy diff plus a review digest. Adoption requires that exact digest:
+
+```bash
+projectctl context adopt-scope TASK_ID \
+  --review REVIEW_ID \
+  --approve-digest REVIEW_DIGEST \
+  --project /path/to/repo
+```
+
+M5.1 safety properties:
+
+- adoption is **additive-only**; existing input/write/resource declarations are never removed
+- existing tree scopes suppress redundant exact-path additions beneath them
+- no-op reviews are rejected
+- project/base/task/suggestion/catalog-before identities are revalidated immediately before mutation
+- stale target/task/catalog changes require a fresh review
+- any active project run blocks scope-authority mutation
+- `projectctl.parallel.yaml` symlinks are refused for adoption
+- an `AdoptionRequest` is persisted before policy mutation
+- crash recovery only accepts exact before-state or exact reviewed after-state; any third state fails closed
+- the catalog write is atomic and post-write schema/scope digests are revalidated
+- an `AdoptionReceipt` binds the exact request digest and review digest
+- ProjectCTL does **not** commit the policy file; the final Git diff/commit remains a visible human boundary
+- if deterministic YAML serialization changes comments/formatting, the exact review diff warns about that before approval
+
+Public artifacts:
+
+- `ContextScopeReview v1`
+- `ContextScopeAdoptionRequest v1`
+- `ContextScopeAdoptionReceipt v1`
+
+See ADR-036.
+
+M5.0/M5.1 now form this authority chain:
+
+```text
+derived discovery
+      ↓
+non-authoritative suggestion
+      ↓
+digest-bound human review
+      ↓
+explicit adoption
+      ↓
+human-managed projectctl.parallel.yaml
+      ↓
+ExecutionInputManifest / ParallelPlan authority
+```
+
+The next milestone is **Post-M5 Architecture Review**. It should verify this chain end to end before ProjectCTL expands context discovery into more languages/providers or stronger automation.
+
+See ADR-029 through ADR-036, `docs/architecture/POST_M4_ARCHITECTURE_REVIEW.md`, and
 `docs/PROJECTCTL_BLUEPRINT.md`.
 
 Next:
 
-- **M5.1 — Context Review & Adoption Workflow**
+- **Post-M5 Architecture Review**
