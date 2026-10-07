@@ -7,6 +7,9 @@ from projectctl.core.time import utc_now
 from projectctl.integrations.beads.client import BeadsClient
 from projectctl.core.digest import digest
 from projectctl.schemas.task_claim import TaskClaim, TaskClaimRequest
+from projectctl.schemas.task import NormalizedTask
+from projectctl.core.enums import TaskStatus
+from projectctl.scheduler.digests import semantic_task_digest
 
 
 class BeadsTaskClaimer:
@@ -71,6 +74,34 @@ class BeadsTaskClaimer:
         status = str(current.get("status") or "").lower()
         assignee = str(current.get("assignee") or "").strip()
         return status == "in_progress" and assignee == claim.actor
+
+    def validate_transition(
+        self,
+        before: NormalizedTask,
+        after: NormalizedTask,
+        claim: TaskClaim,
+    ) -> bool:
+        if (
+            not claim.acquired
+            or claim.provider != "beads"
+            or before.id != claim.task_id
+            or after.id != claim.task_id
+            or before.source.provider != "beads"
+            or after.source.provider != "beads"
+            or before.status != TaskStatus.READY
+            or after.status != TaskStatus.RUNNING
+        ):
+            return False
+
+        normalized_after = after.model_copy(
+            update={
+                "status": before.status,
+                "source": after.source.model_copy(
+                    update={"revision": before.source.revision}
+                ),
+            }
+        )
+        return semantic_task_digest(before) == semantic_task_digest(normalized_after)
 
     def release(self, claim: TaskClaim) -> None:
         if not claim.acquired:
