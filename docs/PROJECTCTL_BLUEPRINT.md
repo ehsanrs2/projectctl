@@ -2,7 +2,7 @@
 
 Status: **Canonical high-level product, architecture, and roadmap reference**
 
-Last architecture review: **2026-10-05**
+Last architecture review: **2026-10-07**
 
 This document answers four questions:
 
@@ -846,17 +846,20 @@ held through verification, integration, publication or review waiting.
 The first version deliberately serializes worker turns per quota account. ProjectCTL still does not
 invent token or percentage reservations without a trustworthy per-task cost estimator.
 
-### Finding J — portfolio/global orchestration groundwork exists but is not yet authoritative
+### Finding J — portfolio arbitration preserves project-local scheduling authority (resolved in M4.0b)
 
-The global DB already contains a stable `project_registry`, but no global scheduler or arbitration
-artifact exists.
+The global `project_registry` now feeds a deterministic portfolio arbitration layer.
 
-Project-local scheduler scores are policy-local and must not be treated as directly comparable
-global utilities.
+**Resolution:** M4.0b chooses a project and worker-turn action from validated candidate envelopes,
+while each project's existing scheduler remains authoritative for task selection. Raw project-local
+scheduler scores are never treated as globally comparable utilities.
 
-**Decision:** M4.0b is now the active milestone. It will arbitrate among project-level candidate
-envelopes on top of the M4.0a atomic admission primitive. Each project's scheduler remains
-authoritative for task choice inside that project.
+Durable continuation (`resume_run`, then `start_run`) precedes new work. Within the same action
+class, least-recently-admitted fairness is derived from M4.0a admission history. Normal decisions
+are materialized as global audit artifacts, while actual worker-turn ownership remains the M4.0a
+account admission lease.
+
+See ADR-030.
 
 ---
 
