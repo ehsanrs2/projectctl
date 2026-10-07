@@ -215,6 +215,11 @@ def build_preclaim_execution_input(
         preclaim_task_scope_digest=scoped_digest,
         admitted_task_scope_digest=scoped_digest,
         scoped_task_ids=scoped_ids,
+        preclaim_tasks=[
+            item
+            for item in sorted(tasks.tasks, key=lambda value: value.id)
+            if item.id in set(scoped_ids)
+        ],
         base_commit=base_commit,
         integration_target_ref=integration_target_ref,
         scope_digest=scope_digest,
@@ -319,6 +324,35 @@ def finalize_execution_input(
             "claim_transition": transition,
             "created_at": now,
         }
+    )
+
+
+def finalize_execution_input_from_current(
+    project_root: Path,
+    preclaim: ExecutionInputManifest,
+    *,
+    claim: TaskClaim,
+    claimer,
+    now: datetime | None = None,
+) -> ExecutionInputManifest:
+    before_snapshot = TaskSnapshot(
+        provider=preclaim.task_provider,
+        captured_at=preclaim.created_at,
+        source_revision=None,
+        tasks=preclaim.preclaim_tasks,
+    )
+    after_snapshot = capture_task_snapshot(
+        project_root,
+        state="all",
+        read_cache_max_age_seconds=0,
+    )
+    return finalize_execution_input(
+        preclaim,
+        before_snapshot=before_snapshot,
+        after_snapshot=after_snapshot,
+        claim=claim,
+        claimer=claimer,
+        now=now,
     )
 
 
