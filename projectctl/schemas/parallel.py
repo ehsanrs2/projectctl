@@ -62,7 +62,7 @@ class ParallelInputEvidence(ProjectCtlModel):
     digest: str = Field(min_length=1)
 
 
-class ParallelPlan(ProjectCtlModel):
+class ParallelPlanV1(ProjectCtlModel):
     schema_kind: Literal["projectctl.parallel_plan"] = "projectctl.parallel_plan"
     schema_version: Literal[1] = 1
     plan_id: str = Field(min_length=1)
@@ -77,6 +77,25 @@ class ParallelPlan(ProjectCtlModel):
     inputs: list[ParallelInputEvidence] = Field(min_length=1)
     writes: list[ParallelPathScope] = Field(min_length=1)
     resources: list[str] = Field(default_factory=list)
+    created_at: AwareDatetime
+
+
+class ParallelPlan(ProjectCtlModel):
+    schema_kind: Literal["projectctl.parallel_plan"] = "projectctl.parallel_plan"
+    schema_version: Literal[2] = 2
+    plan_id: str = Field(min_length=1)
+    project_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    integration_target_ref: str = Field(min_length=1)
+    base_commit: str = Field(min_length=7)
+    project_state_digest: str = Field(min_length=1)
+    scoped_task_digest: str = Field(min_length=1)
+    scoped_task_ids: list[str] = Field(min_length=1)
+    scope_digest: str = Field(min_length=1)
+    inputs: list[ParallelInputEvidence] = Field(min_length=1)
+    writes: list[ParallelPathScope] = Field(min_length=1)
+    resources: list[str] = Field(default_factory=list)
+    execution_input_digest: str | None = None
     created_at: AwareDatetime
 
 
@@ -145,7 +164,7 @@ class ParallelIntegrationQueue(ProjectCtlModel):
     entries: list[ParallelQueueEntry] = Field(default_factory=list)
 
 
-class ParallelReapplicationRequest(ProjectCtlModel):
+class ParallelReapplicationRequestV1(ProjectCtlModel):
     schema_kind: Literal["projectctl.parallel_reapplication_request"] = (
         "projectctl.parallel_reapplication_request"
     )
@@ -163,7 +182,27 @@ class ParallelReapplicationRequest(ProjectCtlModel):
     requested_at: AwareDatetime
 
 
-class ParallelReapplicationManifest(ProjectCtlModel):
+class ParallelReapplicationRequest(ProjectCtlModel):
+    schema_kind: Literal["projectctl.parallel_reapplication_request"] = (
+        "projectctl.parallel_reapplication_request"
+    )
+    schema_version: Literal[2] = 2
+    reapplication_id: str = Field(min_length=1)
+    run_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    source_base_commit: str = Field(min_length=7)
+    source_candidate_commit: str = Field(min_length=7)
+    source_execution_plan_digest: str = Field(min_length=1)
+    source_evidence_digest: str = Field(min_length=1)
+    source_execution_input_digest: str | None = None
+    target_base_commit: str = Field(min_length=7)
+    target_advance_changed_paths: list[RepoRelativePath] = Field(default_factory=list)
+    patch_digest: str = Field(min_length=1)
+    patch_artifact: RepoRelativePath | None = None
+    requested_at: AwareDatetime
+
+
+class ParallelReapplicationManifestV1(ProjectCtlModel):
     schema_kind: Literal["projectctl.parallel_reapplication"] = (
         "projectctl.parallel_reapplication"
     )
@@ -179,6 +218,28 @@ class ParallelReapplicationManifest(ProjectCtlModel):
     target_advance_changed_paths: list[RepoRelativePath] = Field(default_factory=list)
     patch_digest: str = Field(min_length=1)
     updated_execution_plan_digest: str = Field(min_length=1)
+    reapplied_at: AwareDatetime
+
+
+class ParallelReapplicationManifest(ProjectCtlModel):
+    schema_kind: Literal["projectctl.parallel_reapplication"] = (
+        "projectctl.parallel_reapplication"
+    )
+    schema_version: Literal[2] = 2
+    reapplication_id: str = Field(min_length=1)
+    run_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    source_base_commit: str = Field(min_length=7)
+    source_candidate_commit: str = Field(min_length=7)
+    source_execution_plan_digest: str = Field(min_length=1)
+    source_evidence_digest: str = Field(min_length=1)
+    source_execution_input_digest: str | None = None
+    target_base_commit: str = Field(min_length=7)
+    target_advance_changed_paths: list[RepoRelativePath] = Field(default_factory=list)
+    patch_digest: str = Field(min_length=1)
+    patch_artifact: RepoRelativePath | None = None
+    updated_execution_plan_digest: str = Field(min_length=1)
+    updated_execution_input_digest: str | None = None
     reapplied_at: AwareDatetime
 
 
