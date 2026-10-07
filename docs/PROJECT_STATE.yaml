@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Add an explicit review boundary for accepting derived context evidence into human-managed execution scope without allowing silent authority mutation.
+current_goal: Review the complete M5 derived-context authority chain end to end before expanding context discovery or adding stronger automation.
 active_milestone:
-  id: M5.1
-  title: Context Review & Adoption Workflow
+  id: POST-M5
+  title: Post-M5 Architecture Review
   aliases:
-    - Scope Review
-    - Context Adoption
-    - Reviewed Scope Adoption
+    - Context Authority Review
+    - Post-M5 Review
+    - M5 Architecture Review
 updated_at: null

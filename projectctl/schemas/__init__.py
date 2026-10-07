@@ -10,6 +10,11 @@ from projectctl.schemas.capabilities import (
     WorkerRuntimeDescriptor,
     WorkerStrategyDecision,
 )
+from projectctl.schemas.context_adoption import (
+    ContextScopeAdoptionReceipt,
+    ContextScopeAdoptionRequest,
+    ContextScopeReview,
+)
 from projectctl.schemas.context_discovery import (
     ContextDiscoveryEvidence,
     ContextDiscoveryReport,
@@ -125,6 +130,9 @@ __all__ = [
     "ContextManifest",
     "ContextPathCandidate",
     "ContextScopeSuggestion",
+    "ContextScopeReview",
+    "ContextScopeAdoptionRequest",
+    "ContextScopeAdoptionReceipt",
     "ContextManifestV1",
     "ContextManifestV2",
     "DiffPolicy",

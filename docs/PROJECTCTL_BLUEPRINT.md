@@ -125,6 +125,7 @@ Exactly one authority should exist for each mutable concern.
 | Parallel execution scope | `projectctl.parallel.yaml` | Human-managed input/write/resource authorization used by M4.1 proofs |
 | Execution input validity | `ExecutionInputManifest v1` + `ClaimTransitionEvidence v1` | Unified in M4.2a; scheduler full-snapshot digest is audit/ranking evidence, not execution invalidation authority |
 | Context discovery evidence | `ContextDiscoveryReport v1` / `ContextScopeSuggestion v1` | Derived only; assists scope authoring and never overrides human-managed scope or ExecutionInput authority |
+| Reviewed scope adoption | `ContextScopeReview v1` + AdoptionRequest/Receipt v1 | Digest-bound human approval may mutate `projectctl.parallel.yaml`; after mutation the catalog is ordinary human-managed execution authority |
 | Project quota policy | `.projectctl/config.yaml` | Local policy, not quota observation/admission authority |
 | Generated status dashboards | `docs/generated/*` | Derived and non-authoritative |
 | Telemetry | `.projectctl/telemetry.sqlite` | Observational only |
@@ -1606,15 +1607,55 @@ See ADR-035.
 
 ### M5.1 — Context Review & Adoption Workflow
 
+**Completed.**
+
+M5.1 adds the explicit authority boundary between M5.0 derived evidence and human-managed execution scope:
+
+- `ContextScopeReview v1` binds exact project/task/base/discovery/suggestion/catalog-before identities
+- review output contains the exact proposed catalog YAML and byte-level unified diff
+- review selection is additive-only; existing inputs, writes and resources are preserved
+- existing tree scopes semantically cover redundant exact suggestions beneath them
+- no-op reviews are rejected
+- human-added exclusive resource keys are normalized and recorded explicitly
+- the exact review digest is the approval token; boolean confirmation is not enough
+- `ContextScopeAdoptionRequest v1` persists approval intent before policy mutation
+- adoption revalidates project/base/task/suggestion/catalog state immediately before writing
+- any active project run blocks scope-authority mutation
+- policy writes through symlinks are refused
+- catalog mutation is atomic and the post-write catalog/scope digests must equal the reviewed proposal
+- write failure restores the exact reviewed before-bytes
+- retry after crash can continue from exact before-state or reconstruct a receipt from exact reviewed after-state
+- any third/ambiguous catalog state fails closed for manual audit
+- `ContextScopeAdoptionReceipt v1` binds both review digest and durable request digest
+- adoption never commits `projectctl.parallel.yaml`; Git review/commit remains a final visible human policy boundary
+- YAML normalization/comment changes are surfaced in the review diff/warnings before approval
+
+See ADR-036.
+
+### Post-M5 Architecture Review
+
 **Active milestone.**
 
-Define an explicit approval workflow for accepting selected M5.0 evidence into human-managed execution scope. Any catalog mutation must be deliberate, diffable, stale-safe, and auditable; discovery remains non-authoritative until that approval boundary is crossed.
+Review the complete M5 authority chain before expanding context discovery or automation:
+
+```text
+derived discovery
+  -> scope suggestion
+  -> exact digest-bound review
+  -> durable adoption request
+  -> human-managed scope policy
+  -> execution input / parallel proof
+```
+
+The review must check for circular authority, stale-evidence gaps, crash windows, hidden auto-application,
+over-broad scope expansion, and any path by which derived Graphify/AST evidence could bypass explicit
+human approval.
 
 ### Later product directions
 
 Retained after M4.2 contract closure:
 
-- **active M5.1:** reviewed adoption of derived scope evidence into human-managed policy
+- **active:** Post-M5 Architecture Review
 - additional worker providers
 - governed skills registry and supply-chain policy
 - first-class Research / Hypothesis / Experiment / Evidence / Decision flows
