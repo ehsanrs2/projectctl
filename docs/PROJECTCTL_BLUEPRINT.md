@@ -122,6 +122,8 @@ Exactly one authority should exist for each mutable concern.
 | Quota observations / provider selection | `$PROJECTCTL_HOME/state.sqlite` | Account-global |
 | Account execution admission | `$PROJECTCTL_HOME/state.sqlite -> execution_admissions` | Implemented in M4.0a; exclusive per quota account, expiring, and distinct from project/task ownership |
 | Cross-project portfolio arbitration | Registered projects + project-local scheduler envelopes + admission history | Implemented in M4.0b; chooses project/action, never raw cross-project task scores |
+| Parallel execution scope | `projectctl.parallel.yaml` | Human-managed input/write/resource authorization used by M4.1 proofs |
+| Execution input validity | **Currently split:** `ExecutionPlan v2` + `ParallelPlan/ParallelRunBinding` | Post-M4 review found this authority split; M4.2a is active to unify it |
 | Project quota policy | `.projectctl/config.yaml` | Local policy, not quota observation/admission authority |
 | Generated status dashboards | `docs/generated/*` | Derived and non-authoritative |
 | Telemetry | `.projectctl/telemetry.sqlite` | Observational only |
@@ -189,8 +191,12 @@ A task is not complete until the required evidence chain is valid.
 
 A verified candidate is bound to its exact base and exact diff.
 
-Integration is fast-forward-only today. If the target advances, ProjectCTL does not silently
-rebase/cherry-pick the candidate and pretend the old evidence still applies.
+Final integration remains exact-base / ancestry-proven. If the target advances, ProjectCTL does
+not silently rebase/cherry-pick the candidate and pretend the old evidence still applies.
+
+M4.1b may perform a control-plane reapplication only when scope evidence proves the target advance
+is unrelated; the transformed workspace must then receive fresh verification and a new candidate
+before integration.
 
 ### 4.7 Worker Git authority is intentionally narrow
 
@@ -250,45 +256,90 @@ Likewise, the existence of a Git remote does not mean ProjectCTL is allowed to p
 Local-only means a local Git repository without a network remote. The current execution model is
 Git-native and does not support a completely non-Git workspace.
 
+
+### 4.14 Scheduler observation is not execution input authority
+
+The scheduler may observe and digest the complete task snapshot for deterministic ranking and audit.
+
+Execution validity must be bound only to the task/dependency/project/base inputs that semantically
+authorize the selected run. Expected mutations caused by ProjectCTL's own durable claim are modeled
+as claim transitions, not treated as unrelated stale context.
+
+Serial and parallel execution must consume one execution-input authority. A sidecar proof may add
+write/resource conflict constraints, but it may not define a second task-validity contract.
+
+See ADR-033 and `docs/architecture/POST_M4_ARCHITECTURE_REVIEW.md`.
+
 ---
 
 ## 5. Current architecture
 
+The post-M4 review records the **current** architecture with two known closure gaps rather than
+drawing the intended M4.2 end state as if it already existed.
+
 ```mermaid
 flowchart TD
-    H[Human intent / Project State / ADRs] --> S[Scheduler]
+    H[Human intent / Project State / ADRs] --> S[Project-local Scheduler]
     T[Task Authority] --> N[Normalized TaskSnapshot]
     N --> S
     Q[Account Quota Provider] --> S
 
+    REG[Global Project Registry] --> PORT[Portfolio Arbitration]
+    ADM[(Account-global Execution Admission)]
+
     S --> EP[Execution Planner]
     WCap[Worker Capability Probe] --> EP
-    EP --> Plan[Immutable ExecutionPlan]
+    EP --> EPlan[ExecutionPlan v2<br/>whole TaskSnapshot digest]
 
-    Plan --> Claim[Task Claim]
+    PS[projectctl.parallel.yaml] --> PP[Parallel Planning Proof]
+    N --> PP
+    PP --> PPlan[ParallelPlan / ParallelRunBinding<br/>scoped task + code/resource proof]
+
+    EPlan -. M4.2a: unify execution input authority .- PPlan
+
+    EPlan --> Claim[Task / Execution Claim]
+    PPlan --> Active[Bounded Parallel Active Set]
     Claim --> WT[Isolated Worktree]
-    WT --> Ctx[Context Assembly]
-    Ctx --> Worker[Worker Adapter]
+    Active --> WT
 
+    PORT --> PTurn[Portfolio-selected Worker Turn]
+    Active --> LTurn[Parallel-runtime Worker Turn]
+    PTurn --> ADM
+    LTurn --> ADM
+    ADM --> Worker[Worker Adapter]
+
+    PORT -. M4.2b: unify automated turn arbitration .-> Active
+
+    WT --> Ctx[Context Assembly]
+    Ctx --> Worker
     Worker --> CP{Quota boundary?}
-    CP -->|yes| Checkpoint[Durable WorkerCheckpoint]
-    Checkpoint --> Worker
-    CP -->|no / completed| Verify[Independent Verification]
+    CP -->|checkpoint| Checkpoint[Durable WorkerCheckpoint]
+    Checkpoint --> PTurn
+    Checkpoint --> LTurn
+    CP -->|completed| Verify[Independent Verification]
 
     Verify --> Evidence[Evidence + Candidate Commit]
-    Evidence --> Integrate[Fast-forward Local Integration]
-    Integrate --> Publish[Remote Publication when required]
+    Evidence --> IQ[Deterministic Integration Queue]
+    IQ --> Drift{Target advanced?}
+    Drift -->|no| Integrate[Exact-base Integration]
+    Drift -->|yes, safe| Reapply[Archive + Reapply]
+    Reapply --> Verify
+    Integrate --> Publish[Remote Publication / Review when required]
     Publish --> Complete[Canonical Task Completion]
 
     RunDB[(Project Run Store)] --- Claim
-    RunDB --- Worker
+    RunDB --- Active
     RunDB --- Checkpoint
     RunDB --- Verify
-    RunDB --- Integrate
-
-    Telemetry[(Local Telemetry)] -. observes .-> S
-    Telemetry -. observes .-> Worker
+    RunDB --- IQ
 ```
+
+Two gaps are intentionally visible:
+
+1. `ExecutionPlan v2` still uses the whole TaskSnapshot while the parallel proof uses scoped
+   task/dependency inputs. M4.2a unifies these.
+2. portfolio arbitration still assumes at most one active run per project while M4.1b permits a
+   valid multi-run active set. M4.2b unifies automated turn arbitration.
 
 The `Publish` stage is selected by Code Delivery policy, not Task Authority. Local delivery can
 complete from verified local integration; `direct_git` requires exact-base remote publication and
@@ -1340,7 +1391,8 @@ eligibility/dependencies, additive lifecycle writes, independent ownership, and 
 delivery.
 
 The post-M3 architecture review selected the M4 global-orchestration sequence rather than
-extending provider-specific work. M4.0a is complete and M4.0b is now active.
+extending provider-specific work. That sequence progressed through M4.1b; the post-M4 review below
+records the current M4.2 contract-closure work.
 
 ### M4 — Global Orchestration & Safe Concurrency
 
@@ -1433,14 +1485,15 @@ See ADR-031.
 
 **Completed.**
 
-M4.1b adds an explicit bounded parallel runtime on top of M4.1a proof artifacts:
+M4.1b adds an explicit bounded **parallel active-set / concurrent-WIP runtime** on top of M4.1a
+proof artifacts. Worker turns for one quota account remain serialized by M4.0a:
 
 - active-set capacity is explicit (2–8)
 - every additional run is pairwise admitted against all existing parallel bindings
 - declared exclusive resources act as active-set reservations
 - M4.0a still serializes quota-consuming worker turns per account
-- post-claim `ParallelRunBinding v1` avoids confusing a run's own READY → RUNNING claim with
-  external task drift
+- post-claim `ParallelRunBinding v1` gives the parallel proof a claim-aware scoped task state,
+  but the post-M4 review found that ExecutionPlan v2 still has a separate whole-snapshot contract
 - verified candidate paths must stay inside declared write scopes
 - integration order is deterministic by run creation time/run id
 - earlier review-waiting runs remain queue head
@@ -1457,17 +1510,47 @@ See ADR-032.
 
 ### Post-M4 Architecture Review
 
+**Completed.**
+
+The review is recorded in `docs/architecture/POST_M4_ARCHITECTURE_REVIEW.md` and ADR-033.
+
+It found that M4.0–M4.1 safety primitives are individually valuable, but two composition gaps must
+close before the global/parallel control plane is considered architecturally complete:
+
+- scheduler/full-snapshot execution inputs versus scoped parallel execution inputs
+- portfolio single-active-run assumptions versus M4.1b multi-run active sets
+
+#### M4.2a — Execution Input Contract Unification
+
 **Active milestone.**
 
-The M4 correctness sequence identified by the post-M3 review is complete. Re-evaluate authority,
-recovery, throughput and product priorities before selecting the next feature milestone.
+Separate scheduler observation from execution invalidation authority, model provider-native claim
+mutation explicitly, and make serial execution, parallel proof, context assembly, verification and
+reapplication consume one scoped execution-input contract.
+
+Required closure includes claim-aware Beads semantics, additive persisted schemas, code-scope
+context, verification-time write authorization, reapplication lineage and cross-layer scenario
+tests.
+
+See ADR-033.
+
+#### M4.2b — Unified Turn Orchestration
+
+**Planned after M4.2a.**
+
+Make portfolio arbitration aware of parallel active sets and route automated worker turns through
+one account-global dispatcher while M4.0a remains the final atomic admission authority.
+
+Non-quota phases such as verification, recovery and integration remain separate from quota-consuming
+worker-turn arbitration.
 
 ### Later product directions
 
-Retained after the M4 correctness sequence:
+Retained after M4.2 contract closure:
 
+- **leading M5 candidate:** context discovery / scope assistance with optional Graphify-derived
+  relationships
 - additional worker providers
-- optional Graphify-derived code/context graph
 - governed skills registry and supply-chain policy
 - first-class Research / Hypothesis / Experiment / Evidence / Decision flows
 - richer evaluation and trace export
