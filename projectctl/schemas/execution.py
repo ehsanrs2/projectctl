@@ -15,6 +15,7 @@ from projectctl.schemas.base import ProjectCtlModel
 from projectctl.schemas.config import RepoRelativePath
 from projectctl.schemas.quota import QuotaSnapshot
 from projectctl.schemas.run import WorkerDescriptor
+from projectctl.schemas.execution_input import ExecutionPathScope
 
 
 class GitExecutionPolicy(ProjectCtlModel):
@@ -50,7 +51,7 @@ class ExecutionPlanV1(ProjectCtlModel):
     created_at: AwareDatetime
 
 
-class ExecutionPlan(ProjectCtlModel):
+class ExecutionPlanV2(ProjectCtlModel):
     schema_kind: Literal["projectctl.execution_plan"] = "projectctl.execution_plan"
     schema_version: Literal[2] = 2
     plan_id: str = Field(min_length=1)
@@ -70,6 +71,48 @@ class ExecutionPlan(ProjectCtlModel):
     execution_policy: ExecutionPolicy = Field(default_factory=ExecutionPolicy)
     verification_profile: str = Field(default="default", min_length=1)
     created_at: AwareDatetime
+
+
+class ExecutionPlan(ProjectCtlModel):
+    schema_kind: Literal["projectctl.execution_plan"] = "projectctl.execution_plan"
+    schema_version: Literal[3] = 3
+    plan_id: str = Field(min_length=1)
+    project_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    task_source_revision: str | None = None
+    scheduler_decision_digest: str = Field(min_length=1)
+    task_snapshot_digest: str = Field(
+        min_length=1,
+        description="Full scheduler-observation digest; not execution invalidation authority.",
+    )
+    project_state_digest: str = Field(min_length=1)
+    quota_snapshot_digest: str = Field(min_length=1)
+    capability_snapshot_digest: str = Field(min_length=1)
+    strategy_decision_digest: str = Field(min_length=1)
+    strategy: WorkerStrategyKind
+    base_commit: str = Field(min_length=7)
+    integration_target_ref: str = Field(min_length=1)
+    worker: WorkerDescriptor
+    execution_policy: ExecutionPolicy = Field(default_factory=ExecutionPolicy)
+    verification_profile: str = Field(default="default", min_length=1)
+    execution_input_manifest: RepoRelativePath | None = None
+    execution_input_digest: str | None = None
+    lineage_parent_plan_digest: str | None = None
+    lineage_kind: Literal["initial", "reapplication"] = "initial"
+    created_at: AwareDatetime
+
+
+def parse_execution_plan(raw: object) -> ExecutionPlan | ExecutionPlanV2 | ExecutionPlanV1:
+    if not isinstance(raw, dict):
+        raise ValueError("Execution plan must be an object.")
+    version = raw.get("schema_version", 1)
+    if version == 3:
+        return ExecutionPlan.model_validate(raw)
+    if version == 2:
+        return ExecutionPlanV2.model_validate(raw)
+    if version == 1:
+        return ExecutionPlanV1.model_validate(raw)
+    raise ValueError(f"Unsupported execution plan schema version: {version}")
 
 
 class PermissionRequest(ProjectCtlModel):
@@ -96,7 +139,7 @@ class WorkerRequestV1(ProjectCtlModel):
     output_schema_kind: Literal["projectctl.worker_result"] = "projectctl.worker_result"
 
 
-class WorkerRequest(ProjectCtlModel):
+class WorkerRequestV2(ProjectCtlModel):
     schema_kind: Literal["projectctl.worker_request"] = "projectctl.worker_request"
     schema_version: Literal[2] = 2
     run_id: str = Field(min_length=1)
@@ -118,6 +161,46 @@ class WorkerRequest(ProjectCtlModel):
     constraints: list[str] = Field(default_factory=list)
     stop_conditions: list[str] = Field(default_factory=list)
     output_schema_kind: Literal["projectctl.worker_result"] = "projectctl.worker_result"
+
+
+class WorkerRequest(ProjectCtlModel):
+    schema_kind: Literal["projectctl.worker_request"] = "projectctl.worker_request"
+    schema_version: Literal[3] = 3
+    run_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    base_commit: str = Field(min_length=7)
+    branch_name: str = Field(min_length=1)
+    worktree_id: str = Field(min_length=1)
+    execution_plan_digest: str = Field(min_length=1)
+    capability_snapshot_digest: str = Field(min_length=1)
+    strategy_decision_digest: str = Field(min_length=1)
+    strategy: WorkerStrategyKind
+    context_manifest: RepoRelativePath
+    context_manifest_digest: str = Field(min_length=1)
+    context_sources: list[RepoRelativePath] = Field(default_factory=list)
+    execution_input_digest: str | None = None
+    input_scopes: list[ExecutionPathScope] = Field(default_factory=list)
+    write_scopes: list[ExecutionPathScope] = Field(default_factory=list)
+    worker: WorkerDescriptor
+    execution_policy: ExecutionPolicy
+    objective: str = Field(min_length=1)
+    acceptance_criteria: list[str] = Field(default_factory=list)
+    constraints: list[str] = Field(default_factory=list)
+    stop_conditions: list[str] = Field(default_factory=list)
+    output_schema_kind: Literal["projectctl.worker_result"] = "projectctl.worker_result"
+
+
+def parse_worker_request(raw: object) -> WorkerRequest | WorkerRequestV2 | WorkerRequestV1:
+    if not isinstance(raw, dict):
+        raise ValueError("Worker request must be an object.")
+    version = raw.get("schema_version", 1)
+    if version == 3:
+        return WorkerRequest.model_validate(raw)
+    if version == 2:
+        return WorkerRequestV2.model_validate(raw)
+    if version == 1:
+        return WorkerRequestV1.model_validate(raw)
+    raise ValueError(f"Unsupported worker request schema version: {version}")
 
 
 class WorkerOutputPayload(ProjectCtlModel):
