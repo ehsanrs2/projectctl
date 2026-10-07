@@ -55,7 +55,6 @@ class ContextScopeAdoptionRequest(ProjectCtlModel):
     task_id: str = Field(min_length=1)
     review_id: str = Field(min_length=1)
     review_digest: str = Field(min_length=1)
-    request_digest: str = Field(min_length=1)
     approval_digest: str = Field(min_length=1)
     approval_method: Literal["cli_review_digest"] = "cli_review_digest"
     base_commit: str = Field(min_length=7)
@@ -78,6 +77,7 @@ class ContextScopeAdoptionReceipt(ProjectCtlModel):
     task_id: str = Field(min_length=1)
     review_id: str = Field(min_length=1)
     review_digest: str = Field(min_length=1)
+    request_digest: str = Field(min_length=1)
     approval_digest: str = Field(min_length=1)
     approval_method: Literal["cli_review_digest"] = "cli_review_digest"
     base_commit: str = Field(min_length=7)
