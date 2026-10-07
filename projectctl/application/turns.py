@@ -492,13 +492,26 @@ def advance_non_worker_phases(
                     else:
                         integrate_parallel_run(root, record.run_id)
                     final = RunStore(root).get(record.run_id)
-            elif record.status in {
-                RunStatus.INTEGRATING,
-                RunStatus.AWAITING_REVIEW,
-            }:
+            elif record.status == RunStatus.INTEGRATING:
                 action = "recover_delivery"
                 recover_run(root, record.run_id)
                 final = RunStore(root).get(record.run_id)
+            elif record.status == RunStatus.AWAITING_REVIEW:
+                other_worker_phases = sorted(
+                    run_id
+                    for run_id in worker_phase_ids
+                    if run_id != record.run_id
+                )
+                if other_worker_phases:
+                    action = "phase_wait"
+                    detail = (
+                        "Review reconciliation waits for exact-base worker phases: "
+                        + ",".join(other_worker_phases)
+                    )
+                else:
+                    action = "recover_delivery"
+                    recover_run(root, record.run_id)
+                    final = RunStore(root).get(record.run_id)
         except ProjectCtlError as exc:
             final = RunStore(root).get(record.run_id)
             detail = str(exc)
