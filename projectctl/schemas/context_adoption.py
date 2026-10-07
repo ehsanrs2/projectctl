@@ -42,6 +42,28 @@ class ContextScopeReview(ProjectCtlModel):
     requires_digest_approval: Literal[True] = True
 
 
+class ContextScopeAdoptionRequest(ProjectCtlModel):
+    schema_kind: Literal["projectctl.context_scope_adoption_request"] = (
+        "projectctl.context_scope_adoption_request"
+    )
+    schema_version: Literal[1] = 1
+    adoption_id: str = Field(min_length=1)
+    requested_at: AwareDatetime
+    actor: str = Field(min_length=1)
+    project_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    review_id: str = Field(min_length=1)
+    review_digest: str = Field(min_length=1)
+    approval_digest: str = Field(min_length=1)
+    approval_method: Literal["cli_review_digest"] = "cli_review_digest"
+    base_commit: str = Field(min_length=7)
+    task_digest: str = Field(min_length=1)
+    catalog_path: RepoRelativePath
+    catalog_before_digest: str = Field(min_length=1)
+    proposed_catalog_digest: str = Field(min_length=1)
+    proposed_scope_digest: str = Field(min_length=1)
+
+
 class ContextScopeAdoptionReceipt(ProjectCtlModel):
     schema_kind: Literal["projectctl.context_scope_adoption_receipt"] = (
         "projectctl.context_scope_adoption_receipt"
