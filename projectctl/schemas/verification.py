@@ -105,7 +105,7 @@ class VerificationManifestV1(ProjectCtlModel):
     overall_pass: bool
 
 
-class VerificationManifest(ProjectCtlModel):
+class VerificationManifestV2(ProjectCtlModel):
     schema_kind: Literal["projectctl.verification_manifest"] = "projectctl.verification_manifest"
     schema_version: Literal[2] = 2
     run_id: str = Field(min_length=1)
@@ -120,3 +120,36 @@ class VerificationManifest(ProjectCtlModel):
     completed_at: AwareDatetime
     checks: list[VerificationCheckResult] = Field(default_factory=list)
     overall_pass: bool
+
+
+class VerificationManifest(ProjectCtlModel):
+    schema_kind: Literal["projectctl.verification_manifest"] = "projectctl.verification_manifest"
+    schema_version: Literal[3] = 3
+    run_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    base_commit: str = Field(min_length=7)
+    execution_input_digest: str | None = None
+    workspace_state_digest: str = Field(min_length=1)
+    profile: str = Field(min_length=1)
+    profile_digest: str = Field(min_length=1)
+    changed_paths: list[RepoRelativePath] = Field(default_factory=list)
+    policy_violations: list[str] = Field(default_factory=list)
+    started_at: AwareDatetime
+    completed_at: AwareDatetime
+    checks: list[VerificationCheckResult] = Field(default_factory=list)
+    overall_pass: bool
+
+
+def parse_verification_manifest(
+    raw: object,
+) -> VerificationManifest | VerificationManifestV2 | VerificationManifestV1:
+    if not isinstance(raw, dict):
+        raise ValueError("Verification manifest must be an object.")
+    version = raw.get("schema_version", 1)
+    if version == 3:
+        return VerificationManifest.model_validate(raw)
+    if version == 2:
+        return VerificationManifestV2.model_validate(raw)
+    if version == 1:
+        return VerificationManifestV1.model_validate(raw)
+    raise ValueError(f"Unsupported verification manifest schema version: {version}")
