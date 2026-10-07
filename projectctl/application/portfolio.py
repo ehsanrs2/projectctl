@@ -18,7 +18,7 @@ from projectctl.core.digest import digest
 from projectctl.core.enums import RunStatus
 from projectctl.core.errors import PortfolioError, ProjectCtlError
 from projectctl.core.time import utc_now
-from projectctl.git import git_root
+from projectctl.project.root import git_root
 from projectctl.project.bootstrap import _global_init, projectctl_home
 from projectctl.project.loader import load_project_config
 from projectctl.quota import QuotaManager
