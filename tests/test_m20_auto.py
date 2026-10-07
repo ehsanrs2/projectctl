@@ -21,12 +21,38 @@ def no_lock(root, name):
 
 class FakeStore:
     active = []
+    records = {}
 
     def __init__(self, root):
         self.root = root
 
     def list(self, limit=1000):
         return list(self.active)
+
+    def get(self, run_id):
+        return self.records[run_id]
+
+
+def record(
+    run_id="run-1",
+    task_id="task-1",
+    status=RunStatus.CLAIMED,
+    *,
+    terminal_reason=None,
+    lease_owner=None,
+    lease_expires_at=None,
+    checkpoint_ref=None,
+):
+    return SimpleNamespace(
+        run_id=run_id,
+        task_id=task_id,
+        status=status,
+        terminal_reason=terminal_reason,
+        lease_owner=lease_owner,
+        lease_expires_at=lease_expires_at,
+        checkpoint_ref=checkpoint_ref,
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
 
 
 def status_bundle(
@@ -56,24 +82,65 @@ def status_bundle(
     )
 
 
+def maintenance(*steps):
+    return SimpleNamespace(steps=list(steps))
+
+
+def portfolio_decision(
+    *,
+    selected_instance="instance-local",
+    busy=False,
+):
+    return SimpleNamespace(
+        account_busy=busy,
+        active_project_instance_id=(
+            "instance-busy" if busy else None
+        ),
+        active_run_id=("run-busy" if busy else None),
+        selected_project_instance_id=(
+            None if busy else selected_instance
+        ),
+        selected_project_id=(
+            None if busy else "project-local"
+        ),
+    )
+
+
+def turn_result(run_id, action="admit_task", status=RunStatus.VERIFYING):
+    return SimpleNamespace(
+        run_id=run_id,
+        run_status=status,
+        project_turn=SimpleNamespace(
+            envelope=SimpleNamespace(action=action)
+        ),
+    )
+
+
 def setup_common(monkeypatch):
     FakeStore.active = []
+    FakeStore.records = {}
     monkeypatch.setattr(auto_app, "RunStore", FakeStore)
     monkeypatch.setattr(auto_app, "project_lock", no_lock)
+    monkeypatch.setattr(
+        auto_app,
+        "advance_non_worker_phases",
+        lambda root: maintenance(),
+    )
 
 
-def test_auto_stops_on_stale_quota_before_prepare(tmp_path: Path, monkeypatch):
+def test_auto_stops_on_stale_quota_before_portfolio_turn(
+    tmp_path: Path, monkeypatch
+):
     setup_common(monkeypatch)
     monkeypatch.setattr(
         auto_app,
         "collect_status",
         lambda root: status_bundle(stale=True),
     )
-
     called = []
     monkeypatch.setattr(
         auto_app,
-        "prepare_next_run",
+        "request_fair_project_turn",
         lambda *a, **k: called.append(True),
     )
 
@@ -84,29 +151,30 @@ def test_auto_stops_on_stale_quota_before_prepare(tmp_path: Path, monkeypatch):
     assert called == []
 
 
-def test_auto_executes_one_bounded_task(tmp_path: Path, monkeypatch):
+def test_auto_executes_one_bounded_task_through_portfolio(
+    tmp_path: Path, monkeypatch
+):
     setup_common(monkeypatch)
     monkeypatch.setattr(
         auto_app,
         "collect_status",
         lambda root: status_bundle(),
     )
+
+    def fair_turn(*args, **kwargs):
+        final = record(status=RunStatus.PASSED)
+        FakeStore.records["run-1"] = final
+        FakeStore.active = []
+        return portfolio_decision(), turn_result(
+            "run-1",
+            action="admit_task",
+            status=RunStatus.VERIFYING,
+        )
+
     monkeypatch.setattr(
         auto_app,
-        "prepare_next_run",
-        lambda *a, **k: SimpleNamespace(
-            record=SimpleNamespace(run_id="run-1")
-        ),
-    )
-    monkeypatch.setattr(
-        auto_app,
-        "_advance_run",
-        lambda root, run_id: SimpleNamespace(
-            run_id=run_id,
-            task_id="task-1",
-            status=RunStatus.PASSED,
-            terminal_reason=None,
-        ),
+        "request_fair_project_turn",
+        fair_turn,
     )
 
     report = auto_app.run_auto(tmp_path, AutoRunPolicy(max_tasks=1))
@@ -115,9 +183,12 @@ def test_auto_executes_one_bounded_task(tmp_path: Path, monkeypatch):
     assert report.attempted_tasks == 1
     assert report.completed_tasks == 1
     assert report.steps[-1].final_status == RunStatus.PASSED
+    assert report.steps[-1].action == "admit_task"
 
 
-def test_auto_stops_on_material_project_state_change(tmp_path: Path, monkeypatch):
+def test_auto_stops_on_material_project_state_change(
+    tmp_path: Path, monkeypatch
+):
     setup_common(monkeypatch)
     snapshots = iter(
         [
@@ -125,23 +196,20 @@ def test_auto_stops_on_material_project_state_change(tmp_path: Path, monkeypatch
             status_bundle(project_state_digest="state-after"),
         ]
     )
-    monkeypatch.setattr(auto_app, "collect_status", lambda root: next(snapshots))
     monkeypatch.setattr(
         auto_app,
-        "prepare_next_run",
-        lambda *a, **k: SimpleNamespace(
-            record=SimpleNamespace(run_id="run-1")
-        ),
+        "collect_status",
+        lambda root: next(snapshots),
     )
+
+    def fair_turn(*args, **kwargs):
+        FakeStore.records["run-1"] = record(status=RunStatus.PASSED)
+        return portfolio_decision(), turn_result("run-1")
+
     monkeypatch.setattr(
         auto_app,
-        "_advance_run",
-        lambda root, run_id: SimpleNamespace(
-            run_id=run_id,
-            task_id="task-1",
-            status=RunStatus.PASSED,
-            terminal_reason=None,
-        ),
+        "request_fair_project_turn",
+        fair_turn,
     )
 
     report = auto_app.run_auto(tmp_path, AutoRunPolicy(max_tasks=2))
@@ -150,54 +218,49 @@ def test_auto_stops_on_material_project_state_change(tmp_path: Path, monkeypatch
     assert report.completed_tasks == 1
 
 
-def test_auto_stops_while_external_review_is_pending(tmp_path: Path, monkeypatch):
+def test_auto_stops_while_external_review_is_pending(
+    tmp_path: Path, monkeypatch
+):
     setup_common(monkeypatch)
-    monkeypatch.setattr(auto_app, "collect_status", lambda root: status_bundle())
-    monkeypatch.setattr(
-        auto_app,
-        "prepare_next_run",
-        lambda *a, **k: SimpleNamespace(
-            record=SimpleNamespace(run_id="run-review")
-        ),
+    pending = record(
+        run_id="run-review",
+        status=RunStatus.AWAITING_REVIEW,
     )
+    FakeStore.active = [pending]
+    FakeStore.records[pending.run_id] = pending
     monkeypatch.setattr(
         auto_app,
-        "_advance_run",
-        lambda root, run_id: SimpleNamespace(
-            run_id=run_id,
-            task_id="task-1",
-            status=RunStatus.AWAITING_REVIEW,
-            terminal_reason=None,
-        ),
+        "collect_status",
+        lambda root: status_bundle(),
     )
 
     report = auto_app.run_auto(tmp_path, AutoRunPolicy(max_tasks=3))
 
     assert report.stop_reason == AutoStopReason.REVIEW_PENDING
-    assert report.attempted_tasks == 1
+    assert report.attempted_tasks == 0
     assert report.completed_tasks == 0
-    assert report.steps[-1].final_status == RunStatus.AWAITING_REVIEW
 
 
-def test_auto_stops_on_human_decision(tmp_path: Path, monkeypatch):
+def test_auto_stops_on_human_decision_after_fair_turn(
+    tmp_path: Path, monkeypatch
+):
     setup_common(monkeypatch)
-    monkeypatch.setattr(auto_app, "collect_status", lambda root: status_bundle())
     monkeypatch.setattr(
         auto_app,
-        "prepare_next_run",
-        lambda *a, **k: SimpleNamespace(
-            record=SimpleNamespace(run_id="run-1")
-        ),
+        "collect_status",
+        lambda root: status_bundle(),
     )
+
+    def fair_turn(*args, **kwargs):
+        FakeStore.records["run-1"] = record(
+            status=RunStatus.NEEDS_DECISION
+        )
+        return portfolio_decision(), turn_result("run-1")
+
     monkeypatch.setattr(
         auto_app,
-        "_advance_run",
-        lambda root, run_id: SimpleNamespace(
-            run_id=run_id,
-            task_id="task-1",
-            status=RunStatus.NEEDS_DECISION,
-            terminal_reason=None,
-        ),
+        "request_fair_project_turn",
+        fair_turn,
     )
 
     report = auto_app.run_auto(tmp_path, AutoRunPolicy(max_tasks=3))
@@ -207,17 +270,20 @@ def test_auto_stops_on_human_decision(tmp_path: Path, monkeypatch):
     assert report.completed_tasks == 0
 
 
-def test_auto_does_not_compete_with_live_active_run(tmp_path: Path, monkeypatch):
+def test_auto_does_not_compete_with_live_active_run(
+    tmp_path: Path, monkeypatch
+):
     setup_common(monkeypatch)
-    FakeStore.active = [
-        SimpleNamespace(
-            run_id="run-live",
-            task_id="task-live",
-            status=RunStatus.RUNNING,
-            lease_owner="worker-a",
-            lease_expires_at=FUTURE,
-        )
-    ]
+    live = record(
+        run_id="run-live",
+        task_id="task-live",
+        status=RunStatus.RUNNING,
+        lease_owner="worker-a",
+        lease_expires_at=FUTURE,
+        checkpoint_ref="checkpoint",
+    )
+    FakeStore.active = [live]
+    FakeStore.records[live.run_id] = live
 
     report = auto_app.run_auto(tmp_path, AutoRunPolicy(max_tasks=2))
 
@@ -225,57 +291,56 @@ def test_auto_does_not_compete_with_live_active_run(tmp_path: Path, monkeypatch)
     assert report.attempted_tasks == 0
 
 
-def test_auto_fails_closed_on_multiple_active_runs(tmp_path: Path, monkeypatch):
+def test_auto_fails_closed_on_parallel_active_set(
+    tmp_path: Path, monkeypatch
+):
     setup_common(monkeypatch)
-    FakeStore.active = [
-        SimpleNamespace(
-            run_id="run-1",
-            task_id="task-1",
-            status=RunStatus.CLAIMED,
-            lease_owner=None,
-            lease_expires_at=None,
-        ),
-        SimpleNamespace(
-            run_id="run-2",
-            task_id="task-2",
-            status=RunStatus.VERIFYING,
-            lease_owner=None,
-            lease_expires_at=None,
-        ),
-    ]
+    first = record(run_id="run-1", status=RunStatus.CLAIMED)
+    second = record(run_id="run-2", status=RunStatus.VERIFYING)
+    FakeStore.active = [first, second]
+    FakeStore.records = {"run-1": first, "run-2": second}
 
     report = auto_app.run_auto(tmp_path, AutoRunPolicy(max_tasks=2))
 
     assert report.stop_reason == AutoStopReason.MULTIPLE_ACTIVE_RUNS
 
 
-def test_run_auto_cli_is_registered():
-    result = runner.invoke(app, ["run", "auto", "--help"])
-    assert result.exit_code == 0, result.output
-
-
-
-def test_resumed_run_honors_material_project_state_boundary(tmp_path: Path, monkeypatch):
+def test_auto_yields_when_portfolio_selects_another_project(
+    tmp_path: Path, monkeypatch
+):
     setup_common(monkeypatch)
-    FakeStore.active = [
-        SimpleNamespace(
-            run_id="run-resume",
-            task_id="task-resume",
-            status=RunStatus.VERIFYING,
-            lease_owner=None,
-            lease_expires_at=None,
-        )
-    ]
     monkeypatch.setattr(
         auto_app,
-        "_advance_run",
-        lambda root, run_id: SimpleNamespace(
-            run_id=run_id,
-            task_id="task-resume",
-            status=RunStatus.PASSED,
-            terminal_reason=None,
+        "collect_status",
+        lambda root: status_bundle(),
+    )
+    monkeypatch.setattr(
+        auto_app,
+        "request_fair_project_turn",
+        lambda *a, **k: (
+            portfolio_decision(selected_instance="instance-other"),
+            None,
         ),
     )
+
+    report = auto_app.run_auto(tmp_path, AutoRunPolicy(max_tasks=2))
+
+    assert report.stop_reason == AutoStopReason.PORTFOLIO_YIELD
+    assert report.attempted_tasks == 1
+    assert report.steps[-1].action == "portfolio_yield"
+
+
+def test_resumed_run_uses_fair_dispatcher(
+    tmp_path: Path, monkeypatch
+):
+    setup_common(monkeypatch)
+    claimed = record(
+        run_id="run-resume",
+        task_id="task-resume",
+        status=RunStatus.CLAIMED,
+    )
+    FakeStore.active = [claimed]
+    FakeStore.records[claimed.run_id] = claimed
     monkeypatch.setattr(
         auto_app,
         "_execution_plan_state_digest",
@@ -286,15 +351,34 @@ def test_resumed_run_honors_material_project_state_boundary(tmp_path: Path, monk
         "collect_status",
         lambda root: status_bundle(
             selected=None,
-            project_state_digest="state-after",
-            total=1,
-            done=1,
+            project_state_digest="state-before",
         ),
     )
 
-    report = auto_app.run_auto(tmp_path, AutoRunPolicy(max_tasks=2))
+    def fair_turn(*args, **kwargs):
+        FakeStore.records["run-resume"] = record(
+            run_id="run-resume",
+            task_id="task-resume",
+            status=RunStatus.PASSED,
+        )
+        FakeStore.active = []
+        return portfolio_decision(), turn_result(
+            "run-resume",
+            action="start_run",
+        )
 
-    assert report.stop_reason == AutoStopReason.MATERIAL_PROJECT_STATE_CHANGE
+    monkeypatch.setattr(
+        auto_app,
+        "request_fair_project_turn",
+        fair_turn,
+    )
+
+    report = auto_app.run_auto(tmp_path, AutoRunPolicy(max_tasks=1))
+
     assert report.completed_tasks == 1
-    assert report.steps[-1].project_state_digest_before == "state-before"
-    assert report.steps[-1].project_state_digest_after == "state-after"
+    assert report.steps[-1].action == "start_run"
+
+
+def test_run_auto_cli_is_registered():
+    result = runner.invoke(app, ["run", "auto", "--help"])
+    assert result.exit_code == 0, result.output
