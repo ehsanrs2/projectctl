@@ -32,6 +32,13 @@ from projectctl.schemas.task_claim import TaskClaim
 def semantic_execution_input_digest(manifest: ExecutionInputManifest) -> str:
     payload = manifest.model_dump(mode="json")
     payload.pop("created_at", None)
+    payload["preclaim_tasks"] = [
+        {
+            "id": item.id,
+            "digest": semantic_task_digest(item),
+        }
+        for item in sorted(manifest.preclaim_tasks, key=lambda value: value.id)
+    ]
     transition = payload.get("claim_transition")
     if isinstance(transition, dict):
         transition.pop("validated_at", None)
