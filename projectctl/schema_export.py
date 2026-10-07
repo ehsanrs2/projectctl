@@ -87,6 +87,7 @@ from projectctl.schemas.orchestration import (
     ProjectTurnResult,
 )
 from projectctl.schemas.portfolio import (
+    PortfolioCycleResult,
     PortfolioDecision,
     PortfolioDecisionV1,
     PortfolioTurnResult,
@@ -148,6 +149,7 @@ PUBLIC_SCHEMAS = {
     "portfolio-decision.v2.schema.json": PortfolioDecision,
     "portfolio-turn-result.v1.schema.json": PortfolioTurnResultV1,
     "portfolio-turn-result.v2.schema.json": PortfolioTurnResult,
+    "portfolio-cycle-result.v1.schema.json": PortfolioCycleResult,
     "parallel-scope-catalog.v1.schema.json": ParallelScopeCatalog,
     "parallel-plan.v1.schema.json": ParallelPlanV1,
     "parallel-plan.v2.schema.json": ParallelPlan,
