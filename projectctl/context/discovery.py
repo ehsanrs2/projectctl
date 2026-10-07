@@ -255,7 +255,8 @@ def _python_index(
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 symbols[node.name].add(path)
 
-        current_module = sorted(path_modules.get(path, {""}), key=len)[0]
+        aliases = path_modules.get(path) or {""}
+        current_module = sorted(aliases, key=len)[0]
         for node in ast.walk(tree):
             targets: list[str] = []
             if isinstance(node, ast.Import):
@@ -448,7 +449,6 @@ def discover_context(
         (f"task reference {path}", text, path) for path, text in reference_texts
     )
     for source_label, text, source_path in mention_sources:
-        lowered = text.casefold()
         for raw_path in sorted(set(_PATH_RE.findall(text))):
             path = _normalize_repo_path(root, raw_path)
             if path is None or path not in tracked:
