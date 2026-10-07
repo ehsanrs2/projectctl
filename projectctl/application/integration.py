@@ -58,8 +58,16 @@ from projectctl.schemas.delivery import (
     ReviewRequest,
 )
 from projectctl.schemas.evidence import EvidenceManifest
-from projectctl.schemas.execution import EvidenceReference, ExecutionPlan, WorkerResult
+from projectctl.schemas.execution import (
+    EvidenceReference,
+    ExecutionPlan,
+    WorkerRequest,
+    WorkerResult,
+    parse_execution_plan,
+    parse_worker_request,
+)
 from projectctl.schemas.integration import IntegrationManifest
+from projectctl.schemas.run import ContextManifest, parse_context_manifest
 from projectctl.schemas.run_store import RunRecord
 from projectctl.schemas.verification import VerificationManifest
 from projectctl.storage.runs import RunStore
@@ -98,7 +106,14 @@ def _load_json_model(path: Path, model):
     if not path.exists():
         raise RunStoreError(f"Missing run artifact: {path}")
     try:
-        return model.model_validate(json.loads(path.read_text(encoding="utf-8")))
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if model is ExecutionPlan:
+            return parse_execution_plan(raw)
+        if model is WorkerRequest:
+            return parse_worker_request(raw)
+        if model is ContextManifest:
+            return parse_context_manifest(raw)
+        return model.model_validate(raw)
     except Exception as exc:
         raise RunStoreError(f"Invalid run artifact {path.name}: {exc}") from exc
 
