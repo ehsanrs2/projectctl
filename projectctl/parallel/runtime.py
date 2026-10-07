@@ -17,6 +17,14 @@ from projectctl.application.execution import (
     resume_checkpointed_run,
     start_prepared_run,
 )
+from projectctl.application.execution_inputs import (
+    derive_reapplied_execution_input,
+    execution_input_semantic_digest,
+    load_claim_transition,
+    load_execution_input,
+    persist_execution_input,
+    validate_admitted_execution_input,
+)
 from projectctl.application.integration import (
     _integrate_run_locked,
     _load_json_model,
@@ -53,7 +61,7 @@ from projectctl.project.state import load_project_state, semantic_project_state_
 from projectctl.scheduler.digests import semantic_task_scope_digest
 from projectctl.schemas.capabilities import StrategyFallbackPolicy
 from projectctl.schemas.evidence import EvidenceManifest
-from projectctl.schemas.execution import ExecutionPlan
+from projectctl.schemas.execution import ExecutionPlan, ExecutionPlanLineage
 from projectctl.schemas.parallel import (
     ParallelBatchResult,
     ParallelInputEvidence,
@@ -63,6 +71,8 @@ from projectctl.schemas.parallel import (
     ParallelReapplicationManifest,
     ParallelReapplicationRequest,
     ParallelRunBinding,
+    parse_parallel_reapplication_request,
+    parse_parallel_run_binding,
 )
 from projectctl.storage.runs import RunStore
 
@@ -109,7 +119,7 @@ def load_parallel_run_binding(
             "in same-project concurrency."
         )
     try:
-        return ParallelRunBinding.model_validate(
+        return parse_parallel_run_binding(
             json.loads(path.read_text(encoding="utf-8"))
         )
     except Exception as exc:
@@ -142,21 +152,37 @@ def _active_bindings(root: Path) -> list[tuple[object, ParallelRunBinding]]:
     return result
 
 
-def _postclaim_parallel_plan(root: Path, preclaim: ParallelPlan) -> ParallelPlan:
-    snapshot = capture_task_snapshot(
+def _postclaim_parallel_plan(
+    root: Path,
+    preclaim: ParallelPlan,
+    *,
+    run_id: str,
+) -> ParallelPlan:
+    run_dir = root / ".projectctl" / "runs" / run_id
+    execution_input = load_execution_input(
+        run_dir / "execution-input-manifest.json"
+    )
+    transition = load_claim_transition(run_dir / "claim-transition.json")
+    validate_admitted_execution_input(
         root,
-        state="all",
-        read_cache_max_age_seconds=0,
+        execution_input,
+        transition,
+        require_target_at_base=True,
     )
-    scoped_digest, scoped_ids = semantic_task_scope_digest(
-        snapshot,
-        preclaim.task_id,
-    )
+    input_digest = execution_input_semantic_digest(execution_input)
+    if (
+        getattr(preclaim, "execution_input_digest", None) is not None
+        and preclaim.execution_input_digest != input_digest
+    ):
+        raise StaleSnapshotError(
+            "Prepared run execution input differs from pre-claim parallel proof."
+        )
     return preclaim.model_copy(
         update={
             "plan_id": f"parallel-admitted-{uuid.uuid4().hex}",
-            "scoped_task_digest": scoped_digest,
-            "scoped_task_ids": scoped_ids,
+            "execution_input_digest": input_digest,
+            "scoped_task_digest": transition.postclaim_task_scope_digest,
+            "scoped_task_ids": transition.postclaim_task_scope_ids,
             "created_at": utc_now(),
         }
     )
@@ -226,12 +252,25 @@ def prepare_parallel_run(
                 "Prepared execution base differs from the admitted parallel proof."
             )
 
-        admitted = _postclaim_parallel_plan(root, preclaim)
+        admitted = _postclaim_parallel_plan(
+            root,
+            preclaim,
+            run_id=prepared.record.run_id,
+        )
+        run_dir = root / ".projectctl" / "runs" / prepared.record.run_id
+        execution_input = load_execution_input(
+            run_dir / "execution-input-manifest.json"
+        )
+        claim_transition = load_claim_transition(
+            run_dir / "claim-transition.json"
+        )
         binding = ParallelRunBinding(
             run_id=prepared.record.run_id,
             task_id=prepared.record.task_id,
             preclaim_plan_digest=digest(preclaim),
             admitted_plan=admitted,
+            execution_input_digest=execution_input_semantic_digest(execution_input),
+            claim_transition_digest=digest(claim_transition),
             peer_plan_digests=[
                 digest(item.admitted_plan) for _, item in active
             ],
