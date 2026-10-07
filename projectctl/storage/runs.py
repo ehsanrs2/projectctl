@@ -275,6 +275,64 @@ class RunStore:
             conn.close()
         return self.get(run_id)
 
+    def rebind_execution_plan(
+        self,
+        run_id: str,
+        *,
+        expected: set[RunStatus],
+        execution_plan_digest: str,
+        now: datetime | None = None,
+    ) -> RunRecord:
+        """Atomically replace the execution-plan digest without changing lifecycle state."""
+        now = now or datetime.now(timezone.utc)
+        conn = connect_db(self.db_path)
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT * FROM runs WHERE run_id=?", (run_id,)).fetchone()
+            if row is None:
+                raise RunStoreError(f"Unknown run: {run_id}")
+            current = RunStatus(row["status"])
+            if current not in expected:
+                raise RunStoreError(
+                    f"Run {run_id} execution-plan rebind rejected: expected "
+                    f"{sorted(x.value for x in expected)}, found {current.value}."
+                )
+
+            manifest = RunManifest.model_validate(json.loads(row["manifest_json"]))
+            updated_data = manifest.model_dump(mode="python")
+            updated_data["execution_plan_digest"] = execution_plan_digest
+            updated = RunManifest.model_validate(updated_data)
+            payload = json.dumps(
+                updated.model_dump(mode="json"),
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            conn.execute(
+                "UPDATE runs SET execution_plan_digest=?, manifest_json=? WHERE run_id=?",
+                (execution_plan_digest, payload, run_id),
+            )
+            conn.execute(
+                "INSERT INTO run_events(run_id, created_at, event_type, payload_json) "
+                "VALUES (?, ?, ?, ?)",
+                (
+                    run_id,
+                    _iso(now),
+                    "run.execution_plan_rebound",
+                    json.dumps(
+                        {"execution_plan_digest": execution_plan_digest},
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                ),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+        return self.get(run_id)
+
     def rebind_for_reverification(
         self,
         run_id: str,
