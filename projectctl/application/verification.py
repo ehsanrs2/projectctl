@@ -10,6 +10,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from projectctl.application.execution import _actor
+from projectctl.application.execution_inputs import (
+    execution_input_path_allowed,
+    load_execution_input,
+    revalidate_execution_input,
+)
 from projectctl.application.task_lifecycle import reconcile_terminal_task
 from projectctl.core.digest import digest
 from projectctl.core.enums import (
@@ -22,7 +27,7 @@ from projectctl.core.errors import RunStoreError, VerificationError, WorktreeErr
 from projectctl.core.time import utc_now
 from projectctl.git import WorktreeManager, resolve_commit
 from projectctl.schemas.evidence import EvidenceManifest
-from projectctl.schemas.execution import ExecutionPlan, WorkerResult
+from projectctl.schemas.execution import ExecutionPlan, WorkerResult, parse_execution_plan
 from projectctl.schemas.run_store import RunRecord
 from projectctl.schemas.verification import (
     VerificationCheckResult,
@@ -72,7 +77,10 @@ def _load_json_model(path: Path, model):
     if not path.exists():
         raise RunStoreError(f"Missing run artifact: {path}")
     try:
-        return model.model_validate(json.loads(path.read_text(encoding="utf-8")))
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if model is ExecutionPlan:
+            return parse_execution_plan(raw)
+        return model.model_validate(raw)
     except Exception as exc:
         raise RunStoreError(f"Invalid run artifact {path.name}: {exc}") from exc
 
@@ -228,6 +236,14 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
         if digest(plan) != record.execution_plan_digest:
             raise RunStoreError("ExecutionPlan digest no longer matches the run record.")
 
+        execution_input = None
+        if getattr(plan, "execution_input_digest", None):
+            execution_input = load_execution_input(
+                run_dir,
+                expected_digest=plan.execution_input_digest,
+            )
+            revalidate_execution_input(root, execution_input)
+
         manager = WorktreeManager(root)
         expected_worktree = manager.path_for(record.worktree_id)
         worktree = Path(record.worktree_path).resolve()
@@ -256,6 +272,14 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
             strategy=plan.strategy,
         )
         policy_ms = max(0, int((time.monotonic() - policy_start) * 1000))
+        execution_scope_violations: list[str] = []
+        if execution_input is not None and execution_input.writes:
+            execution_scope_violations = [
+                f"execution_write_scope:{path}"
+                for path in before.changed_paths
+                if not execution_input_path_allowed(execution_input.writes, path)
+            ]
+
         checks: list[VerificationCheckResult] = [
             _synthetic_check(
                 "diff-policy",
@@ -263,8 +287,19 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
                 duration_ms=policy_ms,
             )
         ]
+        if execution_input is not None and execution_input.writes:
+            checks.append(
+                _synthetic_check(
+                    "execution-write-scope",
+                    passed=not execution_scope_violations,
+                )
+            )
 
-        if before.violations:
+        initial_policy_violations = [
+            *before.violations,
+            *execution_scope_violations,
+        ]
+        if initial_policy_violations:
             checks.extend(_skipped_check(command) for command in resolved.profile.commands)
             verification = VerificationManifest(
                 run_id=run_id,
@@ -274,7 +309,7 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
                 profile=resolved.profile.id,
                 profile_digest=resolved.profile_digest,
                 changed_paths=before.changed_paths,
-                policy_violations=before.violations,
+                policy_violations=initial_policy_violations,
                 started_at=started_at,
                 completed_at=utc_now(),
                 checks=checks,
@@ -295,7 +330,7 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
                 run_id,
                 "verification.policy_blocked",
                 {
-                    "violations": before.violations,
+                    "violations": initial_policy_violations,
                     "verification_manifest_digest": digest(verification),
                     "evidence_manifest_digest": digest(evidence),
                 },
@@ -338,7 +373,18 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
         checks.append(_synthetic_check("workspace-stability", passed=stable))
 
         command_pass = _required_commands_passed(resolved.profile, checks)
-        overall = stable and command_pass and not after.violations
+        final_scope_violations: list[str] = []
+        if execution_input is not None and execution_input.writes:
+            final_scope_violations = [
+                f"execution_write_scope:{path}"
+                for path in after.changed_paths
+                if not execution_input_path_allowed(execution_input.writes, path)
+            ]
+        final_policy_violations = [
+            *after.violations,
+            *final_scope_violations,
+        ]
+        overall = stable and command_pass and not final_policy_violations
 
         verification = VerificationManifest(
             run_id=run_id,
@@ -348,7 +394,7 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
             profile=resolved.profile.id,
             profile_digest=resolved.profile_digest,
             changed_paths=after.changed_paths,
-            policy_violations=after.violations,
+            policy_violations=final_policy_violations,
             started_at=started_at,
             completed_at=utc_now(),
             checks=checks,
