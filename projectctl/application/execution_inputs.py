@@ -399,6 +399,22 @@ def build_claim_transition_evidence(
 
     before = pre_by_id[manifest.task_id].task
     after = post_by_id[manifest.task_id].task
+    request_digest = digest(request)
+    if (
+        request.task_id != manifest.task_id
+        or request.run_id != run_id
+        or request.base_commit != manifest.base_commit
+        or request.integration_target_ref != manifest.integration_target_ref
+        or claim.task_id != request.task_id
+        or claim.run_id != request.run_id
+        or claim.base_commit != request.base_commit
+        or claim.integration_target_ref != request.integration_target_ref
+        or claim.claim_token != request.claim_token
+        or claim.request_digest != request_digest
+    ):
+        raise StaleSnapshotError(
+            "Durable claim identity does not match the execution input/request."
+        )
     if not claimer.validate(claim):
         raise StaleSnapshotError(
             "Durable task claim no longer proves current execution ownership."
@@ -422,7 +438,7 @@ def build_claim_transition_evidence(
         task_id=manifest.task_id,
         provider=claim.provider,
         execution_input_digest=execution_input_semantic_digest(manifest),
-        claim_request_digest=digest(request),
+        claim_request_digest=request_digest,
         claim_digest=digest(claim),
         preclaim_task_digest=pre_by_id[manifest.task_id].digest,
         postclaim_task_digest=post_by_id[manifest.task_id].digest,
@@ -452,6 +468,14 @@ def validate_admitted_execution_input(
         require_target_at_base=require_target_at_base,
     )
     current = _task_inputs(tasks, transition.postclaim_task_scope_ids)
+    scoped_digest, scoped_ids = semantic_task_scope_digest(tasks, manifest.task_id)
+    if (
+        scoped_digest != transition.postclaim_task_scope_digest
+        or scoped_ids != transition.postclaim_task_scope_ids
+    ):
+        raise StaleSnapshotError(
+            "Claim-admitted task/dependency scope changed after ownership acquisition."
+        )
     if [
         (item.task_id, item.digest) for item in current
     ] != [
