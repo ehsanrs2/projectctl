@@ -446,3 +446,44 @@ def test_non_worker_maintenance_does_not_advance_target_during_worker_phase(
     )
     assert ready_step.action == "phase_wait"
     assert "run-worker" in (ready_step.detail or "")
+
+
+def test_non_worker_maintenance_respects_live_run_lease(
+    tmp_path: Path,
+    monkeypatch,
+):
+    leased = run(
+        "run-leased",
+        "task-a",
+        RunStatus.VERIFYING,
+        lease_owner="other-worker",
+        lease_expires_at=NOW + timedelta(minutes=2),
+    )
+    monkeypatch.setattr(
+        turns,
+        "load_project_config",
+        lambda root: SimpleNamespace(project=SimpleNamespace(id="repo")),
+    )
+    monkeypatch.setattr(
+        turns,
+        "_active_records",
+        lambda root: [leased],
+    )
+    called = []
+    monkeypatch.setattr(
+        turns,
+        "verify_run",
+        lambda *args, **kwargs: called.append("verify"),
+    )
+    monkeypatch.setattr(
+        turns,
+        "recover_run",
+        lambda *args, **kwargs: called.append("recover"),
+    )
+
+    result = turns.advance_non_worker_phases(tmp_path)
+
+    assert called == []
+    assert len(result.steps) == 1
+    assert result.steps[0].action == "phase_wait"
+    assert "live project-local lease" in (result.steps[0].detail or "")
