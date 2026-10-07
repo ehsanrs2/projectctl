@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-The **Post-M4 Architecture Review** contract-closure sequence is complete through **M4.2b — Unified Turn Orchestration**. **M5.0** and **M5.1** now complete the first context-discovery/reviewed-adoption vertical slice. The active milestone is **Post-M5 Architecture Review**.
+The **Post-M5 Architecture Review** is complete. M5.0/M5.1 established a sound derived-context → reviewed-policy chain, but the review found two required closure milestones before the next major product direction. The active milestone is now **M5.2a — Execution Authority Mutation Serialization**.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -2036,7 +2036,11 @@ M5.0   Context Discovery & Scope Assistance                completed
    ↓
 M5.1   Context Review & Adoption Workflow                   completed
    ↓
-POST-M5 Post-M5 Architecture Review                         next
+POST-M5 Post-M5 Architecture Review                         completed
+   ↓
+M5.2a  Execution Authority Mutation Serialization           next
+   ↓
+M5.2b  General Execution Scope Policy & Enforcement Mode    planned
 ```
 
 M4.2a now separates full scheduler observation from execution validity through
@@ -2206,11 +2210,19 @@ human-managed projectctl.parallel.yaml
 ExecutionInputManifest / ParallelPlan authority
 ```
 
-The next milestone is **Post-M5 Architecture Review**. It should verify this chain end to end before ProjectCTL expands context discovery into more languages/providers or stronger automation.
+The Post-M5 review accepted the M5 authority design but found three material gaps: scope-policy mutation is not atomically serialized with new run admission; ordinary serial execution still treats scope as optional without an explicit project governance mode; and the generic execution-scope authority is still named/versioned as a parallel-only contract.
 
-See ADR-029 through ADR-036, `docs/architecture/POST_M4_ARCHITECTURE_REVIEW.md`, and
-`docs/PROJECTCTL_BLUEPRINT.md`.
+Two closure milestones are now required:
+
+- **M5.2a — Execution Authority Mutation Serialization**: one shared project-level authority gate for reviewed scope mutation and the no-active→active run admission transition, plus single-read catalog snapshots.
+- **M5.2b — General Execution Scope Policy & Enforcement Mode**: promote the current parallel-named catalog into a generic execution-scope policy and make optional/required scope governance explicit.
+
+See `docs/architecture/POST_M5_ARCHITECTURE_REVIEW.md`.
+
+See ADR-029 through ADR-036, `docs/architecture/POST_M4_ARCHITECTURE_REVIEW.md`,
+`docs/architecture/POST_M5_ARCHITECTURE_REVIEW.md`, and `docs/PROJECTCTL_BLUEPRINT.md`.
 
 Next:
 
-- **Post-M5 Architecture Review**
+- **M5.2a — Execution Authority Mutation Serialization**
+- **M5.2b — General Execution Scope Policy & Enforcement Mode**
