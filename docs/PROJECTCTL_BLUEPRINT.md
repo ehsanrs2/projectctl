@@ -2,7 +2,7 @@
 
 Status: **Canonical high-level product, architecture, and roadmap reference**
 
-Last architecture review: **2026-10-05**
+Last architecture review: **2026-10-07**
 
 This document answers four questions:
 
@@ -121,6 +121,7 @@ Exactly one authority should exist for each mutable concern.
 | Run lifecycle / leases / checkpoints | `.projectctl/state.sqlite` + run artifacts | Operational, project-instance-local |
 | Quota observations / provider selection | `$PROJECTCTL_HOME/state.sqlite` | Account-global |
 | Account execution admission | `$PROJECTCTL_HOME/state.sqlite -> execution_admissions` | Implemented in M4.0a; exclusive per quota account, expiring, and distinct from project/task ownership |
+| Cross-project portfolio arbitration | Registered projects + project-local scheduler envelopes + admission history | Implemented in M4.0b; chooses project/action, never raw cross-project task scores |
 | Project quota policy | `.projectctl/config.yaml` | Local policy, not quota observation/admission authority |
 | Generated status dashboards | `docs/generated/*` | Derived and non-authoritative |
 | Telemetry | `.projectctl/telemetry.sqlite` | Observational only |
@@ -845,17 +846,20 @@ held through verification, integration, publication or review waiting.
 The first version deliberately serializes worker turns per quota account. ProjectCTL still does not
 invent token or percentage reservations without a trustworthy per-task cost estimator.
 
-### Finding J — portfolio/global orchestration groundwork exists but is not yet authoritative
+### Finding J — portfolio arbitration preserves project-local scheduling authority (resolved in M4.0b)
 
-The global DB already contains a stable `project_registry`, but no global scheduler or arbitration
-artifact exists.
+The global `project_registry` now feeds a deterministic portfolio arbitration layer.
 
-Project-local scheduler scores are policy-local and must not be treated as directly comparable
-global utilities.
+**Resolution:** M4.0b chooses a project and worker-turn action from validated candidate envelopes,
+while each project's existing scheduler remains authoritative for task selection. Raw project-local
+scheduler scores are never treated as globally comparable utilities.
 
-**Decision:** M4.0b is now the active milestone. It will arbitrate among project-level candidate
-envelopes on top of the M4.0a atomic admission primitive. Each project's scheduler remains
-authoritative for task choice inside that project.
+Durable continuation (`resume_run`, then `start_run`) precedes new work. Within the same action
+class, least-recently-admitted fairness is derived from M4.0a admission history. Normal decisions
+are materialized as global audit artifacts, while actual worker-turn ownership remains the M4.0a
+account admission lease.
+
+See ADR-030.
 
 ---
 
@@ -1383,17 +1387,27 @@ Non-goals remain:
 
 #### M4.0b — Portfolio Scheduling & Cross-Project Arbitration
 
-**Active milestone.**
+**Completed.**
 
-Use the existing global project registry to decide which healthy project receives the next account
-admission while preserving each project's local scheduler as the authority for task choice inside
-that project.
+The portfolio layer now:
 
-Do not compare raw project-local scheduler scores as if they were globally equivalent.
+- discovers registered project instances from the global registry
+- validates exact project-instance/logical-project/root identity before eligibility
+- evaluates each project through its existing local scheduler/task/quota authorities
+- represents only a project/action candidate envelope; raw local scheduler scores are not exported
+  into global ranking
+- prioritizes durable worker-turn continuation before new work
+- applies deterministic least-recently-admitted fairness within one action class
+- records decisions as account-global audit artifacts
+- binds new-task execution to the selected task plus task/project-state digests
+- defers final quota authority to the M4.0a admission boundary
+- exposes `projectctl portfolio next` and `projectctl portfolio run`
+
+See ADR-030.
 
 #### M4.1a — Parallel Planning Safety Contract
 
-**Planned after M4.0b.**
+**Active milestone.**
 
 Define scoped execution-input digests, resource/write scopes, dependency/target conflicts and the
 conditions under which two runs can be planned concurrently without invalidating each other's
