@@ -30,12 +30,11 @@ class ParallelTaskScope(ProjectCtlModel):
             raise ValueError("Parallel input scopes must be unique.")
         if len(write_keys) != len(set(write_keys)):
             raise ValueError("Parallel write scopes must be unique.")
-        resources = [item.strip() for item in self.resources]
+        resources = list(self.resources)
         if any(not item for item in resources):
             raise ValueError("Parallel resource keys must be non-empty.")
         if len(resources) != len(set(resources)):
             raise ValueError("Parallel resource keys must be unique.")
-        self.resources = resources
         return self
 
 
