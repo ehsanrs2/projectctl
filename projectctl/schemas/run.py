@@ -63,8 +63,8 @@ class ContextManifest(ProjectCtlModel):
     task_id: str = Field(min_length=1)
     git_commit: str = Field(min_length=7)
     task_snapshot_digest: str = Field(min_length=1)
-    execution_input_digest: str = Field(min_length=1)
-    claim_transition_digest: str = Field(min_length=1)
+    execution_input_digest: str | None = None
+    claim_transition_digest: str | None = None
     project_state_digest: str = Field(min_length=1)
     spec_digest: str | None = None
     artifacts: list[ContextArtifact] = Field(default_factory=list)
