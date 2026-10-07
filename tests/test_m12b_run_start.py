@@ -225,6 +225,10 @@ def setup_prepared(tmp_path: Path, monkeypatch):
     git(repo, "config", "user.email", "test@example.com")
     git(repo, "config", "user.name", "Test")
     monkeypatch.setenv("PROJECTCTL_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(
+        "projectctl.application.execution.read_current_quota",
+        lambda account: fresh_quota(),
+    )
 
     initialized = runner.invoke(app, ["init", str(repo)])
     assert initialized.exit_code == 0, initialized.output
