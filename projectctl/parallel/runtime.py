@@ -17,6 +17,14 @@ from projectctl.application.execution import (
     resume_checkpointed_run,
     start_prepared_run,
 )
+from projectctl.application.execution_inputs import (
+    derive_reapplied_execution_input,
+    execution_input_semantic_digest,
+    load_claim_transition,
+    load_execution_input,
+    persist_execution_input,
+    validate_admitted_execution_input,
+)
 from projectctl.application.integration import (
     _integrate_run_locked,
     _load_json_model,
@@ -53,7 +61,7 @@ from projectctl.project.state import load_project_state, semantic_project_state_
 from projectctl.scheduler.digests import semantic_task_scope_digest
 from projectctl.schemas.capabilities import StrategyFallbackPolicy
 from projectctl.schemas.evidence import EvidenceManifest
-from projectctl.schemas.execution import ExecutionPlan
+from projectctl.schemas.execution import ExecutionPlan, ExecutionPlanLineage
 from projectctl.schemas.parallel import (
     ParallelBatchResult,
     ParallelInputEvidence,
@@ -63,6 +71,8 @@ from projectctl.schemas.parallel import (
     ParallelReapplicationManifest,
     ParallelReapplicationRequest,
     ParallelRunBinding,
+    parse_parallel_reapplication_request,
+    parse_parallel_run_binding,
 )
 from projectctl.storage.runs import RunStore
 
@@ -109,7 +119,7 @@ def load_parallel_run_binding(
             "in same-project concurrency."
         )
     try:
-        return ParallelRunBinding.model_validate(
+        return parse_parallel_run_binding(
             json.loads(path.read_text(encoding="utf-8"))
         )
     except Exception as exc:
@@ -142,21 +152,37 @@ def _active_bindings(root: Path) -> list[tuple[object, ParallelRunBinding]]:
     return result
 
 
-def _postclaim_parallel_plan(root: Path, preclaim: ParallelPlan) -> ParallelPlan:
-    snapshot = capture_task_snapshot(
+def _postclaim_parallel_plan(
+    root: Path,
+    preclaim: ParallelPlan,
+    *,
+    run_id: str,
+) -> ParallelPlan:
+    run_dir = root / ".projectctl" / "runs" / run_id
+    execution_input = load_execution_input(
+        run_dir / "execution-input-manifest.json"
+    )
+    transition = load_claim_transition(run_dir / "claim-transition.json")
+    validate_admitted_execution_input(
         root,
-        state="all",
-        read_cache_max_age_seconds=0,
+        execution_input,
+        transition,
+        require_target_at_base=True,
     )
-    scoped_digest, scoped_ids = semantic_task_scope_digest(
-        snapshot,
-        preclaim.task_id,
-    )
+    input_digest = execution_input_semantic_digest(execution_input)
+    if (
+        getattr(preclaim, "execution_input_digest", None) is not None
+        and preclaim.execution_input_digest != input_digest
+    ):
+        raise StaleSnapshotError(
+            "Prepared run execution input differs from pre-claim parallel proof."
+        )
     return preclaim.model_copy(
         update={
             "plan_id": f"parallel-admitted-{uuid.uuid4().hex}",
-            "scoped_task_digest": scoped_digest,
-            "scoped_task_ids": scoped_ids,
+            "execution_input_digest": input_digest,
+            "scoped_task_digest": transition.postclaim_task_scope_digest,
+            "scoped_task_ids": transition.postclaim_task_scope_ids,
             "created_at": utc_now(),
         }
     )
@@ -226,12 +252,25 @@ def prepare_parallel_run(
                 "Prepared execution base differs from the admitted parallel proof."
             )
 
-        admitted = _postclaim_parallel_plan(root, preclaim)
+        admitted = _postclaim_parallel_plan(
+            root,
+            preclaim,
+            run_id=prepared.record.run_id,
+        )
+        run_dir = root / ".projectctl" / "runs" / prepared.record.run_id
+        execution_input = load_execution_input(
+            run_dir / "execution-input-manifest.json"
+        )
+        claim_transition = load_claim_transition(
+            run_dir / "claim-transition.json"
+        )
         binding = ParallelRunBinding(
             run_id=prepared.record.run_id,
             task_id=prepared.record.task_id,
             preclaim_plan_digest=digest(preclaim),
             admitted_plan=admitted,
+            execution_input_digest=execution_input_semantic_digest(execution_input),
+            claim_transition_digest=digest(claim_transition),
             peer_plan_digests=[
                 digest(item.admitted_plan) for _, item in active
             ],
@@ -466,6 +505,35 @@ def _assert_runtime_inputs_stable(
     new_base: str,
 ) -> None:
     plan = binding.admitted_plan
+    if getattr(binding, "execution_input_digest", None):
+        run_dir = root / ".projectctl" / "runs" / binding.run_id
+        execution_input = load_execution_input(
+            run_dir / "execution-input-manifest.json"
+        )
+        transition = load_claim_transition(
+            run_dir / "claim-transition.json"
+        )
+        if (
+            execution_input_semantic_digest(execution_input)
+            != binding.execution_input_digest
+        ):
+            raise StaleSnapshotError(
+                "Parallel binding execution-input identity changed."
+            )
+        if (
+            getattr(binding, "claim_transition_digest", None) is not None
+            and digest(transition) != binding.claim_transition_digest
+        ):
+            raise StaleSnapshotError(
+                "Parallel binding claim-transition identity changed."
+            )
+        validate_admitted_execution_input(
+            root,
+            execution_input,
+            transition,
+            require_target_at_base=False,
+        )
+
     config = load_project_config(root)
     if config.project.id != plan.project_id:
         raise StaleSnapshotError("Parallel run project identity changed.")
@@ -551,16 +619,21 @@ def _latest_reapplication_request(run_dir: Path):
     root = run_dir / "reapplications"
     if not root.exists():
         return None
-    requests = sorted(root.glob("*/request.json"))
-    if not requests:
+    candidates = []
+    for path in root.glob("*/request.json"):
+        try:
+            request = parse_parallel_reapplication_request(
+                json.loads(path.read_text(encoding="utf-8"))
+            )
+        except Exception as exc:
+            raise RecoveryError(
+                f"Invalid parallel reapplication request {path}: {exc}"
+            ) from exc
+        candidates.append((request.requested_at, request.reapplication_id, path, request))
+    if not candidates:
         return None
-    path = requests[-1]
-    try:
-        return path.parent, ParallelReapplicationRequest.model_validate(
-            json.loads(path.read_text(encoding="utf-8"))
-        )
-    except Exception as exc:
-        raise RecoveryError(f"Invalid parallel reapplication request {path}: {exc}") from exc
+    _, _, path, request = max(candidates, key=lambda item: (item[0], item[1]))
+    return path.parent, request
 
 
 def _reapply_locked(root: Path, run_id: str) -> ParallelReapplicationManifest:
@@ -579,6 +652,22 @@ def _reapply_locked(root: Path, run_id: str) -> ParallelReapplicationManifest:
         assert binding is not None
         plan = _load_json_model(run_dir / "execution-plan.json", ExecutionPlan)
         evidence = _load_json_model(run_dir / "evidence-manifest.json", EvidenceManifest)
+        source_execution_input = None
+        source_execution_input_digest = getattr(plan, "execution_input_digest", None)
+        source_input_path = run_dir / "execution-input-manifest.json"
+        if source_execution_input_digest is not None:
+            if not source_input_path.exists():
+                raise IntegrationError(
+                    "M4.2a reapplication requires the source ExecutionInputManifest."
+                )
+            source_execution_input = load_execution_input(source_input_path)
+            if (
+                execution_input_semantic_digest(source_execution_input)
+                != source_execution_input_digest
+            ):
+                raise IntegrationError(
+                    "Source ExecutionInputManifest no longer matches ExecutionPlan."
+                )
         worktree = _validate_verified_candidate(
             root,
             record,
@@ -613,6 +702,10 @@ def _reapply_locked(root: Path, run_id: str) -> ParallelReapplicationManifest:
 
         reapplication_id = f"reapply-{uuid.uuid4().hex}"
         reapply_dir = run_dir / "reapplications" / reapplication_id
+        patch_rel = (
+            f".projectctl/runs/{run_id}/reapplications/"
+            f"{reapplication_id}/candidate.patch"
+        )
         request = ParallelReapplicationRequest(
             reapplication_id=reapplication_id,
             run_id=run_id,
@@ -620,14 +713,29 @@ def _reapply_locked(root: Path, run_id: str) -> ParallelReapplicationManifest:
             source_base_commit=plan.base_commit,
             source_candidate_commit=record.candidate_commit,
             source_execution_plan_digest=digest(plan),
+            source_execution_input_digest=source_execution_input_digest,
             source_evidence_digest=digest(evidence),
             target_base_commit=target_base,
             target_advance_changed_paths=changed_paths,
             patch_digest=patch_digest,
+            patch_artifact=patch_rel,
             requested_at=utc_now(),
         )
         _atomic_json(reapply_dir / "request.json", request)
+        reapply_dir.mkdir(parents=True, exist_ok=True)
+        (reapply_dir / "candidate.patch").write_bytes(patch)
         shutil.copy2(run_dir / "execution-plan.json", reapply_dir / "source-execution-plan.json")
+        if source_input_path.exists():
+            shutil.copy2(
+                source_input_path,
+                reapply_dir / "source-execution-input-manifest.json",
+            )
+        transition_path = run_dir / "claim-transition.json"
+        if transition_path.exists():
+            shutil.copy2(
+                transition_path,
+                reapply_dir / "source-claim-transition.json",
+            )
         shutil.copy2(run_dir / "evidence-manifest.json", reapply_dir / "source-evidence-manifest.json")
         verification_path = run_dir / "verification-manifest.json"
         if verification_path.exists():
@@ -651,9 +759,36 @@ def _reapply_locked(root: Path, run_id: str) -> ParallelReapplicationManifest:
         if resolve_commit(worktree, "HEAD") != target_base:
             raise IntegrationError("Reapplied worktree HEAD does not equal the new target base.")
 
+        updated_execution_input_digest = source_execution_input_digest
+        if source_execution_input is not None:
+            updated_execution_input = derive_reapplied_execution_input(
+                source_execution_input,
+                target_base_commit=target_base,
+                reapplication_id=reapplication_id,
+            )
+            # The target-advance checks above prove these code-input digests are
+            # unchanged on the new base. Persist a derived input artifact with
+            # explicit lineage rather than pretending the old base is current.
+            persist_execution_input(source_input_path, updated_execution_input)
+            updated_execution_input_digest = execution_input_semantic_digest(
+                updated_execution_input
+            )
+
+        lineage = None
+        if source_execution_input_digest is not None:
+            lineage = ExecutionPlanLineage(
+                transformation="parallel_reapplication",
+                source_execution_plan_digest=digest(plan),
+                source_execution_input_digest=source_execution_input_digest,
+                source_base_commit=plan.base_commit,
+                source_candidate_commit=record.candidate_commit,
+                reapplication_id=reapplication_id,
+            )
         new_plan = plan.model_copy(
             update={
                 "base_commit": target_base,
+                "execution_input_digest": updated_execution_input_digest,
+                "lineage": lineage,
                 "created_at": utc_now(),
             }
         )
@@ -677,11 +812,13 @@ def _reapply_locked(root: Path, run_id: str) -> ParallelReapplicationManifest:
             source_base_commit=request.source_base_commit,
             source_candidate_commit=request.source_candidate_commit,
             source_execution_plan_digest=request.source_execution_plan_digest,
+            source_execution_input_digest=request.source_execution_input_digest,
             source_evidence_digest=request.source_evidence_digest,
             target_base_commit=target_base,
             target_advance_changed_paths=changed_paths,
             patch_digest=patch_digest,
             updated_execution_plan_digest=new_plan_digest,
+            updated_execution_input_digest=updated_execution_input_digest,
             reapplied_at=utc_now(),
         )
         _atomic_json(reapply_dir / "manifest.json", manifest)
@@ -693,6 +830,7 @@ def _reapply_locked(root: Path, run_id: str) -> ParallelReapplicationManifest:
                 "manifest_digest": digest(manifest),
                 "source_candidate_commit": request.source_candidate_commit,
                 "target_base_commit": target_base,
+                "updated_execution_input_digest": updated_execution_input_digest,
                 "fresh_verification_required": True,
             },
         )
@@ -734,8 +872,44 @@ def recover_parallel_reapplication(
         if plan.base_commit == request.target_base_commit and record.status == RunStatus.VERIFYING:
             return "reverification_required"
 
+    store.append_event(
+        run_id,
+        "parallel.reapplication_ambiguous",
+        {
+            "reapplication_id": request.reapplication_id,
+            "source_candidate_commit": request.source_candidate_commit,
+            "target_base_commit": request.target_base_commit,
+            "observed_head": head,
+            "status": record.status.value,
+        },
+    )
+    if record.status in {
+        RunStatus.READY_TO_INTEGRATE,
+        RunStatus.VERIFYING,
+        RunStatus.INTEGRATING,
+    }:
+        final = store.transition(
+            run_id,
+            expected={record.status},
+            status=RunStatus.NEEDS_DECISION,
+            terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
+        )
+        try:
+            reconcile_terminal_task(
+                root,
+                store=store,
+                run_id=final.run_id,
+                actor=_actor(),
+            )
+        except Exception as exc:
+            store.append_event(
+                run_id,
+                "parallel.reapplication_reconcile_failed",
+                {"error": str(exc)},
+            )
     raise RecoveryError(
-        "Parallel reapplication is in an ambiguous crash state; human decision is required."
+        "Parallel reapplication is in an ambiguous crash state; "
+        "run persisted as needs_decision when lifecycle allowed."
     )
 
 

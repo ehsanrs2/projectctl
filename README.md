@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-The **Post-M4 Architecture Review** is complete. M4.0–M4.1 safety primitives are implemented, and the active milestone is now **M4.2a — Execution Input Contract Unification**.
+The **Post-M4 Architecture Review** is complete. **M4.2a — Execution Input Contract Unification** is implemented, and the active milestone is now **M4.2b — Unified Turn Orchestration**.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -2029,14 +2029,30 @@ M4.1a  Parallel Planning Safety Contract                  completed
    ↓
 M4.1b  Bounded Parallel Active-Set & Safe Integration     implemented
    ↓
-M4.2a  Execution Input Contract Unification               next
+M4.2a  Execution Input Contract Unification               completed
    ↓
-M4.2b  Unified Turn Orchestration
+M4.2b  Unified Turn Orchestration                           next
 ```
 
-M4.2a will separate full scheduler observation from scoped execution validity, make claims
-transition-aware, connect code scopes to context/verification, clean up reapplication provenance,
-and add cross-layer scenario tests.
+M4.2a now separates full scheduler observation from execution validity through
+`ExecutionInputManifest v1`. The selected task + relevant dependency proof, project/base identity,
+references and optional code scopes are the execution invalidation authority; the full scheduler
+snapshot remains audit material.
+
+Task claim is now an explicit transition. `ClaimTransitionEvidence v1` proves that the selected
+task's post-claim state is the expected consequence of the exact durable claim while relevant
+dependencies remain unchanged. Beads READY → RUNNING/revision movement is validated inside its
+claim adapter rather than special-cased in generic execution code.
+
+`ExecutionPlan v3`, `WorkerRequest v3` and `ContextManifest v3` bind the unified input proof.
+Explicit code scopes populate worker context and constraints, and independent verification now
+contains an `execution-write-scope` policy check so out-of-scope code cannot receive passing
+evidence.
+
+ParallelPlan/ParallelRunBinding v2 reference the same execution-input/claim-transition authority.
+Reapplication now persists the exact patch, archives source proof artifacts, creates explicit
+execution-plan/input lineage, chooses recovery requests by durable time, and persists ambiguous
+recovery as NEEDS_DECISION when lifecycle state allows.
 
 M4.2b will make portfolio arbitration aware of parallel active sets and route automated worker
 turns through one account-global dispatcher.
@@ -2049,4 +2065,4 @@ See ADR-029 through ADR-033, `docs/architecture/POST_M4_ARCHITECTURE_REVIEW.md`,
 
 Next:
 
-- **M4.2a — Execution Input Contract Unification**
+- **M4.2b — Unified Turn Orchestration**

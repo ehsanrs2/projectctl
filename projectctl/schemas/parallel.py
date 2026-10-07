@@ -62,7 +62,7 @@ class ParallelInputEvidence(ProjectCtlModel):
     digest: str = Field(min_length=1)
 
 
-class ParallelPlan(ProjectCtlModel):
+class ParallelPlanV1(ProjectCtlModel):
     schema_kind: Literal["projectctl.parallel_plan"] = "projectctl.parallel_plan"
     schema_version: Literal[1] = 1
     plan_id: str = Field(min_length=1)
@@ -78,6 +78,36 @@ class ParallelPlan(ProjectCtlModel):
     writes: list[ParallelPathScope] = Field(min_length=1)
     resources: list[str] = Field(default_factory=list)
     created_at: AwareDatetime
+
+
+class ParallelPlan(ProjectCtlModel):
+    schema_kind: Literal["projectctl.parallel_plan"] = "projectctl.parallel_plan"
+    schema_version: Literal[2] = 2
+    plan_id: str = Field(min_length=1)
+    project_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    integration_target_ref: str = Field(min_length=1)
+    base_commit: str = Field(min_length=7)
+    project_state_digest: str = Field(min_length=1)
+    execution_input_digest: str | None = None
+    scoped_task_digest: str = Field(min_length=1)
+    scoped_task_ids: list[str] = Field(min_length=1)
+    scope_digest: str = Field(min_length=1)
+    inputs: list[ParallelInputEvidence] = Field(min_length=1)
+    writes: list[ParallelPathScope] = Field(min_length=1)
+    resources: list[str] = Field(default_factory=list)
+    created_at: AwareDatetime
+
+
+def parse_parallel_plan(raw: object) -> ParallelPlan | ParallelPlanV1:
+    if not isinstance(raw, dict):
+        raise ValueError("Parallel plan must be an object.")
+    version = raw.get("schema_version", 1)
+    if version == 2:
+        return ParallelPlan.model_validate(raw)
+    if version == 1:
+        return ParallelPlanV1.model_validate(raw)
+    raise ValueError(f"Unsupported parallel plan schema version: {version}")
 
 
 class ParallelConflict(ProjectCtlModel):
@@ -110,7 +140,7 @@ class ParallelSafetyDecision(ProjectCtlModel):
     conflicts: list[ParallelConflict] = Field(default_factory=list)
 
 
-class ParallelRunBinding(ProjectCtlModel):
+class ParallelRunBindingV1(ProjectCtlModel):
     schema_kind: Literal["projectctl.parallel_run_binding"] = (
         "projectctl.parallel_run_binding"
     )
@@ -118,10 +148,37 @@ class ParallelRunBinding(ProjectCtlModel):
     run_id: str = Field(min_length=1)
     task_id: str = Field(min_length=1)
     preclaim_plan_digest: str = Field(min_length=1)
-    admitted_plan: ParallelPlan
+    admitted_plan: ParallelPlanV1
     peer_plan_digests: list[str] = Field(default_factory=list)
     peer_decision_digests: list[str] = Field(default_factory=list)
     bound_at: AwareDatetime
+
+
+class ParallelRunBinding(ProjectCtlModel):
+    schema_kind: Literal["projectctl.parallel_run_binding"] = (
+        "projectctl.parallel_run_binding"
+    )
+    schema_version: Literal[2] = 2
+    run_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    preclaim_plan_digest: str = Field(min_length=1)
+    admitted_plan: ParallelPlan
+    execution_input_digest: str | None = None
+    claim_transition_digest: str | None = None
+    peer_plan_digests: list[str] = Field(default_factory=list)
+    peer_decision_digests: list[str] = Field(default_factory=list)
+    bound_at: AwareDatetime
+
+
+def parse_parallel_run_binding(raw: object) -> ParallelRunBinding | ParallelRunBindingV1:
+    if not isinstance(raw, dict):
+        raise ValueError("Parallel run binding must be an object.")
+    version = raw.get("schema_version", 1)
+    if version == 2:
+        return ParallelRunBinding.model_validate(raw)
+    if version == 1:
+        return ParallelRunBindingV1.model_validate(raw)
+    raise ValueError(f"Unsupported parallel run binding schema version: {version}")
 
 
 class ParallelQueueEntry(ProjectCtlModel):
@@ -145,7 +202,7 @@ class ParallelIntegrationQueue(ProjectCtlModel):
     entries: list[ParallelQueueEntry] = Field(default_factory=list)
 
 
-class ParallelReapplicationRequest(ProjectCtlModel):
+class ParallelReapplicationRequestV1(ProjectCtlModel):
     schema_kind: Literal["projectctl.parallel_reapplication_request"] = (
         "projectctl.parallel_reapplication_request"
     )
@@ -163,7 +220,40 @@ class ParallelReapplicationRequest(ProjectCtlModel):
     requested_at: AwareDatetime
 
 
-class ParallelReapplicationManifest(ProjectCtlModel):
+class ParallelReapplicationRequest(ProjectCtlModel):
+    schema_kind: Literal["projectctl.parallel_reapplication_request"] = (
+        "projectctl.parallel_reapplication_request"
+    )
+    schema_version: Literal[2] = 2
+    reapplication_id: str = Field(min_length=1)
+    run_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    source_base_commit: str = Field(min_length=7)
+    source_candidate_commit: str = Field(min_length=7)
+    source_execution_plan_digest: str = Field(min_length=1)
+    source_execution_input_digest: str | None = None
+    source_evidence_digest: str = Field(min_length=1)
+    target_base_commit: str = Field(min_length=7)
+    target_advance_changed_paths: list[RepoRelativePath] = Field(default_factory=list)
+    patch_digest: str = Field(min_length=1)
+    patch_artifact: RepoRelativePath | None = None
+    requested_at: AwareDatetime
+
+
+def parse_parallel_reapplication_request(
+    raw: object,
+) -> ParallelReapplicationRequest | ParallelReapplicationRequestV1:
+    if not isinstance(raw, dict):
+        raise ValueError("Parallel reapplication request must be an object.")
+    version = raw.get("schema_version", 1)
+    if version == 2:
+        return ParallelReapplicationRequest.model_validate(raw)
+    if version == 1:
+        return ParallelReapplicationRequestV1.model_validate(raw)
+    raise ValueError(f"Unsupported parallel reapplication request schema version: {version}")
+
+
+class ParallelReapplicationManifestV1(ProjectCtlModel):
     schema_kind: Literal["projectctl.parallel_reapplication"] = (
         "projectctl.parallel_reapplication"
     )
@@ -180,6 +270,40 @@ class ParallelReapplicationManifest(ProjectCtlModel):
     patch_digest: str = Field(min_length=1)
     updated_execution_plan_digest: str = Field(min_length=1)
     reapplied_at: AwareDatetime
+
+
+class ParallelReapplicationManifest(ProjectCtlModel):
+    schema_kind: Literal["projectctl.parallel_reapplication"] = (
+        "projectctl.parallel_reapplication"
+    )
+    schema_version: Literal[2] = 2
+    reapplication_id: str = Field(min_length=1)
+    run_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    source_base_commit: str = Field(min_length=7)
+    source_candidate_commit: str = Field(min_length=7)
+    source_execution_plan_digest: str = Field(min_length=1)
+    source_execution_input_digest: str | None = None
+    source_evidence_digest: str = Field(min_length=1)
+    target_base_commit: str = Field(min_length=7)
+    target_advance_changed_paths: list[RepoRelativePath] = Field(default_factory=list)
+    patch_digest: str = Field(min_length=1)
+    updated_execution_plan_digest: str = Field(min_length=1)
+    updated_execution_input_digest: str | None = None
+    reapplied_at: AwareDatetime
+
+
+def parse_parallel_reapplication_manifest(
+    raw: object,
+) -> ParallelReapplicationManifest | ParallelReapplicationManifestV1:
+    if not isinstance(raw, dict):
+        raise ValueError("Parallel reapplication manifest must be an object.")
+    version = raw.get("schema_version", 1)
+    if version == 2:
+        return ParallelReapplicationManifest.model_validate(raw)
+    if version == 1:
+        return ParallelReapplicationManifestV1.model_validate(raw)
+    raise ValueError(f"Unsupported parallel reapplication manifest schema version: {version}")
 
 
 class ParallelBatchResult(ProjectCtlModel):

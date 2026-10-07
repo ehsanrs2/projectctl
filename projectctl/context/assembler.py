@@ -11,6 +11,10 @@ from projectctl.core.paths import resolve_inside_repo
 from projectctl.project.loader import load_project_config
 from projectctl.schemas.capabilities import WorkerStrategyDecision
 from projectctl.schemas.execution import ExecutionPlan, WorkerRequest
+from projectctl.schemas.execution_input import (
+    ClaimTransitionEvidence,
+    ExecutionInputManifest,
+)
 from projectctl.schemas.run import (
     ContextArtifact,
     ContextManifest,
@@ -116,7 +120,11 @@ def _spec_digest(task: NormalizedTask, artifacts: list[ContextArtifact]) -> str 
     return digest(specs) if specs else None
 
 
-def _constraints_for(plan: ExecutionPlan, manifest: ContextManifest) -> list[str]:
+def _constraints_for(
+    plan: ExecutionPlan,
+    manifest: ContextManifest,
+    execution_input: ExecutionInputManifest | None,
+) -> list[str]:
     constraints = [
         "Work only inside the provided isolated Git worktree.",
         "Follow all applicable AGENTS.md instruction files discovered in the context manifest, but do not modify them.",
@@ -134,6 +142,25 @@ def _constraints_for(plan: ExecutionPlan, manifest: ContextManifest) -> list[str
         constraints.append(
             "Use the listed knowledge sources as repository context; inspect them from the worktree instead of assuming their contents."
         )
+    if execution_input is not None and execution_input.write_scopes:
+        rendered = ", ".join(
+            f"{item.path} ({item.kind})" for item in execution_input.write_scopes
+        )
+        constraints.append(
+            "Authorized implementation write scope is limited to: " + rendered + "."
+        )
+        constraints.append(
+            "Treat repository paths outside the authorized write scope as read-only; "
+            "stop and report a blocker if the task requires changing them."
+        )
+    if execution_input is not None and execution_input.code_inputs:
+        rendered = ", ".join(
+            f"{item.scope.path} ({item.scope.kind})"
+            for item in execution_input.code_inputs
+        )
+        constraints.append(
+            "Declared code input scope for this execution is: " + rendered + "."
+        )
     return constraints
 
 
@@ -145,20 +172,46 @@ def assemble_context(
     plan: ExecutionPlan,
     strategy: WorkerStrategyDecision,
     context_manifest_path: str,
+    execution_input: ExecutionInputManifest | None = None,
+    claim_transition: ClaimTransitionEvidence | None = None,
 ) -> ContextBundle:
     task = task_store_for_project(project_root).get(plan.task_id)
     artifacts = _task_artifacts(worktree, task)
     instructions = _instruction_sources(worktree)
     knowledge = _knowledge_sources(project_root, worktree)
 
+    execution_input_digest = (
+        plan.execution_input_digest
+        if getattr(plan, "execution_input_digest", None)
+        else None
+    )
+    claim_transition_digest = (
+        digest(claim_transition) if claim_transition is not None else None
+    )
+    input_scopes = (
+        [item.scope for item in execution_input.code_inputs]
+        if execution_input is not None
+        else []
+    )
+    write_scopes = (
+        list(execution_input.write_scopes)
+        if execution_input is not None
+        else []
+    )
+    code_paths = sorted({item.path for item in input_scopes})
+
     manifest = ContextManifest(
         task_id=task.id,
         git_commit=plan.base_commit,
         task_snapshot_digest=plan.task_snapshot_digest,
+        execution_input_digest=execution_input_digest,
+        claim_transition_digest=claim_transition_digest,
         project_state_digest=plan.project_state_digest,
         spec_digest=_spec_digest(task, artifacts),
         artifacts=artifacts,
-        code_paths=[],
+        code_paths=code_paths,
+        input_scopes=input_scopes,
+        write_scopes=write_scopes,
         instruction_sources=instructions,
         knowledge_sources=knowledge,
         graph_revision=None,
@@ -169,6 +222,7 @@ def assemble_context(
             *[item.path for item in artifacts],
             *[item.path for item in instructions],
             *[item.path for item in knowledge],
+            *code_paths,
         }
     )
 
@@ -189,6 +243,8 @@ def assemble_context(
         branch_name=f"projectctl/run/{run_id}",
         worktree_id=run_id,
         execution_plan_digest=digest(plan),
+        execution_input_digest=execution_input_digest,
+        claim_transition_digest=claim_transition_digest,
         capability_snapshot_digest=plan.capability_snapshot_digest,
         strategy_decision_digest=plan.strategy_decision_digest,
         strategy=plan.strategy,
@@ -199,7 +255,7 @@ def assemble_context(
         execution_policy=plan.execution_policy,
         objective=objective,
         acceptance_criteria=acceptance,
-        constraints=_constraints_for(plan, manifest),
+        constraints=_constraints_for(plan, manifest, execution_input),
         stop_conditions=[
             "Stop if required information is missing and cannot be discovered from the worktree.",
             "Stop if the task requires additional permission or network access.",

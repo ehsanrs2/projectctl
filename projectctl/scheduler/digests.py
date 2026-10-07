@@ -4,7 +4,7 @@ from projectctl.core.digest import digest
 from projectctl.schemas.task import NormalizedTask, TaskSnapshot
 
 
-def _semantic_task_payload(task: NormalizedTask) -> dict:
+def semantic_task_payload(task: NormalizedTask) -> dict:
     raw = task.model_dump(mode="json", exclude_none=False)
     if isinstance(raw.get("source"), dict):
         raw["source"].pop("observed_at", None)
@@ -14,9 +14,13 @@ def _semantic_task_payload(task: NormalizedTask) -> dict:
     return raw
 
 
+def semantic_task_digest(task: NormalizedTask) -> str:
+    return digest(semantic_task_payload(task))
+
+
 def semantic_task_snapshot_digest(snapshot: TaskSnapshot) -> str:
     tasks = [
-        _semantic_task_payload(task)
+        semantic_task_payload(task)
         for task in sorted(snapshot.tasks, key=lambda item: item.id)
     ]
     return digest(
@@ -59,6 +63,6 @@ def semantic_task_scope_digest(
     ordered = sorted(included)
     payload = {
         "provider": snapshot.provider,
-        "tasks": [_semantic_task_payload(by_id[item]) for item in ordered],
+        "tasks": [semantic_task_payload(by_id[item]) for item in ordered],
     }
     return digest(payload), ordered

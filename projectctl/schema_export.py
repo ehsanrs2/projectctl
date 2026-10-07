@@ -17,7 +17,21 @@ from projectctl.schemas.delivery import (
 )
 from projectctl.schemas.evidence import EvidenceManifest, EvidenceManifestV1
 from projectctl.schemas.github_cache import GitHubCacheEntry, GitHubCacheRequest
-from projectctl.schemas.execution import (ExecutionPlan, ExecutionPlanV1, WorkerCheckpoint, WorkerCheckpointV1, WorkerRequest, WorkerRequestV1, WorkerResult)
+from projectctl.schemas.execution import (
+    ExecutionPlan,
+    ExecutionPlanV1,
+    ExecutionPlanV2,
+    WorkerCheckpoint,
+    WorkerCheckpointV1,
+    WorkerRequest,
+    WorkerRequestV1,
+    WorkerRequestV2,
+    WorkerResult,
+)
+from projectctl.schemas.execution_input import (
+    ClaimTransitionEvidence,
+    ExecutionInputManifest,
+)
 from projectctl.schemas.jira_lifecycle import JiraLifecycleMarker
 from projectctl.schemas.integration import (
     IntegrationManifest,
@@ -46,16 +60,26 @@ from projectctl.schemas.parallel import (
     ParallelBatchResult,
     ParallelIntegrationQueue,
     ParallelPlan,
+    ParallelPlanV1,
     ParallelReapplicationManifest,
+    ParallelReapplicationManifestV1,
     ParallelReapplicationRequest,
+    ParallelReapplicationRequestV1,
     ParallelRunBinding,
+    ParallelRunBindingV1,
     ParallelSafetyDecision,
     ParallelScopeCatalog,
 )
 from projectctl.schemas.portfolio import PortfolioDecision, PortfolioTurnResult
 from projectctl.schemas.project_state import ProjectState
 from projectctl.schemas.quota import QuotaSnapshot, QuotaSnapshotV1
-from projectctl.schemas.run import ContextManifest, ContextManifestV1, RunManifest, RunManifestV1
+from projectctl.schemas.run import (
+    ContextManifest,
+    ContextManifestV1,
+    ContextManifestV2,
+    RunManifest,
+    RunManifestV1,
+)
 from projectctl.schemas.scheduler import SchedulerDecision, SchedulerDecisionV1
 from projectctl.schemas.status import ProjectStatus
 from projectctl.schemas.task import TaskSnapshot, TaskSnapshotV1, TaskSnapshotV2
@@ -97,21 +121,30 @@ PUBLIC_SCHEMAS = {
     "portfolio-decision.v1.schema.json": PortfolioDecision,
     "portfolio-turn-result.v1.schema.json": PortfolioTurnResult,
     "parallel-scope-catalog.v1.schema.json": ParallelScopeCatalog,
-    "parallel-plan.v1.schema.json": ParallelPlan,
+    "parallel-plan.v1.schema.json": ParallelPlanV1,
+    "parallel-plan.v2.schema.json": ParallelPlan,
     "parallel-safety-decision.v1.schema.json": ParallelSafetyDecision,
-    "parallel-run-binding.v1.schema.json": ParallelRunBinding,
+    "parallel-run-binding.v1.schema.json": ParallelRunBindingV1,
+    "parallel-run-binding.v2.schema.json": ParallelRunBinding,
     "parallel-integration-queue.v1.schema.json": ParallelIntegrationQueue,
-    "parallel-reapplication-request.v1.schema.json": ParallelReapplicationRequest,
-    "parallel-reapplication.v1.schema.json": ParallelReapplicationManifest,
+    "parallel-reapplication-request.v1.schema.json": ParallelReapplicationRequestV1,
+    "parallel-reapplication-request.v2.schema.json": ParallelReapplicationRequest,
+    "parallel-reapplication.v1.schema.json": ParallelReapplicationManifestV1,
+    "parallel-reapplication.v2.schema.json": ParallelReapplicationManifest,
     "parallel-batch-result.v1.schema.json": ParallelBatchResult,
     "run-manifest.v1.schema.json": RunManifestV1,
     "run-manifest.v2.schema.json": RunManifest,
     "context-manifest.v1.schema.json": ContextManifestV1,
-    "context-manifest.v2.schema.json": ContextManifest,
+    "context-manifest.v2.schema.json": ContextManifestV2,
+    "context-manifest.v3.schema.json": ContextManifest,
+    "execution-input-manifest.v1.schema.json": ExecutionInputManifest,
+    "claim-transition-evidence.v1.schema.json": ClaimTransitionEvidence,
     "execution-plan.v1.schema.json": ExecutionPlanV1,
-    "execution-plan.v2.schema.json": ExecutionPlan,
+    "execution-plan.v2.schema.json": ExecutionPlanV2,
+    "execution-plan.v3.schema.json": ExecutionPlan,
     "worker-request.v1.schema.json": WorkerRequestV1,
-    "worker-request.v2.schema.json": WorkerRequest,
+    "worker-request.v2.schema.json": WorkerRequestV2,
+    "worker-request.v3.schema.json": WorkerRequest,
     "worker-result.v1.schema.json": WorkerResult,
     "worker-checkpoint.v1.schema.json": WorkerCheckpointV1,
     "worker-checkpoint.v2.schema.json": WorkerCheckpoint,

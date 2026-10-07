@@ -10,6 +10,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from projectctl.application.execution import _actor
+from projectctl.application.execution_inputs import (
+    execution_input_semantic_digest,
+    load_execution_input,
+)
 from projectctl.application.task_lifecycle import reconcile_terminal_task
 from projectctl.core.digest import digest
 from projectctl.core.enums import (
@@ -22,7 +26,7 @@ from projectctl.core.errors import RunStoreError, VerificationError, WorktreeErr
 from projectctl.core.time import utc_now
 from projectctl.git import WorktreeManager, resolve_commit
 from projectctl.schemas.evidence import EvidenceManifest
-from projectctl.schemas.execution import ExecutionPlan, WorkerResult
+from projectctl.schemas.execution import ExecutionPlan, WorkerResult, parse_execution_plan
 from projectctl.schemas.run_store import RunRecord
 from projectctl.schemas.verification import (
     VerificationCheckResult,
@@ -72,9 +76,33 @@ def _load_json_model(path: Path, model):
     if not path.exists():
         raise RunStoreError(f"Missing run artifact: {path}")
     try:
-        return model.model_validate(json.loads(path.read_text(encoding="utf-8")))
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if model is ExecutionPlan:
+            return parse_execution_plan(raw)
+        return model.model_validate(raw)
     except Exception as exc:
         raise RunStoreError(f"Invalid run artifact {path.name}: {exc}") from exc
+
+
+def _scope_contains(scope, path: str) -> bool:
+    if scope.kind == "exact":
+        return scope.path == path
+    prefix = scope.path.rstrip("/") + "/"
+    return path == scope.path or path.startswith(prefix)
+
+
+def _write_scope_violations(execution_input, changed_paths: list[str]) -> list[str]:
+    if execution_input is None or not execution_input.write_scopes:
+        return []
+    outside = [
+        path
+        for path in changed_paths
+        if not any(_scope_contains(scope, path) for scope in execution_input.write_scopes)
+    ]
+    return [
+        f"execution_write_scope:{path}"
+        for path in sorted(outside)
+    ]
 
 
 def _synthetic_check(
@@ -223,6 +251,19 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
 
         plan = _load_json_model(run_dir / "execution-plan.json", ExecutionPlan)
         worker_result = _load_json_model(run_dir / "worker-result.json", WorkerResult)
+        execution_input = None
+        expected_execution_input = getattr(plan, "execution_input_digest", None)
+        if expected_execution_input is not None:
+            input_path = run_dir / "execution-input-manifest.json"
+            if not input_path.exists():
+                raise RunStoreError(
+                    "ExecutionPlan references an ExecutionInputManifest that is missing."
+                )
+            execution_input = load_execution_input(input_path)
+            if execution_input_semantic_digest(execution_input) != expected_execution_input:
+                raise RunStoreError(
+                    "ExecutionInputManifest no longer matches ExecutionPlan."
+                )
         if worker_result.run_id != run_id or worker_result.task_id != plan.task_id:
             raise RunStoreError("WorkerResult identity does not match the run.")
         if digest(plan) != record.execution_plan_digest:
@@ -256,15 +297,24 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
             strategy=plan.strategy,
         )
         policy_ms = max(0, int((time.monotonic() - policy_start) * 1000))
+        scope_violations = _write_scope_violations(
+            execution_input,
+            before.changed_paths,
+        )
+        policy_violations = [*before.violations, *scope_violations]
         checks: list[VerificationCheckResult] = [
             _synthetic_check(
                 "diff-policy",
                 passed=not before.violations,
                 duration_ms=policy_ms,
-            )
+            ),
+            _synthetic_check(
+                "execution-write-scope",
+                passed=not scope_violations,
+            ),
         ]
 
-        if before.violations:
+        if policy_violations:
             checks.extend(_skipped_check(command) for command in resolved.profile.commands)
             verification = VerificationManifest(
                 run_id=run_id,
@@ -274,7 +324,7 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
                 profile=resolved.profile.id,
                 profile_digest=resolved.profile_digest,
                 changed_paths=before.changed_paths,
-                policy_violations=before.violations,
+                policy_violations=policy_violations,
                 started_at=started_at,
                 completed_at=utc_now(),
                 checks=checks,
@@ -295,7 +345,7 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
                 run_id,
                 "verification.policy_blocked",
                 {
-                    "violations": before.violations,
+                    "violations": policy_violations,
                     "verification_manifest_digest": digest(verification),
                     "evidence_manifest_digest": digest(evidence),
                 },
@@ -337,8 +387,26 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
         )
         checks.append(_synthetic_check("workspace-stability", passed=stable))
 
+        final_scope_violations = _write_scope_violations(
+            execution_input,
+            after.changed_paths,
+        )
+        final_policy_violations = [*after.violations, *final_scope_violations]
+        if final_scope_violations:
+            # The pre-command check already covered the worker diff. This second
+            # calculation is a fail-closed guard if a verifier somehow changed
+            # path identity while also escaping workspace stability.
+            checks = [
+                (
+                    _synthetic_check("execution-write-scope", passed=False)
+                    if item.id == "execution-write-scope"
+                    else item
+                )
+                for item in checks
+            ]
+
         command_pass = _required_commands_passed(resolved.profile, checks)
-        overall = stable and command_pass and not after.violations
+        overall = stable and command_pass and not final_policy_violations
 
         verification = VerificationManifest(
             run_id=run_id,
@@ -348,7 +416,7 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
             profile=resolved.profile.id,
             profile_digest=resolved.profile_digest,
             changed_paths=after.changed_paths,
-            policy_violations=after.violations,
+            policy_violations=final_policy_violations,
             started_at=started_at,
             completed_at=utc_now(),
             checks=checks,

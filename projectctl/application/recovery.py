@@ -16,6 +16,14 @@ from projectctl.application.execution import (
     _checkpoint_event_matches,
     _worktree_state_digest,
 )
+from projectctl.application.execution_inputs import (
+    build_claim_transition_evidence,
+    execution_input_semantic_digest,
+    load_claim_transition,
+    load_execution_input,
+    persist_claim_transition,
+    validate_admitted_execution_input,
+)
 from projectctl.application.integration import (
     _cleanup_verified_worktree,
     _finalize_delivery,
@@ -206,6 +214,65 @@ def _recover_preparing(
             details=details,
         )
 
+    expected_execution_input = getattr(plan, "execution_input_digest", None)
+    if expected_execution_input is not None:
+        input_path = run_dir / "execution-input-manifest.json"
+        transition_path = run_dir / "claim-transition.json"
+        try:
+            execution_input = load_execution_input(input_path)
+            if execution_input_semantic_digest(execution_input) != expected_execution_input:
+                raise RecoveryError(
+                    "ExecutionInputManifest no longer matches durable ExecutionPlan."
+                )
+            if transition_path.exists():
+                transition = load_claim_transition(transition_path)
+            else:
+                transition = build_claim_transition_evidence(
+                    root,
+                    run_id=record.run_id,
+                    manifest=execution_input,
+                    request=request,
+                    claim=claim,
+                    claimer=claimer,
+                )
+                persist_claim_transition(transition_path, transition)
+                store.append_event(
+                    record.run_id,
+                    "task.claim.transition_recovered",
+                    {
+                        "execution_input_digest": expected_execution_input,
+                        "claim_transition_digest": digest(transition),
+                    },
+                )
+                details.append(
+                    "Missing claim-transition evidence was reconstructed from "
+                    "durable claim + current task authority."
+                )
+            validate_admitted_execution_input(
+                root,
+                execution_input,
+                transition,
+                require_target_at_base=True,
+            )
+        except Exception as exc:
+            final = store.transition(
+                record.run_id,
+                expected={RunStatus.PREPARING},
+                status=RunStatus.NEEDS_DECISION,
+                terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
+            )
+            details.append(
+                "Claim is owned but M4.2a execution-input transition cannot be "
+                f"proven safely: {exc}"
+            )
+            return RecoveryAction(
+                run_id=record.run_id,
+                previous_status=previous.value,
+                resolved_status=final.status.value,
+                action="escalated_execution_input_recovery",
+                details=details,
+            )
+
     manager = WorktreeManager(root)
     expected = manager.path_for(record.worktree_id)
     if expected.exists():
@@ -320,6 +387,47 @@ def recover_run(project_root: Path, run_id: str) -> RecoveryAction:
                         action="claimed_ownership_lost",
                         details=details,
                     )
+
+                expected_execution_input = getattr(plan, "execution_input_digest", None)
+                if expected_execution_input is not None:
+                    try:
+                        execution_input = load_execution_input(
+                            run_dir / "execution-input-manifest.json"
+                        )
+                        transition = load_claim_transition(
+                            run_dir / "claim-transition.json"
+                        )
+                        if (
+                            execution_input_semantic_digest(execution_input)
+                            != expected_execution_input
+                        ):
+                            raise RecoveryError(
+                                "Execution input digest differs from ExecutionPlan."
+                            )
+                        validate_admitted_execution_input(
+                            root,
+                            execution_input,
+                            transition,
+                            require_target_at_base=True,
+                        )
+                    except Exception as exc:
+                        final = store.transition(
+                            run_id,
+                            expected={RunStatus.CLAIMED},
+                            status=RunStatus.NEEDS_DECISION,
+                            terminal_reason=RunTerminalReason.RECOVERY_UNSAFE,
+                        )
+                        details.append(
+                            "Claimed run execution input is no longer provable: "
+                            + str(exc)
+                        )
+                        return RecoveryAction(
+                            run_id=run_id,
+                            previous_status=previous.value,
+                            resolved_status=final.status.value,
+                            action="escalated_claimed_input_recovery",
+                            details=details,
+                        )
 
                 expected = WorktreeManager(root).path_for(record.worktree_id)
                 if not expected.exists():
