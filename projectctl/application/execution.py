@@ -457,6 +457,7 @@ def prepare_next_run(
                 root,
                 preclaim_input,
                 require_admitted=False,
+                tasks=planning_tasks,
             )
         except StaleSnapshotError:
             store.transition(
@@ -530,7 +531,11 @@ def prepare_next_run(
                 claim=claim,
                 claimer=claimer,
             )
-            revalidate_execution_input(root, admitted_input)
+            revalidate_execution_input(
+                root,
+                admitted_input,
+                tasks=postclaim_tasks,
+            )
             plan = plan.model_copy(
                 update={
                     "execution_input_digest": semantic_execution_input_digest(
