@@ -14,6 +14,10 @@ def _semantic_task_payload(task: NormalizedTask) -> dict:
     return raw
 
 
+def semantic_task_digest(task: NormalizedTask) -> str:
+    return digest(_semantic_task_payload(task))
+
+
 def semantic_task_snapshot_digest(snapshot: TaskSnapshot) -> str:
     tasks = [
         _semantic_task_payload(task)
