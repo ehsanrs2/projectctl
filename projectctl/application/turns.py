@@ -469,17 +469,29 @@ def advance_non_worker_phases(
                 verify_run(root, record.run_id)
                 final = RunStore(root).get(record.run_id)
             elif record.status == RunStatus.READY_TO_INTEGRATE:
-                action = "integrate"
-                binding = load_parallel_run_binding(
-                    root,
-                    record.run_id,
-                    allow_missing=True,
+                other_worker_phases = sorted(
+                    run_id
+                    for run_id in worker_phase_ids
+                    if run_id != record.run_id
                 )
-                if binding is None:
-                    integrate_run(root, record.run_id)
+                if other_worker_phases:
+                    action = "phase_wait"
+                    detail = (
+                        "Integration waits for other exact-base worker phases: "
+                        + ",".join(other_worker_phases)
+                    )
                 else:
-                    integrate_parallel_run(root, record.run_id)
-                final = RunStore(root).get(record.run_id)
+                    action = "integrate"
+                    binding = load_parallel_run_binding(
+                        root,
+                        record.run_id,
+                        allow_missing=True,
+                    )
+                    if binding is None:
+                        integrate_run(root, record.run_id)
+                    else:
+                        integrate_parallel_run(root, record.run_id)
+                    final = RunStore(root).get(record.run_id)
             elif record.status in {
                 RunStatus.INTEGRATING,
                 RunStatus.AWAITING_REVIEW,
