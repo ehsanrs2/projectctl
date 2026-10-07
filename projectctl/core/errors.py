@@ -54,6 +54,10 @@ class QuotaAdmissionError(QuotaError):
     pass
 
 
+class PortfolioError(ProjectCtlError):
+    pass
+
+
 class ProviderUnavailableError(ProjectCtlError):
     pass
 
