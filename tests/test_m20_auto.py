@@ -111,7 +111,16 @@ def turn_result(run_id, action="admit_task", status=RunStatus.VERIFYING):
         run_id=run_id,
         run_status=status,
         project_turn=SimpleNamespace(
-            envelope=SimpleNamespace(action=action)
+            envelope=SimpleNamespace(
+                action=action,
+                run_status=(
+                    RunStatus.CLAIMED
+                    if action == "start_run"
+                    else RunStatus.RUNNING
+                    if action == "resume_run"
+                    else None
+                ),
+            )
         ),
     )
 
@@ -291,18 +300,70 @@ def test_auto_does_not_compete_with_live_active_run(
     assert report.attempted_tasks == 0
 
 
-def test_auto_fails_closed_on_parallel_active_set(
+def test_auto_uses_fair_dispatcher_for_parallel_active_set(
     tmp_path: Path, monkeypatch
 ):
     setup_common(monkeypatch)
-    first = record(run_id="run-1", status=RunStatus.CLAIMED)
-    second = record(run_id="run-2", status=RunStatus.VERIFYING)
+    first = record(run_id="run-1", task_id="task-1", status=RunStatus.CLAIMED)
+    second = record(run_id="run-2", task_id="task-2", status=RunStatus.VERIFYING)
     FakeStore.active = [first, second]
     FakeStore.records = {"run-1": first, "run-2": second}
 
-    report = auto_app.run_auto(tmp_path, AutoRunPolicy(max_tasks=2))
+    monkeypatch.setattr(
+        auto_app,
+        "collect_status",
+        lambda root: status_bundle(selected=None, total=2, done=1),
+    )
 
-    assert report.stop_reason == AutoStopReason.MULTIPLE_ACTIVE_RUNS
+    def maintain(root):
+        current = FakeStore.records.get("run-2")
+        if current is not None and current.status == RunStatus.VERIFYING:
+            passed = record(
+                run_id="run-2",
+                task_id="task-2",
+                status=RunStatus.PASSED,
+            )
+            FakeStore.records["run-2"] = passed
+            FakeStore.active = [
+                item for item in FakeStore.active if item.run_id != "run-2"
+            ]
+            return maintenance(
+                SimpleNamespace(
+                    run_id="run-2",
+                    action="verify",
+                    started_status=RunStatus.VERIFYING,
+                    final_status=RunStatus.PASSED,
+                    detail=None,
+                )
+            )
+        return maintenance()
+
+    monkeypatch.setattr(auto_app, "advance_non_worker_phases", maintain)
+
+    def fair_turn(*args, **kwargs):
+        passed = record(
+            run_id="run-1",
+            task_id="task-1",
+            status=RunStatus.PASSED,
+        )
+        FakeStore.records["run-1"] = passed
+        FakeStore.active = [
+            item for item in FakeStore.active if item.run_id != "run-1"
+        ]
+        return portfolio_decision(), turn_result(
+            "run-1",
+            action="start_run",
+            status=RunStatus.VERIFYING,
+        )
+
+    monkeypatch.setattr(auto_app, "request_fair_project_turn", fair_turn)
+
+    report = auto_app.run_auto(tmp_path, AutoRunPolicy(max_tasks=1))
+
+    assert report.stop_reason == AutoStopReason.MAX_TASKS_REACHED
+    assert report.completed_tasks == 1
+    assert report.attempted_tasks == 1
+    assert report.steps[-1].action == "start_run"
 
 
 def test_auto_yields_when_portfolio_selects_another_project(
