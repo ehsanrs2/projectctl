@@ -275,6 +275,97 @@ class RunStore:
             conn.close()
         return self.get(run_id)
 
+    def rebind_for_reverification(
+        self,
+        run_id: str,
+        *,
+        expected: set[RunStatus],
+        execution_plan_digest: str,
+        base_commit: str,
+        now: datetime | None = None,
+    ) -> RunRecord:
+        """Atomically bind an existing verified run to a transformed base.
+
+        This is reserved for ProjectCTL-controlled reapplication. The previous
+        candidate/evidence remain audit artifacts on disk, while durable run
+        state is reset to VERIFYING and requires fresh verification.
+        """
+        now = now or datetime.now(timezone.utc)
+        conn = connect_db(self.db_path)
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT * FROM runs WHERE run_id=?", (run_id,)).fetchone()
+            if row is None:
+                raise RunStoreError(f"Unknown run: {run_id}")
+            current = RunStatus(row["status"])
+            if current not in expected:
+                raise RunStoreError(
+                    f"Run {run_id} rebind rejected: expected "
+                    f"{sorted(x.value for x in expected)}, found {current.value}."
+                )
+
+            manifest = RunManifest.model_validate(json.loads(row["manifest_json"]))
+            updated_data = manifest.model_dump(mode="python")
+            updated_data.update(
+                {
+                    "status": RunStatus.VERIFYING,
+                    "terminal_reason": None,
+                    "execution_plan_digest": execution_plan_digest,
+                    "base_commit": base_commit,
+                    "candidate_commit": None,
+                    "evidence_manifest": None,
+                    "completed_at": None,
+                }
+            )
+            updated = RunManifest.model_validate(updated_data)
+            payload = json.dumps(
+                updated.model_dump(mode="json"),
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            conn.execute(
+                """
+                UPDATE runs
+                SET status=?, terminal_reason=NULL, execution_plan_digest=?,
+                    base_commit=?, candidate_commit=NULL, completed_at=NULL,
+                    manifest_json=?
+                WHERE run_id=?
+                """,
+                (
+                    RunStatus.VERIFYING.value,
+                    execution_plan_digest,
+                    base_commit,
+                    payload,
+                    run_id,
+                ),
+            )
+            conn.execute(
+                "INSERT INTO run_events(run_id, created_at, event_type, payload_json) "
+                "VALUES (?, ?, ?, ?)",
+                (
+                    run_id,
+                    _iso(now),
+                    "run.rebound_for_reverification",
+                    json.dumps(
+                        {
+                            "from": current.value,
+                            "to": RunStatus.VERIFYING.value,
+                            "base_commit": base_commit,
+                            "execution_plan_digest": execution_plan_digest,
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                ),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+        return self.get(run_id)
+
     def acquire_lease(
         self,
         run_id: str,
