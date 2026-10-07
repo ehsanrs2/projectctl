@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Re-evaluate the complete post-M4 control plane, identify remaining correctness or product bottlenecks, and freeze the next milestone only after an architecture review.
+current_goal: Unify scheduler observation, claim-aware task transitions, scoped execution inputs, context scope and verification into one execution-input authority shared by serial and parallel runs.
 active_milestone:
-  id: POST-M4-ARCH
-  title: Post-M4 Architecture Review
+  id: M4.2a
+  title: Execution Input Contract Unification
   aliases:
-    - Post-M4 Review
-    - M4 Architecture Review
-    - Next-Milestone Review
+    - Execution Input Authority
+    - Claim-Aware Execution Inputs
+    - Scoped Execution Contract
 updated_at: null
