@@ -528,6 +528,32 @@ def _validate_review_before_apply(
     return state
 
 
+def _validate_request_against_review(
+    request: ContextScopeAdoptionRequest,
+    review: ContextScopeReview,
+    review_digest: str,
+    approval_digest: str,
+) -> None:
+    expected = {
+        "project_id": review.project_id,
+        "task_id": review.task_id,
+        "review_id": review.review_id,
+        "review_digest": review_digest,
+        "approval_digest": approval_digest,
+        "base_commit": review.base_commit,
+        "task_digest": review.task_digest,
+        "catalog_path": review.catalog_path,
+        "catalog_before_digest": review.catalog_before_digest,
+        "proposed_catalog_digest": review.proposed_catalog_digest,
+        "proposed_scope_digest": digest(review.proposed_scope),
+    }
+    for field, value in expected.items():
+        if getattr(request, field) != value:
+            raise ConfigurationError(
+                f"Adoption request field {field!r} no longer matches the reviewed proposal."
+            )
+
+
 def _make_receipt(
     *,
     request: ContextScopeAdoptionRequest,
@@ -583,23 +609,32 @@ def adopt_scope_review(
             review_digest,
         )
         if receipt is not None:
-            if receipt.approval_digest != approval_digest:
+            _validate_request_against_review(
+                request,
+                review,
+                review_digest,
+                approval_digest,
+            )
+            if (
+                receipt.approval_digest != approval_digest
+                or receipt.review_digest != review_digest
+                or receipt.request_digest != digest(request)
+                or receipt.adoption_id != request.adoption_id
+            ):
                 raise ConfigurationError(
-                    "Existing adoption receipt approval identity differs."
+                    "Existing adoption receipt does not match its durable request/review."
                 )
             return receipt
 
         path, raw, current_digest, catalog = _catalog_state(root)
 
         if request is not None:
-            if (
-                request.approval_digest != approval_digest
-                or request.proposed_catalog_digest != review.proposed_catalog_digest
-                or request.catalog_before_digest != review.catalog_before_digest
-            ):
-                raise ConfigurationError(
-                    "Pending adoption request does not match this approval/review."
-                )
+            _validate_request_against_review(
+                request,
+                review,
+                review_digest,
+                approval_digest,
+            )
             if current_digest == request.proposed_catalog_digest:
                 adopted = load_parallel_scope_catalog(root)
                 scope = adopted.tasks.get(task_id)
