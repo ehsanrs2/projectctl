@@ -383,3 +383,53 @@ def test_portfolio_cli_is_registered():
     assert result.exit_code == 0, result.output
     assert "next" in result.output
     assert "run" in result.output
+    assert "maintain" in result.output
+    assert "cycle" in result.output
+
+
+
+def test_portfolio_cycle_runs_maintenance_before_worker_decision(
+    monkeypatch,
+    tmp_path,
+):
+    calls = []
+    maintenance_result = SimpleNamespace(
+        model_dump=lambda mode=None: {},
+    )
+    monkeypatch.setattr(
+        portfolio_app,
+        "maintain_portfolio_projects",
+        lambda *args, **kwargs: (
+            calls.append("maintenance") or [maintenance_result],
+            [],
+        ),
+    )
+    decision = PortfolioDecision(
+        decision_id="cycle-decision",
+        evaluated_at=NOW,
+        account_id="acct",
+        registry_digest="registry",
+        account_busy=True,
+        active_project_instance_id="busy-project",
+        active_run_id="busy-run",
+    )
+
+    def collect(*args, **kwargs):
+        calls.append("decision")
+        return decision
+
+    monkeypatch.setattr(
+        portfolio_app,
+        "collect_portfolio_decision",
+        collect,
+    )
+
+    result = portfolio_app.run_portfolio_cycle(
+        "acct",
+        now=NOW,
+        home=tmp_path,
+    )
+
+    assert calls == ["maintenance", "decision"]
+    assert result.turn is None
+    assert result.decision.account_busy is True
