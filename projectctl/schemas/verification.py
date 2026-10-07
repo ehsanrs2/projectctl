@@ -23,7 +23,7 @@ DEFAULT_PROTECTED_PATHS = [
     "projectctl.verification.yaml",
     "projectctl.parallel.yaml",
 ]
-RESERVED_CHECK_IDS = {"diff-policy", "workspace-stability"}
+RESERVED_CHECK_IDS = {"diff-policy", "execution-write-scope", "workspace-stability"}
 
 
 class VerificationCommand(ProjectCtlModel):
