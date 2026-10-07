@@ -36,6 +36,7 @@ from projectctl.schemas.execution import ExecutionPlan, ExecutionPolicy
 from projectctl.schemas.run import WorkerDescriptor
 from projectctl.schemas.task import NormalizedTask, TaskSnapshot, TaskSource
 from projectctl.schemas.task_claim import TaskClaim
+from projectctl.project.state import load_project_state, semantic_project_state_digest
 from projectctl.workers.capability_digest import effective_capability_digest
 
 NOW = datetime(2026, 10, 7, 10, 0, tzinfo=timezone.utc)
@@ -226,15 +227,8 @@ def planning_bundle(repo: Path, base: str, tasks: TaskSnapshot):
         task_id="task-a",
         tasks=tasks,
         scheduler_task_snapshot_digest="scheduler-full-snapshot",
-        project_state_digest=digest(
-            {
-                "schema_kind": "projectctl.project_state",
-                "schema_version": 1,
-                "project_id": "repo",
-                "current_goal": None,
-                "active_milestone": None,
-                "updated_at": None,
-            }
+        project_state_digest=semantic_project_state_digest(
+            load_project_state(repo, allow_missing=True)
         ),
         integration_target_ref=git(repo, "branch", "--show-current"),
         base_commit=base,
