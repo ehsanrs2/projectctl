@@ -256,6 +256,7 @@ def build_parallel_plan(
         base_commit=base_commit,
         now=now,
         explicit_scope=scope,
+        project_id=config.project.id,
     )
     input_evidence = [
         ParallelInputEvidence(
@@ -339,6 +340,7 @@ def revalidate_parallel_plan(
             integration_target_ref=plan.integration_target_ref,
             base_commit=plan.base_commit,
             explicit_scope=scope,
+            project_id=config.project.id,
         )
         if execution_input_semantic_digest(current_input) != plan.execution_input_digest:
             raise StaleSnapshotError(
