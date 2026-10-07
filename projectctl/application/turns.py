@@ -437,13 +437,21 @@ def advance_non_worker_phases(
         }
     }
 
+    now = utc_now()
     for record in active_snapshot:
         started = record.status
         action = "phase_wait"
         detail = None
         final = record
         try:
-            if record.status == RunStatus.PLANNED:
+            if _live_lease(record, now):
+                action = "phase_wait"
+                detail = (
+                    "Run has a live project-local lease; maintenance will not "
+                    f"steal ownership from {record.lease_owner} before "
+                    f"{record.lease_expires_at.isoformat()}."
+                )
+            elif record.status == RunStatus.PLANNED:
                 action = "unsafe_planned"
                 detail = (
                     "PLANNED has no durable claim/worktree proof; automatic "
