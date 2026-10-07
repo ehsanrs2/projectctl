@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-This repository has completed **M4.0a — Account-Global Execution Admission**. The active milestone is now **M4.0b — Portfolio Scheduling & Cross-Project Arbitration**.
+This repository has completed **M4.0b — Portfolio Scheduling & Cross-Project Arbitration**. The active milestone is now **M4.1a — Parallel Planning Safety Contract**.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -1828,23 +1828,79 @@ projectctl migrate
 The command now migrates the account-global state database as well as the project-local state
 database and creates backups before applying supported migrations.
 
-The M4 architecture sequence remains:
+### M4.0b — Portfolio Scheduling & Cross-Project Arbitration
+
+M4.0b adds deterministic cross-project arbitration on top of the M4.0a account admission
+primitive.
+
+The portfolio layer chooses a **project / worker-turn action**. It never compares raw local
+scheduler scores and never replaces the project-local task scheduler.
+
+Supported actions:
+
+```text
+resume_run
+   ↓
+start_run
+   ↓
+new_task
+```
+
+Within one action class, fairness is:
+
+```text
+never admitted
+   ↓
+least recently admitted
+   ↓
+older registration
+   ↓
+stable project-instance id
+```
+
+Inspect the next project for one quota account:
+
+```bash
+projectctl portfolio next --account openai-default
+projectctl portfolio next --account openai-default --json
+```
+
+Execute exactly one selected quota-consuming worker turn:
+
+```bash
+projectctl portfolio run --account openai-default
+```
+
+For new work, the portfolio decision is bound to the local scheduler's selected task,
+task-snapshot digest and project-state digest. If those inputs change before preparation,
+ProjectCTL fails closed before claiming a task.
+
+Normal decisions are materialized under:
+
+```text
+$PROJECTCTL_HOME/portfolio/decisions/<decision-id>.json
+```
+
+These files are audit artifacts, not task or admission authority. Actual worker-turn ownership
+remains the M4.0a account admission lease.
+
+The M4 sequence is now:
 
 ```text
 M4.0a  Account-Global Execution Admission                  completed
    ↓
-M4.0b  Portfolio Scheduling & Cross-Project Arbitration   next
+M4.0b  Portfolio Scheduling & Cross-Project Arbitration   completed
    ↓
-M4.1a  Parallel Planning Safety Contract
+M4.1a  Parallel Planning Safety Contract                  next
    ↓
 M4.1b  Safe Parallel Execution & Integration
 ```
 
-Graphify/context discovery remains valuable—especially later for write-scope evidence—but does not
-replace portfolio arbitration or the account admission authority.
+Graphify/context discovery remains valuable—especially for later write-scope evidence—but does not
+replace the portfolio, task, or admission authorities.
 
-See ADR-029 and `docs/PROJECTCTL_BLUEPRINT.md`.
+See ADR-029, ADR-030 and `docs/PROJECTCTL_BLUEPRINT.md`.
 
 Next:
 
-- **M4.0b — Portfolio Scheduling & Cross-Project Arbitration**
+- **M4.1a — Parallel Planning Safety Contract**
