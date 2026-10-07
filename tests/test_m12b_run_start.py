@@ -57,7 +57,7 @@ from projectctl.schemas.quota import QuotaSnapshot, QuotaWindow
 from projectctl.quota.admission import AccountAdmissionStore
 from projectctl.schemas.run import WorkerDescriptor
 from projectctl.schemas.task_claim import TaskClaim
-from projectctl.schemas.task import NormalizedTask, TaskSource
+from projectctl.schemas.task import NormalizedTask, TaskSnapshot, TaskSource
 from projectctl.storage.runs import RunStore
 from projectctl.workers.capability_digest import effective_capability_digest
 from typer.testing import CliRunner
@@ -278,7 +278,22 @@ def setup_prepared(tmp_path: Path, monkeypatch):
         ),
         created_at=NOW,
     )
-    planning = ExecutionPlanningBundle(plan=plan, capabilities=caps, strategy=strategy)
+    tasks = TaskSnapshot(
+        provider="test",
+        captured_at=NOW,
+        source_revision="test-snapshot",
+        tasks=[task],
+    )
+    planning = ExecutionPlanningBundle(
+        plan=plan,
+        capabilities=caps,
+        strategy=strategy,
+        tasks=tasks,
+    )
+    monkeypatch.setattr(
+        "projectctl.application.execution.capture_task_snapshot",
+        lambda *args, **kwargs: tasks,
+    )
 
     monkeypatch.setattr(
         "projectctl.application.execution.build_next_execution_bundle",
