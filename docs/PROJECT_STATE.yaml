@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Arbitrate which registered healthy project receives the next account admission while preserving each project's local scheduler as the authority for task choice inside that project.
+current_goal: Define the planning and conflict-safety contract required before two runs may coexist without invalidating task, project-state, base, resource or verification evidence.
 active_milestone:
-  id: M4.0b
-  title: Portfolio Scheduling & Cross-Project Arbitration
+  id: M4.1a
+  title: Parallel Planning Safety Contract
   aliases:
-    - Portfolio Arbitration
-    - Cross-Project Project Selection
-    - Global Project Admission Scheduling
+    - Parallel Planning Contract
+    - Run Independence Contract
+    - Conflict Scope Contract
 updated_at: null
