@@ -398,3 +398,51 @@ def test_parallel_batch_requests_global_fair_turns(
         item.startswith("portfolio_yield:selected_other_project")
         for item in result.details
     )
+
+
+
+def test_non_worker_maintenance_does_not_advance_target_during_worker_phase(
+    tmp_path: Path,
+    monkeypatch,
+):
+    ready = run(
+        "run-ready",
+        "task-a",
+        RunStatus.READY_TO_INTEGRATE,
+    )
+    claimed = run(
+        "run-worker",
+        "task-b",
+        RunStatus.CLAIMED,
+        seconds=1,
+    )
+    monkeypatch.setattr(
+        turns,
+        "load_project_config",
+        lambda root: SimpleNamespace(project=SimpleNamespace(id="repo")),
+    )
+    monkeypatch.setattr(
+        turns,
+        "_active_records",
+        lambda root: [ready, claimed],
+    )
+    called = []
+    monkeypatch.setattr(
+        turns,
+        "integrate_parallel_run",
+        lambda *args, **kwargs: called.append(True),
+    )
+    monkeypatch.setattr(
+        turns,
+        "integrate_run",
+        lambda *args, **kwargs: called.append(True),
+    )
+
+    result = turns.advance_non_worker_phases(tmp_path)
+
+    assert called == []
+    ready_step = next(
+        item for item in result.steps if item.run_id == "run-ready"
+    )
+    assert ready_step.action == "phase_wait"
+    assert "run-worker" in (ready_step.detail or "")
