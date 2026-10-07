@@ -42,6 +42,7 @@ from projectctl.schemas.onboarding import (
     ProjectInspectionV1,
     ProjectInspectionV2,
 )
+from projectctl.schemas.portfolio import PortfolioDecision, PortfolioTurnResult
 from projectctl.schemas.project_state import ProjectState
 from projectctl.schemas.quota import QuotaSnapshot, QuotaSnapshotV1
 from projectctl.schemas.run import ContextManifest, ContextManifestV1, RunManifest, RunManifestV1
@@ -83,6 +84,8 @@ PUBLIC_SCHEMAS = {
     "scheduler-decision.v2.schema.json": SchedulerDecision,
     "project-state.v1.schema.json": ProjectState,
     "project-status.v1.schema.json": ProjectStatus,
+    "portfolio-decision.v1.schema.json": PortfolioDecision,
+    "portfolio-turn-result.v1.schema.json": PortfolioTurnResult,
     "run-manifest.v1.schema.json": RunManifestV1,
     "run-manifest.v2.schema.json": RunManifest,
     "context-manifest.v1.schema.json": ContextManifestV1,
