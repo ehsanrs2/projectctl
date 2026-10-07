@@ -468,3 +468,44 @@ def test_verification_write_scope_rejects_outside_paths():
         manifest,
         ["src/allowed/a.py", "src/outside.py"],
     ) == ["execution_write_scope:src/outside.py"]
+
+
+def test_parallel_v1_binding_remains_readable():
+    from projectctl.schemas.parallel import parse_parallel_run_binding
+
+    payload = {
+        "schema_kind": "projectctl.parallel_run_binding",
+        "schema_version": 1,
+        "run_id": "run-old",
+        "task_id": "task-old",
+        "preclaim_plan_digest": "preclaim",
+        "admitted_plan": {
+            "schema_kind": "projectctl.parallel_plan",
+            "schema_version": 1,
+            "plan_id": "old-plan",
+            "project_id": "repo",
+            "task_id": "task-old",
+            "integration_target_ref": "main",
+            "base_commit": "a" * 40,
+            "project_state_digest": "state",
+            "scoped_task_digest": "task",
+            "scoped_task_ids": ["task-old"],
+            "scope_digest": "scope",
+            "inputs": [
+                {
+                    "scope": {"path": "src/a.py", "kind": "exact"},
+                    "digest": "input",
+                }
+            ],
+            "writes": [{"path": "src/a.py", "kind": "exact"}],
+            "resources": [],
+            "created_at": NOW.isoformat(),
+        },
+        "peer_plan_digests": [],
+        "peer_decision_digests": [],
+        "bound_at": NOW.isoformat(),
+    }
+
+    parsed = parse_parallel_run_binding(payload)
+    assert parsed.schema_version == 1
+    assert parsed.admitted_plan.schema_version == 1
