@@ -94,6 +94,11 @@ def _atomic_json(path: Path, value) -> None:
 
 
 def _catalog_path(root: Path) -> Path:
+    declared = root / PARALLEL_SCOPE_PATH
+    if declared.is_symlink():
+        raise ConfigurationError(
+            "Refusing to mutate human-managed scope authority through a symlink."
+        )
     return resolve_inside_repo(root, PARALLEL_SCOPE_PATH, must_exist=False)
 
 
@@ -289,9 +294,10 @@ def create_scope_review(
         write_paths,
         label="write",
     )
-    resource_additions = sorted(set(resources or []))
-    if any(not item.strip() for item in resource_additions):
+    raw_resources = list(resources or [])
+    if any(not item.strip() for item in raw_resources):
         raise ConfigurationError("Review resource keys must be non-empty.")
+    resource_additions = sorted({item.strip() for item in raw_resources})
 
     path, raw, before_digest, catalog = _catalog_state(root)
     existing = catalog.tasks.get(task_id)
