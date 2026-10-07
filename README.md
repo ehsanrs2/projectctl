@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-The **Post-M4 Architecture Review** contract-closure sequence is complete through **M4.2b — Unified Turn Orchestration**. The active milestone is now **M5.0 — Context Discovery & Scope Assistance**.
+The **Post-M4 Architecture Review** contract-closure sequence is complete through **M4.2b — Unified Turn Orchestration**. **M5.0 — Context Discovery & Scope Assistance** is implemented, and the active milestone is now **M5.1 — Context Review & Adoption Workflow**.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -2032,7 +2032,9 @@ M4.2a  Execution Input Contract Unification               completed
    ↓
 M4.2b  Unified Turn Orchestration                           completed
    ↓
-M5.0   Context Discovery & Scope Assistance                next
+M5.0   Context Discovery & Scope Assistance                completed
+   ↓
+M5.1   Context Review & Adoption Workflow                   next
 ```
 
 M4.2a now separates full scheduler observation from execution validity through
@@ -2072,11 +2074,49 @@ projectctl parallel run --project /path/to/repo
 
 `projectctl parallel run` is now a bounded fair wave rather than a local bypass. `--max-runs` is compatibility/assertion only; configured `orchestration.max_active_runs` is the capacity authority.
 
-With M4.2a/b complete, the M4 global/parallel contract closure is complete. The next milestone is **M5.0 — Context Discovery & Scope Assistance**. Derived AST/Graphify relationships may suggest scope, but never replace explicit human/control-plane authority.
+With M4.2a/b complete, the M4 global/parallel contract closure is complete.
 
-See ADR-029 through ADR-033, `docs/architecture/POST_M4_ARCHITECTURE_REVIEW.md`, and
+### M5.0 — Context Discovery & Scope Assistance
+
+M5.0 adds derived, non-authoritative repository/code context evidence:
+
+```bash
+projectctl context discover TASK_ID --project /path/to/repo
+projectctl context discover TASK_ID --project /path/to/repo --json
+
+projectctl context suggest-scope TASK_ID --project /path/to/repo
+projectctl context suggest-scope TASK_ID --project /path/to/repo --yaml
+projectctl context suggest-scope TASK_ID --project /path/to/repo --json
+```
+
+The built-in provider reads the exact selected Git base and derives explainable candidates from:
+
+- explicit task references and tracked path mentions
+- Python AST symbols
+- Python import/imported-by relationships
+- filename/token overlap
+- conventional test companions
+
+Dirty working-tree code is not used as built-in discovery evidence for the recorded base.
+
+When `features.graphify: true`, ProjectCTL may consume an existing `graphify-out/graph.json`. It does not invoke Graphify itself. Graphify node/edge provenance is preserved, and `INFERRED` / `AMBIGUOUS` relationships remain weaker navigation evidence. They cannot independently create write scope.
+
+Two public artifacts are persisted under `.projectctl/context/`:
+
+- `ContextDiscoveryReport v1`
+- `ContextScopeSuggestion v1`
+
+Both are explicitly non-authoritative. `suggest-scope --yaml` prints a **review-only** snippet and never writes `projectctl.parallel.yaml`.
+
+Scope comparison reports suggested-vs-declared differences, but the human-managed catalog remains execution authority even when discovery disagrees.
+
+See ADR-035.
+
+The next milestone is **M5.1 — Context Review & Adoption Workflow**, which will define an explicit approval boundary for turning accepted suggestions into human-managed scope policy.
+
+See ADR-029 through ADR-035, `docs/architecture/POST_M4_ARCHITECTURE_REVIEW.md`, and
 `docs/PROJECTCTL_BLUEPRINT.md`.
 
 Next:
 
-- **M5.0 — Context Discovery & Scope Assistance**
+- **M5.1 — Context Review & Adoption Workflow**

@@ -10,6 +10,13 @@ from projectctl.schemas.capabilities import (
     WorkerRuntimeDescriptor,
     WorkerStrategyDecision,
 )
+from projectctl.schemas.context_discovery import (
+    ContextDiscoveryEvidence,
+    ContextDiscoveryReport,
+    ContextPathCandidate,
+    ContextScopeSuggestion,
+    ScopeCoverage,
+)
 from projectctl.schemas.config import (
     OrchestrationConfig,
     ProjectConfig,
@@ -113,7 +120,11 @@ __all__ = [
     "CapabilitySupport",
     "ClaimResult",
     "ClaimTransitionEvidence",
+    "ContextDiscoveryEvidence",
+    "ContextDiscoveryReport",
     "ContextManifest",
+    "ContextPathCandidate",
+    "ContextScopeSuggestion",
     "ContextManifestV1",
     "ContextManifestV2",
     "DiffPolicy",
@@ -159,6 +170,7 @@ __all__ = [
     "RecoveryAction",
     "RecoveryReport",
     "RunManifest",
+    "ScopeCoverage",
     "RunManifestV1",
     "SchedulerDecision",
     "SchedulerDecisionV1",

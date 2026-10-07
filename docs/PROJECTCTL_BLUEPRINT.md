@@ -124,6 +124,7 @@ Exactly one authority should exist for each mutable concern.
 | Cross-project portfolio arbitration | Registered projects + project-local scheduler envelopes + admission history | Implemented in M4.0b; chooses project/action, never raw cross-project task scores |
 | Parallel execution scope | `projectctl.parallel.yaml` | Human-managed input/write/resource authorization used by M4.1 proofs |
 | Execution input validity | `ExecutionInputManifest v1` + `ClaimTransitionEvidence v1` | Unified in M4.2a; scheduler full-snapshot digest is audit/ranking evidence, not execution invalidation authority |
+| Context discovery evidence | `ContextDiscoveryReport v1` / `ContextScopeSuggestion v1` | Derived only; assists scope authoring and never overrides human-managed scope or ExecutionInput authority |
 | Project quota policy | `.projectctl/config.yaml` | Local policy, not quota observation/admission authority |
 | Generated status dashboards | `docs/generated/*` | Derived and non-authoritative |
 | Telemetry | `.projectctl/telemetry.sqlite` | Observational only |
@@ -1579,15 +1580,41 @@ See ADR-034.
 
 ### M5.0 — Context Discovery & Scope Assistance
 
+**Completed.**
+
+M5.0 adds a derived context layer without changing execution authority:
+
+- `ContextDiscoveryReport v1` records explainable repository/code evidence
+- `ContextScopeSuggestion v1` renders conservative input/write suggestions plus declared-scope coverage
+- built-in discovery reads tracked content from the selected Git base rather than the dirty working tree
+- explicit task references/path mentions seed discovery
+- Python AST supplies symbol and one-hop import/imported-by structure
+- conventional test companions are surfaced as implementation/test candidates
+- write suggestions require stronger direct/structural evidence than read/navigation suggestions
+- suggestions emit exact paths rather than broad inferred write trees
+- `features.graphify` optionally enables consumption of an existing `graphify-out/graph.json`
+- ProjectCTL does not invoke Graphify, an LLM, or network access during discovery
+- Graphify `EXTRACTED`, `INFERRED`, and `AMBIGUOUS` provenance remains visible
+- Graphify-derived evidence can enrich navigation but cannot independently grant write authority
+- graph paths must normalize inside the repository; foreign paths are ignored
+- discovery/suggestion artifacts persist only under `.projectctl/context/`
+- `projectctl.parallel.yaml` is never mutated by M5.0
+- `suggest-scope --yaml` is explicitly review-only output
+- declared human-managed scope remains authoritative when it disagrees with derived suggestions
+
+See ADR-035.
+
+### M5.1 — Context Review & Adoption Workflow
+
 **Active milestone.**
 
-Add derived repository/code-relationship discovery that helps author and explain execution input/write scope without becoming execution authority. Repository structure, AST relationships and optional Graphify-derived evidence may propose scope; human/control-plane policy remains authoritative.
+Define an explicit approval workflow for accepting selected M5.0 evidence into human-managed execution scope. Any catalog mutation must be deliberate, diffable, stale-safe, and auditable; discovery remains non-authoritative until that approval boundary is crossed.
 
 ### Later product directions
 
 Retained after M4.2 contract closure:
 
-- **active M5.0:** context discovery / scope assistance with optional Graphify-derived relationships
+- **active M5.1:** reviewed adoption of derived scope evidence into human-managed policy
 - additional worker providers
 - governed skills registry and supply-chain policy
 - first-class Research / Hypothesis / Experiment / Evidence / Decision flows
