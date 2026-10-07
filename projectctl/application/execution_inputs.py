@@ -224,6 +224,7 @@ def build_execution_input_manifest(
     integration_target_ref: str,
     base_commit: str,
     now: datetime | None = None,
+    explicit_scope=None,
 ) -> ExecutionInputManifest:
     root = project_root.resolve()
     now = now or utc_now()
@@ -236,7 +237,7 @@ def build_execution_input_manifest(
         raise ConfigurationError(f"Selected task {task_id!r} is missing.")
 
     scoped_digest, scoped_ids = semantic_task_scope_digest(tasks, task_id)
-    scope = _optional_scope(root, task_id)
+    scope = explicit_scope if explicit_scope is not None else _optional_scope(root, task_id)
     code_inputs: list[ExecutionCodeInput] = []
     write_scopes: list[ExecutionPathScope] = []
     resources: list[str] = []
