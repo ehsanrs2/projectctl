@@ -165,6 +165,9 @@ def build_next_execution_bundle(
     integration_target_ref: str | None = None,
     requested_strategy: WorkerStrategyKind | None = None,
     fallback: StrategyFallbackPolicy | None = None,
+    expected_task_id: str | None = None,
+    expected_task_snapshot_digest: str | None = None,
+    expected_project_state_digest: str | None = None,
 ) -> ExecutionPlanningBundle:
     if not _repository_clean(project_root):
         raise StaleSnapshotError(
@@ -175,6 +178,28 @@ def build_next_execution_bundle(
     decision = bundle.decision
     if decision.selected_task_id is None:
         raise ConfigurationError("Scheduler did not select an eligible task.")
+
+    if expected_task_id is not None and decision.selected_task_id != expected_task_id:
+        raise StaleSnapshotError(
+            "Portfolio arbitration became stale: the project-local scheduler selected "
+            f"{decision.selected_task_id!r}, expected {expected_task_id!r}."
+        )
+    if (
+        expected_task_snapshot_digest is not None
+        and decision.task_snapshot_digest != expected_task_snapshot_digest
+    ):
+        raise StaleSnapshotError(
+            "Portfolio arbitration became stale: task authority state changed "
+            "before run preparation."
+        )
+    if (
+        expected_project_state_digest is not None
+        and decision.project_state_digest != expected_project_state_digest
+    ):
+        raise StaleSnapshotError(
+            "Portfolio arbitration became stale: project intent/state changed "
+            "before run preparation."
+        )
 
     candidate = next(
         c for c in decision.candidates if c.task_id == decision.selected_task_id
@@ -247,12 +272,18 @@ def build_next_execution_plan(
     integration_target_ref: str | None = None,
     requested_strategy: WorkerStrategyKind | None = None,
     fallback: StrategyFallbackPolicy | None = None,
+    expected_task_id: str | None = None,
+    expected_task_snapshot_digest: str | None = None,
+    expected_project_state_digest: str | None = None,
 ) -> ExecutionPlan:
     return build_next_execution_bundle(
         project_root,
         integration_target_ref=integration_target_ref,
         requested_strategy=requested_strategy,
         fallback=fallback,
+        expected_task_id=expected_task_id,
+        expected_task_snapshot_digest=expected_task_snapshot_digest,
+        expected_project_state_digest=expected_project_state_digest,
     ).plan
 
 
@@ -310,6 +341,9 @@ def prepare_next_run(
     integration_target_ref: str | None = None,
     requested_strategy: WorkerStrategyKind | None = None,
     fallback: StrategyFallbackPolicy | None = None,
+    expected_task_id: str | None = None,
+    expected_task_snapshot_digest: str | None = None,
+    expected_project_state_digest: str | None = None,
 ) -> PreparedRun:
     root = project_root.resolve()
     actor = _actor()
@@ -321,6 +355,9 @@ def prepare_next_run(
             integration_target_ref=integration_target_ref,
             requested_strategy=requested_strategy,
             fallback=fallback,
+            expected_task_id=expected_task_id,
+            expected_task_snapshot_digest=expected_task_snapshot_digest,
+            expected_project_state_digest=expected_project_state_digest,
         )
         plan = planning.plan
         run_id = f"run-{uuid.uuid4().hex}"
@@ -1013,21 +1050,25 @@ def start_prepared_run(project_root: Path, run_id: str) -> StartedRun:
                         "eligible": quota_eligible,
                     },
                 )
-                if not quota_eligible:
+                if quota_state.stale or not quota_eligible:
                     preserve_claimed_on_error = True
                     store.append_event(
                         run_id,
                         "worker.start_deferred",
                         {
-                            "reason": "quota_insufficient",
+                            "reason": (
+                                "quota_stale"
+                                if quota_state.stale
+                                else "quota_insufficient"
+                            ),
                             "quota_mode": quota_state.mode.value,
                             "quota_stale": quota_state.stale,
                             "quota_snapshot_digest": digest(quota),
                         },
                     )
                     raise QuotaError(
-                        "Worker start deferred because current account quota is "
-                        "insufficient for this task resource class."
+                        "Worker start deferred because current account quota is stale "
+                        "or insufficient for this task resource class."
                     )
 
                 adapter = _adapter_for_provider(plan.worker.provider)
