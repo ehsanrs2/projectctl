@@ -74,9 +74,22 @@ def register_m40b(app: typer.Typer) -> None:
                 else ""
             )
             action = f" action={candidate.action}" if candidate.action else ""
+            active = (
+                f" active={candidate.active_run_count}/{candidate.max_active_runs}"
+            )
+            parallel = (
+                " parallel-admit"
+                if candidate.parallel_admission
+                else ""
+            )
+            queue = (
+                f" queue_head={candidate.integration_queue_head_run_id}"
+                if candidate.integration_queue_head_run_id
+                else ""
+            )
             typer.echo(
                 f"  {candidate.project_id} [{candidate.project_instance_id}] "
-                f"{status}{action}{reason}"
+                f"{status}{action}{active}{parallel}{queue}{reason}"
             )
 
     @portfolio_app.command("run")
