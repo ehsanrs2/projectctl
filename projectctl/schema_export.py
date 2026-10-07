@@ -4,6 +4,10 @@ from pathlib import Path
 from projectctl.schemas.artifact import ArtifactMetadata
 from projectctl.schemas.auto import AutoRunPolicy, AutoRunReport
 from projectctl.schemas.capabilities import WorkerCapabilities, WorkerStrategyDecision
+from projectctl.schemas.context_discovery import (
+    ContextDiscoveryReport,
+    ContextScopeSuggestion,
+)
 from projectctl.schemas.config import (
     ProjectConfig,
     ProjectConfigV1,
@@ -141,6 +145,8 @@ PUBLIC_SCHEMAS = {
     "scheduler-decision.v2.schema.json": SchedulerDecision,
     "project-state.v1.schema.json": ProjectState,
     "project-status.v1.schema.json": ProjectStatus,
+    "context-discovery-report.v1.schema.json": ContextDiscoveryReport,
+    "context-scope-suggestion.v1.schema.json": ContextScopeSuggestion,
     "project-turn-envelope.v1.schema.json": ProjectTurnEnvelope,
     "project-turn-result.v1.schema.json": ProjectTurnResult,
     "project-maintenance-result.v1.schema.json": ProjectMaintenanceResult,
