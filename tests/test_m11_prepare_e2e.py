@@ -32,6 +32,7 @@ from projectctl.schemas.capabilities import (
 from projectctl.schemas.execution import ExecutionPlan
 from projectctl.schemas.task_claim import TaskClaim
 from projectctl.schemas.task import NormalizedTask, TaskSnapshot, TaskSource
+from projectctl.integrations.beads.claim import BeadsTaskClaimer
 from projectctl.schemas.run import RunManifest, WorkerDescriptor
 from projectctl.storage.runs import RunStore
 from projectctl.workers.capability_digest import effective_capability_digest
@@ -51,12 +52,16 @@ def git(repo: Path, *args: str) -> str:
 
 
 class FakeClaimer:
-    def __init__(self):
+    def __init__(self, *, on_claim=None, transition_validator=None):
         self.claimed = []
         self.released = []
+        self.on_claim = on_claim
+        self.transition_validator = transition_validator
 
     def claim(self, request):
         self.claimed.append(request.task_id)
+        if self.on_claim is not None:
+            self.on_claim()
         return TaskClaim(
             provider="beads",
             task_id=request.task_id,
@@ -75,6 +80,11 @@ class FakeClaimer:
 
     def validate(self, claim):
         return True
+
+    def validate_transition(self, before, after, claim):
+        if self.transition_validator is None:
+            return before == after
+        return self.transition_validator(before, after, claim)
 
     def release(self, claim):
         self.released.append(claim.task_id)
@@ -176,7 +186,28 @@ def test_prepare_and_abort_use_durable_run_state_and_external_worktree(
         source_revision="rev-1",
         tasks=[task],
     )
-    claimer = FakeClaimer()
+    claimed_task = task.model_copy(
+        update={
+            "status": "running",
+            "source": task.source.model_copy(update={"revision": "rev-2"}),
+        }
+    )
+    claimed_tasks = TaskSnapshot(
+        provider="beads",
+        captured_at=NOW,
+        source_revision="rev-2",
+        tasks=[claimed_task],
+    )
+    current_snapshot = {"value": tasks}
+
+    def mutate_claim_state():
+        current_snapshot["value"] = claimed_tasks
+
+    beads_transition = BeadsTaskClaimer(repo, client=object()).validate_transition
+    claimer = FakeClaimer(
+        on_claim=mutate_claim_state,
+        transition_validator=beads_transition,
+    )
     monkeypatch.setattr(
         "projectctl.application.execution.build_next_execution_bundle",
         lambda root, **kwargs: ExecutionPlanningBundle(
@@ -188,7 +219,7 @@ def test_prepare_and_abort_use_durable_run_state_and_external_worktree(
     )
     monkeypatch.setattr(
         "projectctl.application.execution.capture_task_snapshot",
-        lambda *args, **kwargs: tasks,
+        lambda *args, **kwargs: current_snapshot["value"],
     )
     validation_calls = []
 
