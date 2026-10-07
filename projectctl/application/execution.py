@@ -275,6 +275,7 @@ def build_next_execution_bundle(
         project_state_digest=decision.project_state_digest,
         integration_target_ref=target_ref,
         base_commit=base_commit,
+        project_id=bundle.config.project.id,
     )
     plan = ExecutionPlan(
         plan_id=f"ep-{uuid.uuid4().hex}",
