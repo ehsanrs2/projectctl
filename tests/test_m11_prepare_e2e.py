@@ -31,6 +31,7 @@ from projectctl.schemas.capabilities import (
 )
 from projectctl.schemas.execution import ExecutionPlan
 from projectctl.schemas.task_claim import TaskClaim
+from projectctl.schemas.task import NormalizedTask, TaskSnapshot, TaskSource
 from projectctl.schemas.run import RunManifest, WorkerDescriptor
 from projectctl.storage.runs import RunStore
 from projectctl.workers.capability_digest import effective_capability_digest
@@ -163,6 +164,18 @@ def test_prepare_and_abort_use_durable_run_state_and_external_worktree(
         worker=worker,
         created_at=NOW,
     )
+    task = NormalizedTask(
+        id="bd-1",
+        title="Prepare task",
+        source=TaskSource(provider="beads", external_id="bd-1", revision="rev-1"),
+        status="ready",
+    )
+    tasks = TaskSnapshot(
+        provider="beads",
+        captured_at=NOW,
+        source_revision="rev-1",
+        tasks=[task],
+    )
     claimer = FakeClaimer()
     monkeypatch.setattr(
         "projectctl.application.execution.build_next_execution_bundle",
@@ -170,7 +183,12 @@ def test_prepare_and_abort_use_durable_run_state_and_external_worktree(
             plan=plan,
             capabilities=capabilities,
             strategy=strategy,
+            tasks=tasks,
         ),
+    )
+    monkeypatch.setattr(
+        "projectctl.application.execution.capture_task_snapshot",
+        lambda *args, **kwargs: tasks,
     )
     validation_calls = []
 
@@ -202,7 +220,7 @@ def test_prepare_and_abort_use_durable_run_state_and_external_worktree(
     assert not worktree.is_relative_to(repo)
     assert git(repo, "rev-parse", "HEAD") == base
     assert claimer.claimed == ["bd-1"]
-    assert validation_calls == ["ep-test", "ep-test"]
+    assert validation_calls == ["ep-test"]
 
     shown = runner.invoke(
         app,
@@ -216,6 +234,8 @@ def test_prepare_and_abort_use_durable_run_state_and_external_worktree(
         "run.transition",
         "task.claim.requested",
         "task.claim.observed",
+        "run.execution_plan_rebound",
+        "execution.input_admitted",
         "run.transition",
     ]
 
