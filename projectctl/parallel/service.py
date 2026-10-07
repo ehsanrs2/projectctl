@@ -10,6 +10,10 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 
 from projectctl.application.tasks import capture_task_snapshot
+from projectctl.application.execution_inputs import (
+    build_preclaim_execution_input,
+    semantic_execution_input_digest,
+)
 from projectctl.core.digest import digest
 from projectctl.core.enums import TaskStatus
 from projectctl.core.errors import ConfigurationError, StaleSnapshotError
@@ -21,7 +25,10 @@ from projectctl.project.state import (
     load_project_state,
     semantic_project_state_digest,
 )
-from projectctl.scheduler.digests import semantic_task_scope_digest
+from projectctl.scheduler.digests import (
+    semantic_task_scope_digest,
+    semantic_task_snapshot_digest,
+)
 from projectctl.schemas.parallel import (
     ParallelConflict,
     ParallelInputEvidence,
@@ -240,6 +247,15 @@ def build_parallel_plan(
     base_commit = resolve_commit(root, target_ref)
     scoped_task_digest, scoped_task_ids = semantic_task_scope_digest(tasks, task_id)
     project_state_digest = semantic_project_state_digest(state)
+    execution_input = build_preclaim_execution_input(
+        root,
+        tasks=tasks,
+        task_id=task_id,
+        base_commit=base_commit,
+        integration_target_ref=target_ref,
+        scheduler_task_snapshot_digest=semantic_task_snapshot_digest(tasks),
+        now=now,
+    )
     input_evidence = [
         ParallelInputEvidence(
             scope=item,
@@ -261,12 +277,21 @@ def build_parallel_plan(
         inputs=input_evidence,
         writes=scope.writes,
         resources=sorted(scope.resources),
+        execution_input_digest=semantic_execution_input_digest(execution_input),
         created_at=now,
     )
     if persist:
         _atomic_json(
             root / ".projectctl" / "parallel" / "plans" / f"{plan.plan_id}.json",
             plan,
+        )
+        _atomic_json(
+            root
+            / ".projectctl"
+            / "parallel"
+            / "inputs"
+            / f"{plan.plan_id}.json",
+            execution_input,
         )
     return plan
 
