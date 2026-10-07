@@ -6,6 +6,7 @@ from pydantic import AwareDatetime, Field
 
 from projectctl.schemas.base import ProjectCtlModel
 from projectctl.schemas.config import RepoRelativePath
+from projectctl.schemas.task import NormalizedTask
 
 
 ExecutionPathKind = Literal["exact", "tree"]
@@ -24,6 +25,7 @@ class ExecutionCodeInput(ProjectCtlModel):
 class ExecutionTaskInput(ProjectCtlModel):
     task_id: str = Field(min_length=1)
     digest: str = Field(min_length=1)
+    task: NormalizedTask
 
 
 class ExecutionInputLineage(ProjectCtlModel):
