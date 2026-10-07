@@ -24,6 +24,7 @@ from projectctl.parallel.runtime import (
 )
 from projectctl.parallel.service import assess_parallel_safety, build_parallel_plan
 from projectctl.project.loader import load_project_config
+from projectctl.project.locking import project_lock
 from projectctl.quota import QuotaManager
 from projectctl.quota.admission import project_instance_id
 from projectctl.schemas.capabilities import StrategyFallbackPolicy
@@ -324,63 +325,63 @@ def execute_project_turn(
     fallback: StrategyFallbackPolicy | None = None,
 ) -> ProjectTurnResult:
     root = project_root.resolve()
-    current = collect_project_turn_envelope(
-        root,
-        max_active_runs=envelope.max_active_runs,
-    )
-    if not current.eligible or _turn_key(current) != _turn_key(envelope):
-        raise PortfolioError(
-            "Project worker-turn envelope became stale before execution."
+    with project_lock(root, "worker-turn-dispatch"):
+        current = collect_project_turn_envelope(
+            root,
+            max_active_runs=envelope.max_active_runs,
         )
-    if current.action is None or current.task_id is None:
-        raise PortfolioError("Eligible project turn is incomplete.")
-
-    prepared_new = False
-    if current.action == "resume_run":
-        if current.run_id is None:
-            raise PortfolioError("Resume turn is missing run identity.")
-        result = resume_checkpointed_run(root, current.run_id)
-    elif current.action == "start_run":
-        if current.run_id is None:
-            raise PortfolioError("Start turn is missing run identity.")
-        result = start_prepared_run(root, current.run_id)
-    else:
-        if (
-            current.task_snapshot_digest is None
-            or current.project_state_digest is None
-        ):
+        if not current.eligible or _turn_key(current) != _turn_key(envelope):
             raise PortfolioError(
-                "Admission turn is missing scheduler input digests."
+                "Project worker-turn envelope became stale before execution."
             )
-        if current.parallel_admission:
-            prepared = prepare_parallel_run(
-                root,
-                max_parallel_runs=current.max_active_runs,
-                requested_strategy=requested_strategy,
-                fallback=fallback,
-                expected_task_id=current.task_id,
-                expected_task_snapshot_digest=current.task_snapshot_digest,
-                expected_project_state_digest=current.project_state_digest,
-            )
+        if current.action is None or current.task_id is None:
+            raise PortfolioError("Eligible project turn is incomplete.")
+
+        prepared_new = False
+        if current.action == "resume_run":
+            if current.run_id is None:
+                raise PortfolioError("Resume turn is missing run identity.")
+            result = resume_checkpointed_run(root, current.run_id)
+        elif current.action == "start_run":
+            if current.run_id is None:
+                raise PortfolioError("Start turn is missing run identity.")
+            result = start_prepared_run(root, current.run_id)
         else:
-            prepared = prepare_next_run(
-                root,
-                requested_strategy=requested_strategy,
-                fallback=fallback,
-                expected_task_id=current.task_id,
-                expected_task_snapshot_digest=current.task_snapshot_digest,
-                expected_project_state_digest=current.project_state_digest,
-            )
-        prepared_new = True
-        result = start_prepared_run(root, prepared.record.run_id)
+            if (
+                current.task_snapshot_digest is None
+                or current.project_state_digest is None
+            ):
+                raise PortfolioError(
+                    "Admission turn is missing scheduler input digests."
+                )
+            if current.parallel_admission:
+                prepared = prepare_parallel_run(
+                    root,
+                    max_parallel_runs=current.max_active_runs,
+                    requested_strategy=requested_strategy,
+                    fallback=fallback,
+                    expected_task_id=current.task_id,
+                    expected_task_snapshot_digest=current.task_snapshot_digest,
+                    expected_project_state_digest=current.project_state_digest,
+                )
+            else:
+                prepared = prepare_next_run(
+                    root,
+                    requested_strategy=requested_strategy,
+                    fallback=fallback,
+                    expected_task_id=current.task_id,
+                    expected_task_snapshot_digest=current.task_snapshot_digest,
+                    expected_project_state_digest=current.project_state_digest,
+                )
+            prepared_new = True
+            result = start_prepared_run(root, prepared.record.run_id)
 
-    return ProjectTurnResult(
-        envelope=current,
-        run_id=result.record.run_id,
-        run_status=result.record.status,
-        prepared_new_run=prepared_new,
-    )
-
+        return ProjectTurnResult(
+            envelope=current,
+            run_id=result.record.run_id,
+            run_status=result.record.status,
+            prepared_new_run=prepared_new,
+        )
 
 def collect_orchestration_status(project_root: Path) -> OrchestrationStatus:
     root = project_root.resolve()
