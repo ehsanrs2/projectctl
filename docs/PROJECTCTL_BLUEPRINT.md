@@ -1407,18 +1407,31 @@ See ADR-030.
 
 #### M4.1a — Parallel Planning Safety Contract
 
-**Active milestone.**
+**Completed.**
 
-Define scoped execution-input digests, resource/write scopes, dependency/target conflicts and the
-conditions under which two runs can be planned concurrently without invalidating each other's
-proof inputs.
+M4.1a establishes a non-executing proof layer before runtime concurrency:
 
-Optional Graphify-derived code relationships may contribute derived evidence here, but may not
-become the sole conflict authority.
+- human-managed `projectctl.parallel.yaml` is the explicit scope authority
+- each task declares input paths, write paths and exclusive resource keys
+- `ParallelPlan v1` binds exact target/base, project-state digest, scoped task/dependency digest,
+  scope digest and Git-base input evidence
+- scoped task digests include the selected task plus locally represented transitive dependencies,
+  so unrelated task lifecycle movement does not invalidate the proof
+- path conflicts cover write/write and write/input overlap
+- dependency/resource conflicts fail closed
+- same target planned from different bases fails closed
+- same target + same base may be execution-independent, but is marked as requiring fresh
+  verification after target advancement before later integration
+- Graphify/LLM-derived relationships may supplement evidence later but are not the sole safety
+  authority
+
+The existing single-active-run runtime policy remains unchanged in M4.1a.
+
+See ADR-031.
 
 #### M4.1b — Safe Parallel Execution & Integration
 
-**Planned after M4.1a.**
+**Active milestone.**
 
 Allow bounded concurrent work only after independence is proven. Integration remains deterministic,
 and any transformed/reapplied candidate requires fresh verification rather than reusing evidence
