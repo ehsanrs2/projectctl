@@ -1365,6 +1365,30 @@ def resume_checkpointed_run(project_root: Path, run_id: str) -> StartedRun:
             )
             raise RunStoreError("ExecutionPlan digest no longer matches the run record.")
 
+        if getattr(plan, "execution_input_digest", None):
+            try:
+                execution_input = load_execution_input(
+                    run_dir,
+                    expected_digest=plan.execution_input_digest,
+                )
+                revalidate_execution_input(root, execution_input)
+            except Exception as exc:
+                _mark_start_failure(
+                    store,
+                    run_id,
+                    expected=RunStatus.RUNNING,
+                    status=RunStatus.NEEDS_DECISION,
+                    reason=RunTerminalReason.CONTEXT_INVALID,
+                )
+                store.append_event(
+                    run_id,
+                    "execution.input_invalid",
+                    {"error": str(exc), "resume": True},
+                )
+                raise StaleSnapshotError(
+                    f"Execution input became invalid before checkpoint resume: {exc}"
+                ) from exc
+
         checkpoint_path = (root / record.checkpoint_ref).resolve()
         if not checkpoint_path.is_relative_to(root):
             raise RunStoreError("Checkpoint path escapes the project root.")
@@ -1435,6 +1459,11 @@ def resume_checkpointed_run(project_root: Path, run_id: str) -> StartedRun:
             or request.context_manifest_digest != checkpoint.context_manifest_digest
             or request.run_id != run_id
             or request.task_id != record.task_id
+            or (
+                getattr(plan, "execution_input_digest", None) is not None
+                and getattr(request, "execution_input_digest", None)
+                != plan.execution_input_digest
+            )
         ):
             _mark_start_failure(
                 store,
