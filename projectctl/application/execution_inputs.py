@@ -325,9 +325,11 @@ def finalize_execution_input(
 def revalidate_execution_input(
     project_root: Path,
     manifest: ExecutionInputManifest,
+    *,
+    require_admitted: bool = True,
 ) -> TaskSnapshot:
     root = project_root.resolve()
-    if manifest.phase != "admitted":
+    if require_admitted and manifest.phase != "admitted":
         raise StaleSnapshotError(
             "Worker/verification execution requires an admitted execution input."
         )
@@ -351,8 +353,13 @@ def revalidate_execution_input(
     current_digest, current_ids = semantic_task_scope_digest(
         tasks, manifest.task_id
     )
+    expected_task_digest = (
+        manifest.admitted_task_scope_digest
+        if manifest.phase == "admitted"
+        else manifest.preclaim_task_scope_digest
+    )
     if (
-        current_digest != manifest.admitted_task_scope_digest
+        current_digest != expected_task_digest
         or current_ids != manifest.scoped_task_ids
     ):
         raise StaleSnapshotError(
