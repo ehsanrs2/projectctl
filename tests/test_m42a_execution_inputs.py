@@ -326,6 +326,10 @@ def _prepare_with_mutating_claim(tmp_path: Path, monkeypatch, *, mutate_dependen
         lambda root: claimer,
     )
     monkeypatch.setattr(
+        "projectctl.application.execution._prepare_quota_reason",
+        lambda root, task_id: None,
+    )
+    monkeypatch.setattr(
         "projectctl.application.execution_inputs.capture_task_snapshot",
         lambda *args, **kwargs: state["snapshot"],
     )
