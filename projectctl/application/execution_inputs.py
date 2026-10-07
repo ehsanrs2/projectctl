@@ -416,6 +416,7 @@ def revalidate_execution_input(
     manifest: ExecutionInputManifest,
     *,
     require_admitted: bool = True,
+    tasks: TaskSnapshot | None = None,
 ) -> TaskSnapshot:
     root = project_root.resolve()
     if require_admitted and manifest.phase != "admitted":
@@ -434,7 +435,7 @@ def revalidate_execution_input(
     if semantic_project_state_digest(state) != manifest.project_state_digest:
         raise StaleSnapshotError("Execution-input project state changed.")
 
-    tasks = capture_task_snapshot(
+    tasks = tasks or capture_task_snapshot(
         root,
         state="all",
         read_cache_max_age_seconds=0,
