@@ -17,6 +17,7 @@ from projectctl.schemas.execution import ExecutionPlanV1, ExecutionPolicy, Worke
 from projectctl.schemas.run import (
     ContextManifest,
     ContextManifestV1,
+    ContextManifestV2,
     RunManifest,
     RunManifestV1,
     WorkerDescriptor,
