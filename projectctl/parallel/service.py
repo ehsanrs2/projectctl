@@ -255,6 +255,7 @@ def build_parallel_plan(
         integration_target_ref=target_ref,
         base_commit=base_commit,
         now=now,
+        explicit_scope=scope,
     )
     input_evidence = [
         ParallelInputEvidence(
@@ -326,6 +327,8 @@ def revalidate_parallel_plan(
             "Parallel plan scoped task/dependency input changed."
         )
 
+    scope = task_parallel_scope(root, plan.task_id)
+
     if getattr(plan, "execution_input_digest", None):
         current_input = build_execution_input_manifest(
             root,
@@ -335,13 +338,13 @@ def revalidate_parallel_plan(
             project_state_digest=plan.project_state_digest,
             integration_target_ref=plan.integration_target_ref,
             base_commit=plan.base_commit,
+            explicit_scope=scope,
         )
         if execution_input_semantic_digest(current_input) != plan.execution_input_digest:
             raise StaleSnapshotError(
                 "Parallel plan unified execution input changed."
             )
 
-    scope = task_parallel_scope(root, plan.task_id)
     if digest(scope) != plan.scope_digest:
         raise StaleSnapshotError(
             "Parallel task scope declaration changed."
