@@ -90,6 +90,13 @@ def test_global_migration_v1_to_v2_is_backup_safe(tmp_path: Path):
         migrations = {
             row[0] for row in conn.execute("SELECT version FROM schema_migrations")
         }
+        indexes = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='index' AND name NOT LIKE 'sqlite_autoindex_%'"
+            )
+        }
         account = conn.execute(
             "SELECT provider FROM accounts WHERE account_id='acct'"
         ).fetchone()
@@ -97,6 +104,10 @@ def test_global_migration_v1_to_v2_is_backup_safe(tmp_path: Path):
         conn.close()
 
     assert {"execution_admissions", "execution_admission_events"} <= tables
+    assert {
+        "idx_execution_admissions_run",
+        "idx_execution_admission_events_account",
+    } <= indexes
     assert {1, 2} <= migrations
     assert account == ("manual",)
 
