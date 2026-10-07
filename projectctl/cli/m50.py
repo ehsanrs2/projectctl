@@ -6,6 +6,11 @@ from pathlib import Path
 import typer
 import yaml
 
+from projectctl.context.adoption import (
+    adopt_scope_review,
+    create_scope_review,
+    render_review_diff,
+)
 from projectctl.context.discovery import discover_context, suggest_scope
 from projectctl.core.errors import ProjectCtlError
 from projectctl.project.root import find_project_root
@@ -193,3 +198,146 @@ def register_m50(app: typer.Typer) -> None:
             typer.echo("\nWarnings")
             for warning in suggestion.warnings:
                 typer.echo(f"  - {warning}")
+
+
+    @context_app.command("review-scope")
+    def context_review_scope_command(
+        task_id: str,
+        suggestion_id: str = typer.Option(
+            ...,
+            "--suggestion",
+            help="Exact ContextScopeSuggestion id to review.",
+        ),
+        project: Path = typer.Option(
+            Path("."),
+            "--project",
+            exists=True,
+            file_okay=False,
+            resolve_path=True,
+        ),
+        input_path: list[str] | None = typer.Option(
+            None,
+            "--input",
+            help=(
+                "Accept only this suggested input path. Repeatable. "
+                "Omit to accept all suggested inputs."
+            ),
+        ),
+        write_path: list[str] | None = typer.Option(
+            None,
+            "--write",
+            help=(
+                "Accept only this suggested write path. Repeatable. "
+                "Omit to accept all suggested writes."
+            ),
+        ),
+        resource: list[str] = typer.Option(
+            [],
+            "--resource",
+            help="Add an explicit human-reviewed exclusive resource key. Repeatable.",
+        ),
+        json_output: bool = typer.Option(False, "--json"),
+    ) -> None:
+        try:
+            root = find_project_root(project)
+            review = create_scope_review(
+                root,
+                task_id,
+                suggestion_id=suggestion_id,
+                input_paths=input_path,
+                write_paths=write_path,
+                resources=resource,
+            )
+        except (ProjectCtlError, ValueError) as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(EXIT_CONTEXT)
+
+        if json_output:
+            typer.echo(_json(review))
+            return
+
+        from projectctl.core.digest import digest
+
+        review_digest = digest(review)
+        typer.echo(f"Scope review: {review.review_id}")
+        typer.echo(f"Task: {review.task_id}")
+        typer.echo(f"Base: {review.base_commit[:12]}")
+        typer.echo(f"Review digest: {review_digest}")
+        typer.echo("Mutation mode: additive")
+        typer.echo("Approval required: exact review digest")
+        typer.echo("\nAccepted additions")
+        typer.echo(
+            "  inputs: "
+            + (", ".join(review.added_inputs) if review.added_inputs else "none")
+        )
+        typer.echo(
+            "  writes: "
+            + (", ".join(review.added_writes) if review.added_writes else "none")
+        )
+        typer.echo(
+            "  resources: "
+            + (
+                ", ".join(review.added_resources)
+                if review.added_resources
+                else "none"
+            )
+        )
+        typer.echo("\nReviewed policy diff")
+        diff_text = render_review_diff(review)
+        typer.echo(diff_text or "  no byte-level policy change")
+        typer.echo("\nTo adopt this exact review:")
+        typer.echo(
+            "  projectctl context adopt-scope "
+            f"{task_id} --review {review.review_id} "
+            f"--approve-digest {review_digest}"
+        )
+
+    @context_app.command("adopt-scope")
+    def context_adopt_scope_command(
+        task_id: str,
+        review_id: str = typer.Option(
+            ...,
+            "--review",
+            help="Exact ContextScopeReview id to adopt.",
+        ),
+        approval_digest: str = typer.Option(
+            ...,
+            "--approve-digest",
+            help=(
+                "Exact review digest printed by review-scope. "
+                "This binds approval to the reviewed bytes."
+            ),
+        ),
+        project: Path = typer.Option(
+            Path("."),
+            "--project",
+            exists=True,
+            file_okay=False,
+            resolve_path=True,
+        ),
+        json_output: bool = typer.Option(False, "--json"),
+    ) -> None:
+        try:
+            root = find_project_root(project)
+            receipt = adopt_scope_review(
+                root,
+                task_id,
+                review_id=review_id,
+                approval_digest=approval_digest,
+            )
+        except (ProjectCtlError, ValueError) as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(EXIT_CONTEXT)
+
+        if json_output:
+            typer.echo(_json(receipt))
+            return
+
+        typer.echo(f"Scope adoption: {receipt.adoption_id}")
+        typer.echo(f"Review: {receipt.review_id}")
+        typer.echo(f"Task: {receipt.task_id}")
+        typer.echo(f"Catalog: {receipt.catalog_path}")
+        typer.echo(f"Before: {receipt.catalog_before_digest}")
+        typer.echo(f"After: {receipt.catalog_after_digest}")
+        typer.echo(f"Scope digest: {receipt.scope_after_digest}")
+        typer.echo("Applied: true")
