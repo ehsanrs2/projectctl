@@ -251,3 +251,36 @@ def test_release_never_deletes_foreign_admission(tmp_path: Path):
     assert store.release(owned) is True
     assert store.get("acct") is None
     assert store.release(owned) is False
+
+
+def test_admission_history_exposes_last_acquire_per_project(tmp_path: Path):
+    home = tmp_path / "home"
+    initialize_global_state_db(home / "state.sqlite")
+    times = iter([
+        NOW,
+        NOW + timedelta(seconds=1),
+        NOW + timedelta(seconds=2),
+        NOW + timedelta(seconds=3),
+    ])
+    store = AccountAdmissionStore(home, clock=lambda: next(times))
+
+    first = store.acquire(
+        account_id="acct",
+        project_instance_id="instance-a",
+        project_id="project-a",
+        run_id="run-a",
+        lease_owner="owner-a",
+    )
+    store.release(first)
+    second = store.acquire(
+        account_id="acct",
+        project_instance_id="instance-b",
+        project_id="project-b",
+        run_id="run-b",
+        lease_owner="owner-b",
+    )
+    store.release(second)
+
+    history = store.last_acquired_at_by_project("acct")
+    assert history["instance-a"] == NOW
+    assert history["instance-b"] == NOW + timedelta(seconds=2)
