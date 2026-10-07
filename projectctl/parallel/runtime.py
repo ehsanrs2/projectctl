@@ -14,8 +14,6 @@ from projectctl.application.execution import (
     PreparedRun,
     _actor,
     prepare_next_run,
-    resume_checkpointed_run,
-    start_prepared_run,
 )
 from projectctl.application.execution_inputs import (
     derive_reapplied_execution_input,
@@ -1012,34 +1010,6 @@ def recover_parallel_project(project_root: Path) -> list[str]:
                 f"{record.run_id}:{action.action}:{action.resolved_status}"
             )
     return details
-
-
-def _advance_parallel_run(root: Path, run_id: str):
-    store = RunStore(root)
-    record = store.get(run_id)
-
-    if record.status in {RunStatus.PREPARING, RunStatus.INTEGRATING, RunStatus.AWAITING_REVIEW}:
-        recover_run(root, run_id)
-        record = store.get(run_id)
-
-    if record.status == RunStatus.RUNNING:
-        if record.checkpoint_ref:
-            resume_checkpointed_run(root, run_id)
-        else:
-            recover_run(root, run_id)
-        record = store.get(run_id)
-
-    if record.status == RunStatus.CLAIMED:
-        start_prepared_run(root, run_id)
-        record = store.get(run_id)
-
-    if record.status == RunStatus.VERIFYING:
-        verify_run(root, run_id)
-        record = store.get(run_id)
-        if record.status == RunStatus.READY_TO_INTEGRATE:
-            validate_parallel_candidate_scope(root, run_id)
-
-    return store.get(run_id)
 
 
 def run_parallel_batch(
