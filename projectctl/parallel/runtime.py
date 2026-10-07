@@ -59,6 +59,7 @@ from projectctl.project.state import load_project_state, semantic_project_state_
 from projectctl.scheduler.digests import semantic_task_scope_digest
 from projectctl.schemas.capabilities import StrategyFallbackPolicy
 from projectctl.schemas.evidence import EvidenceManifest
+from projectctl.schemas.execution_input import ExecutionPathScope
 from projectctl.schemas.execution import ExecutionPlan
 from projectctl.schemas.parallel import (
     ParallelBatchResult,
@@ -511,10 +512,7 @@ def _assert_runtime_inputs_stable(
             digest=input_scope_digest(
                 root,
                 new_base,
-                __import__(
-                    "projectctl.schemas.execution_input",
-                    fromlist=["ExecutionPathScope"],
-                ).ExecutionPathScope(
+                ExecutionPathScope(
                     path=item.scope.path,
                     kind=item.scope.kind,
                 ),
