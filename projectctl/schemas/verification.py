@@ -21,6 +21,7 @@ DEFAULT_PROTECTED_PATHS = [
     "specs/**",
     "docs/decisions/**",
     "projectctl.verification.yaml",
+    "projectctl.parallel.yaml",
 ]
 RESERVED_CHECK_IDS = {"diff-policy", "workspace-stability"}
 
