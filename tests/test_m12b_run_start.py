@@ -294,6 +294,10 @@ def setup_prepared(tmp_path: Path, monkeypatch):
         "projectctl.application.execution.capture_task_snapshot",
         lambda *args, **kwargs: tasks,
     )
+    monkeypatch.setattr(
+        "projectctl.application.execution_inputs.capture_task_snapshot",
+        lambda *args, **kwargs: tasks,
+    )
 
     monkeypatch.setattr(
         "projectctl.application.execution.build_next_execution_bundle",
