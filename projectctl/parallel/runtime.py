@@ -194,6 +194,9 @@ def prepare_parallel_run(
     max_parallel_runs: int,
     requested_strategy=None,
     fallback: StrategyFallbackPolicy | None = None,
+    expected_task_id: str | None = None,
+    expected_task_snapshot_digest: str | None = None,
+    expected_project_state_digest: str | None = None,
 ) -> PreparedRun:
     if max_parallel_runs < 2 or max_parallel_runs > 8:
         raise ValueError("max_parallel_runs must be between 2 and 8.")
@@ -211,6 +214,27 @@ def prepare_parallel_run(
         if task_id is None:
             raise ConfigurationError(
                 "Project-local scheduler selected no task for another parallel slot."
+            )
+        if expected_task_id is not None and task_id != expected_task_id:
+            raise StaleSnapshotError(
+                f"Parallel slot task changed: expected {expected_task_id!r}, "
+                f"selected {task_id!r}."
+            )
+        if (
+            expected_task_snapshot_digest is not None
+            and scheduling.decision.task_snapshot_digest
+            != expected_task_snapshot_digest
+        ):
+            raise StaleSnapshotError(
+                "Parallel slot task snapshot changed before admission."
+            )
+        if (
+            expected_project_state_digest is not None
+            and scheduling.decision.project_state_digest
+            != expected_project_state_digest
+        ):
+            raise StaleSnapshotError(
+                "Parallel slot project state changed before admission."
             )
 
         preclaim = build_parallel_plan(
