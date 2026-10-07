@@ -145,6 +145,24 @@ class ParallelIntegrationQueue(ProjectCtlModel):
     entries: list[ParallelQueueEntry] = Field(default_factory=list)
 
 
+class ParallelReapplicationRequest(ProjectCtlModel):
+    schema_kind: Literal["projectctl.parallel_reapplication_request"] = (
+        "projectctl.parallel_reapplication_request"
+    )
+    schema_version: Literal[1] = 1
+    reapplication_id: str = Field(min_length=1)
+    run_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    source_base_commit: str = Field(min_length=7)
+    source_candidate_commit: str = Field(min_length=7)
+    source_execution_plan_digest: str = Field(min_length=1)
+    source_evidence_digest: str = Field(min_length=1)
+    target_base_commit: str = Field(min_length=7)
+    target_advance_changed_paths: list[RepoRelativePath] = Field(default_factory=list)
+    patch_digest: str = Field(min_length=1)
+    requested_at: AwareDatetime
+
+
 class ParallelReapplicationManifest(ProjectCtlModel):
     schema_kind: Literal["projectctl.parallel_reapplication"] = (
         "projectctl.parallel_reapplication"
