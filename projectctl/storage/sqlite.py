@@ -168,6 +168,25 @@ def _assert_expected_tables(conn: sqlite3.Connection, path: Path, expected: set[
         )
 
 
+def _assert_expected_indexes(
+    conn: sqlite3.Connection,
+    path: Path,
+    expected: set[str],
+) -> None:
+    indexes = {
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_autoindex_%'"
+        )
+    }
+    missing = expected - indexes
+    if missing:
+        raise DatabaseVersionError(
+            f"Database {path} claims the current version but is missing indexes: "
+            f"{sorted(missing)}"
+        )
+
+
 def initialize_project_state_db(path: Path) -> None:
     existed = path.exists()
     conn = connect_db(path, telemetry=False)
@@ -385,6 +404,14 @@ def initialize_global_state_db(path: Path) -> None:
                     "execution_admission_events",
                 },
             )
+            _assert_expected_indexes(
+                conn,
+                path,
+                {
+                    "idx_execution_admissions_run",
+                    "idx_execution_admission_events_account",
+                },
+            )
     finally:
         conn.close()
 
@@ -478,6 +505,27 @@ def migrate_global_state_db(path: Path) -> MigrationResult:
         _create_migrations_table(conn)
         _record_migration(conn, 1, "global-state-baseline")
         _create_global_v2(conn)
+        _assert_expected_tables(
+            conn,
+            path,
+            {
+                "schema_migrations",
+                "accounts",
+                "quota_observations",
+                "project_registry",
+                "provider_status",
+                "execution_admissions",
+                "execution_admission_events",
+            },
+        )
+        _assert_expected_indexes(
+            conn,
+            path,
+            {
+                "idx_execution_admissions_run",
+                "idx_execution_admission_events_account",
+            },
+        )
         _record_migration(conn, 2, "m4-global-execution-admission")
         conn.execute(f"PRAGMA user_version = {GLOBAL_STATE_DB_VERSION}")
         conn.commit()
