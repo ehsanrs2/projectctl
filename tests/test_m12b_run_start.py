@@ -704,3 +704,33 @@ def test_checkpoint_resume_conflict_preserves_checkpoint_and_never_probes(
         if event.event_type == "worker.resume_deferred"
     ]
     assert deferred[-1].payload["reason"] == "account_admission_unavailable"
+
+
+def test_worker_start_fails_closed_on_stale_quota_before_provider_contact(
+    tmp_path: Path, monkeypatch
+):
+    repo, prepared, task, caps = setup_prepared(tmp_path, monkeypatch)
+    stale = QuotaSnapshot(
+        provider="test",
+        account="openai-default",
+        observed_at=datetime(2000, 1, 1, tzinfo=timezone.utc),
+        five_hour=QuotaWindow(remaining_ratio=.95),
+        weekly=QuotaWindow(remaining_ratio=.95),
+        ordinary_usage_allowed=True,
+    )
+    monkeypatch.setattr(
+        "projectctl.application.execution.read_current_quota",
+        lambda account: stale,
+    )
+    monkeypatch.setattr(
+        "projectctl.application.execution._adapter_for_provider",
+        lambda provider: (_ for _ in ()).throw(
+            AssertionError("worker provider must not be contacted with stale quota")
+        ),
+    )
+
+    with pytest.raises(QuotaError, match="stale or insufficient"):
+        start_prepared_run(repo, prepared.record.run_id)
+
+    record = RunStore(repo).get(prepared.record.run_id)
+    assert record.status == RunStatus.CLAIMED
