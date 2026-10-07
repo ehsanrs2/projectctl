@@ -1982,13 +1982,13 @@ new base, returns the run to `VERIFYING`, and only then creates fresh candidate/
 Crash evidence for this transformation is recorded as:
 
 ```text
-ParallelReapplicationRequest v1
+ParallelReapplicationRequest v2
         ↓
 workspace transformation
         ↓
 durable run rebind -> VERIFYING
         ↓
-ParallelReapplicationManifest v1
+ParallelReapplicationManifest v2
         ↓
 fresh VerificationManifest / EvidenceManifest
 ```
