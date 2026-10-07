@@ -225,13 +225,18 @@ def build_execution_input_manifest(
     base_commit: str,
     now: datetime | None = None,
     explicit_scope=None,
+    project_id: str | None = None,
 ) -> ExecutionInputManifest:
     root = project_root.resolve()
     now = now or utc_now()
     if now.tzinfo is None:
         raise ValueError("Execution input time must be timezone-aware.")
 
-    config = load_project_config(root)
+    resolved_project_id = (
+        project_id
+        if project_id is not None
+        else load_project_config(root).project.id
+    )
     task = next((item for item in tasks.tasks if item.id == task_id), None)
     if task is None:
         raise ConfigurationError(f"Selected task {task_id!r} is missing.")
@@ -263,7 +268,7 @@ def build_execution_input_manifest(
 
     return ExecutionInputManifest(
         input_id=f"execution-input-{uuid.uuid4().hex}",
-        project_id=config.project.id,
+        project_id=resolved_project_id,
         task_id=task_id,
         integration_target_ref=integration_target_ref,
         base_commit=base_commit,
