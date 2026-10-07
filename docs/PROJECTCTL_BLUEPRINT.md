@@ -123,7 +123,7 @@ Exactly one authority should exist for each mutable concern.
 | Account execution admission | `$PROJECTCTL_HOME/state.sqlite -> execution_admissions` | Implemented in M4.0a; exclusive per quota account, expiring, and distinct from project/task ownership |
 | Cross-project portfolio arbitration | Registered projects + project-local scheduler envelopes + admission history | Implemented in M4.0b; chooses project/action, never raw cross-project task scores |
 | Parallel execution scope | `projectctl.parallel.yaml` | Human-managed input/write/resource authorization used by M4.1 proofs |
-| Execution input validity | **Currently split:** `ExecutionPlan v2` + `ParallelPlan/ParallelRunBinding` | Post-M4 review found this authority split; M4.2a is active to unify it |
+| Execution input validity | `ExecutionInputManifest v1` | Implemented in M4.2a; scoped task/dependency/base/claim/scope proof shared by serial and parallel execution |
 | Project quota policy | `.projectctl/config.yaml` | Local policy, not quota observation/admission authority |
 | Generated status dashboards | `docs/generated/*` | Derived and non-authoritative |
 | Telemetry | `.projectctl/telemetry.sqlite` | Observational only |
@@ -274,8 +274,8 @@ See ADR-033 and `docs/architecture/POST_M4_ARCHITECTURE_REVIEW.md`.
 
 ## 5. Current architecture
 
-The post-M4 review records the **current** architecture with two known closure gaps rather than
-drawing the intended M4.2 end state as if it already existed.
+M4.2a closes the execution-input authority split found by the post-M4 review. One remaining M4.2
+closure gap is intentionally visible: portfolio arbitration is not yet active-set-aware.
 
 ```mermaid
 flowchart TD
@@ -289,18 +289,17 @@ flowchart TD
 
     S --> EP[Execution Planner]
     WCap[Worker Capability Probe] --> EP
-    EP --> EPlan[ExecutionPlan v2<br/>whole TaskSnapshot digest]
-
-    PS[projectctl.parallel.yaml] --> PP[Parallel Planning Proof]
-    N --> PP
-    PP --> PPlan[ParallelPlan / ParallelRunBinding<br/>scoped task + code/resource proof]
-
-    EPlan -. M4.2a: unify execution input authority .- PPlan
+    EP --> EPlan[ExecutionPlan v3<br/>scheduler audit + input binding]
+    EP --> EInput[ExecutionInputManifest v1<br/>scoped execution authority]
 
     EPlan --> Claim[Task / Execution Claim]
-    PPlan --> Active[Bounded Parallel Active Set]
-    Claim --> WT[Isolated Worktree]
-    Active --> WT
+    EInput --> Claim
+    Claim --> EAdmit[Claim-aware admitted input]
+    EAdmit --> WT[Isolated Worktree]
+
+    PS[projectctl.parallel.yaml] --> EInput
+    EAdmit --> PP[ParallelPlan v2 / ParallelRunBinding]
+    PP --> Active[Bounded Parallel Active Set]
 
     PORT --> PTurn[Portfolio-selected Worker Turn]
     Active --> LTurn[Parallel-runtime Worker Turn]
@@ -310,20 +309,23 @@ flowchart TD
 
     PORT -. M4.2b: unify automated turn arbitration .-> Active
 
-    WT --> Ctx[Context Assembly]
+    WT --> Ctx[ContextManifest v3 / WorkerRequest v3]
+    EAdmit --> Ctx
     Ctx --> Worker
     Worker --> CP{Quota boundary?}
     CP -->|checkpoint| Checkpoint[Durable WorkerCheckpoint]
     Checkpoint --> PTurn
     Checkpoint --> LTurn
-    CP -->|completed| Verify[Independent Verification]
+    CP -->|completed| Verify[Independent Verification<br/>including write-scope authorization]
 
+    EAdmit --> Verify
     Verify --> Evidence[Evidence + Candidate Commit]
     Evidence --> IQ[Deterministic Integration Queue]
     IQ --> Drift{Target advanced?}
     Drift -->|no| Integrate[Exact-base Integration]
-    Drift -->|yes, safe| Reapply[Archive + Reapply]
-    Reapply --> Verify
+    Drift -->|yes, safe| Reapply[Archive plan/input/evidence + patch]
+    Reapply --> EDerived[Derived execution-input / plan lineage]
+    EDerived --> Verify
     Integrate --> Publish[Remote Publication / Review when required]
     Publish --> Complete[Canonical Task Completion]
 
@@ -334,12 +336,8 @@ flowchart TD
     RunDB --- IQ
 ```
 
-Two gaps are intentionally visible:
-
-1. `ExecutionPlan v2` still uses the whole TaskSnapshot while the parallel proof uses scoped
-   task/dependency inputs. M4.2a unifies these.
-2. portfolio arbitration still assumes at most one active run per project while M4.1b permits a
-   valid multi-run active set. M4.2b unifies automated turn arbitration.
+The remaining gap is M4.2b: portfolio arbitration still assumes at most one active run per project
+while M4.1b permits a valid multi-run active set. M4.2b unifies automated worker-turn arbitration.
 
 The `Publish` stage is selected by Code Delivery policy, not Task Authority. Local delivery can
 complete from verified local integration; `direct_git` requires exact-base remote publication and
@@ -1522,21 +1520,36 @@ close before the global/parallel control plane is considered architecturally com
 
 #### M4.2a — Execution Input Contract Unification
 
-**Active milestone.**
+**Completed.**
 
-Separate scheduler observation from execution invalidation authority, model provider-native claim
-mutation explicitly, and make serial execution, parallel proof, context assembly, verification and
-reapplication consume one scoped execution-input contract.
+Implemented:
 
-Required closure includes claim-aware Beads semantics, additive persisted schemas, code-scope
-context, verification-time write authorization, reapplication lineage and cross-layer scenario
-tests.
+- `ExecutionInputManifest v1` is now the execution-validity authority
+- the full TaskSnapshot digest remains scheduler/audit evidence rather than execution invalidation
+- selected task + locally represented transitive dependencies form the scoped task proof
+- persisted pre-claim scoped task state makes post-claim crash recovery reconstructable
+- exact durable claim transition evidence distinguishes expected ownership mutation from drift
+- Beads explicitly permits only its READY → RUNNING provider-native claim transition
+- local/Git/GitHub side-channel claims require normalized task state to remain unchanged
+- claimers without transition semantics fail closed unless the selected task is semantically unchanged
+- serial and parallel execution consume the same execution-input proof
+- `ParallelPlan v2` references the execution-input digest
+- `ExecutionPlan v3`, `ContextManifest v3` and `WorkerRequest v3` bind the same proof
+- explicit input/write scopes become worker context/constraints
+- write authorization is enforced during independent verification before passing evidence
+- M4.1b integration keeps its write-scope check as defense in depth
+- reapplication persists exact candidate patch bytes plus source execution-input evidence
+- transformed plans/inputs carry explicit parent lineage and require fresh verification
+- reapplication recovery orders requests by durable request time rather than UUID path order
+- ambiguous reapplication recovery is persisted as NEEDS_DECISION / RECOVERY_UNSAFE
+- execution input binds the run base while target-head drift remains integration/reapplication authority
+- v1/v2 historical execution/context artifacts remain readable
 
 See ADR-033.
 
 #### M4.2b — Unified Turn Orchestration
 
-**Planned after M4.2a.**
+**Active milestone.**
 
 Make portfolio arbitration aware of parallel active sets and route automated worker turns through
 one account-global dispatcher while M4.0a remains the final atomic admission authority.
