@@ -1634,28 +1634,38 @@ See ADR-036.
 
 ### Post-M5 Architecture Review
 
+**Completed.**
+
+The review accepts the core M5 authority chain but requires two closure milestones before further product expansion.
+
+Key findings:
+
+- **critical:** reviewed scope adoption uses `context-scope-adoption.lock` while new run admission uses `run-prepare.lock`; the no-active-run check and policy mutation are therefore not atomic with the no-active→active run transition
+- **high:** serial execution allows an absent task scope, causing `ExecutionInputManifest.write_scopes=[]` and a vacuous `execution-write-scope` verification pass; scope optionality is not an explicit project governance policy
+- **high:** `projectctl.parallel.yaml` / `ParallelScopeCatalog` now govern serial context, serial verification, M5 adoption and parallel conflict proof; the semantic role has become generic execution scope
+- **medium:** catalog review snapshots read raw bytes and parsed YAML in separate reads, which is fail-closed at adoption but not a single consistent review snapshot
+- **medium:** review-digest approval is content-bound operator approval, not authenticated human identity
+- **medium:** review/request/receipt evidence is local operational audit rather than repository-portable provenance
+
+See `docs/architecture/POST_M5_ARCHITECTURE_REVIEW.md`.
+
+### M5.2a — Execution Authority Mutation Serialization
+
 **Active milestone.**
 
-Review the complete M5 authority chain before expanding context discovery or automation:
+Introduce one shared project-level execution-authority gate so reviewed scope mutation and new run admission cannot cross. Adoption must hold the gate from final catalog snapshot/no-active-run check through atomic policy validation/write; run preparation must hold the same gate through creation of a durable active run. Catalog snapshot digesting/parsing must use one byte read.
 
-```text
-derived discovery
-  -> scope suggestion
-  -> exact digest-bound review
-  -> durable adoption request
-  -> human-managed scope policy
-  -> execution input / parallel proof
-```
+### M5.2b — General Execution Scope Policy & Enforcement Mode
 
-The review must check for circular authority, stale-evidence gaps, crash windows, hidden auto-application,
-over-broad scope expansion, and any path by which derived Graphify/AST evidence could bypass explicit
-human approval.
+**Planned.**
+
+Promote the current parallel-named scope authority into one generic execution-scope policy, with a canonical generic schema/file and an explicit durable project governance mode such as `optional|required`. Historical parallel-scope contracts remain readable, but two simultaneous scope authorities must never be merged implicitly.
 
 ### Later product directions
 
-Retained after M4.2 contract closure:
+Retained after M5.2 closure:
 
-- **active:** Post-M5 Architecture Review
+- broader language-aware context discovery
 - additional worker providers
 - governed skills registry and supply-chain policy
 - first-class Research / Hypothesis / Experiment / Evidence / Decision flows
