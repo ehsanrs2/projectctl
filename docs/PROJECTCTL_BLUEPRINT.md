@@ -1640,10 +1640,10 @@ The review accepts the core M5 authority chain but requires two closure mileston
 
 Key findings:
 
-- **critical:** reviewed scope adoption uses `context-scope-adoption.lock` while new run admission uses `run-prepare.lock`; the no-active-run check and policy mutation are therefore not atomic with the no-active→active run transition
-- **high:** serial execution allows an absent task scope, causing `ExecutionInputManifest.write_scopes=[]` and a vacuous `execution-write-scope` verification pass; scope optionality is not an explicit project governance policy
-- **high:** `projectctl.parallel.yaml` / `ParallelScopeCatalog` now govern serial context, serial verification, M5 adoption and parallel conflict proof; the semantic role has become generic execution scope
-- **medium:** catalog review snapshots read raw bytes and parsed YAML in separate reads, which is fail-closed at adoption but not a single consistent review snapshot
+- **closed by M5.2a (critical):** the previous separate adoption/run-preparation locks are now nested under one shared `execution-authority` gate
+- **open for M5.2b (high):** serial execution still allows absent task scope, so scope optionality needs an explicit project governance mode
+- **open for M5.2b (high):** `projectctl.parallel.yaml` / `ParallelScopeCatalog` now govern serial context, verification, M5 adoption and parallel conflict proof; the semantic role has become generic execution scope
+- **closed by M5.2a (medium):** catalog review snapshots parse and digest the same single-read byte sequence
 - **medium:** review-digest approval is content-bound operator approval, not authenticated human identity
 - **medium:** review/request/receipt evidence is local operational audit rather than repository-portable provenance
 
@@ -1651,13 +1651,22 @@ See `docs/architecture/POST_M5_ARCHITECTURE_REVIEW.md`.
 
 ### M5.2a — Execution Authority Mutation Serialization
 
-**Active milestone.**
+**Completed.**
 
-Introduce one shared project-level execution-authority gate so reviewed scope mutation and new run admission cannot cross. Adoption must hold the gate from final catalog snapshot/no-active-run check through atomic policy validation/write; run preparation must hold the same gate through creation of a durable active run. Catalog snapshot digesting/parsing must use one byte read.
+M5.2a introduces the shared `execution-authority` gate for both reviewed scope adoption and new run preparation.
+
+- run preparation acquires the gate before execution preflight and holds it through planning, durable run creation, task claim, isolated worktree setup and transition to `CLAIMED`
+- adoption acquires the same gate before its operation-specific lock and holds it through the final no-active-run check, durable request, policy write, byte/schema validation and receipt
+- lock ordering is explicit: `execution-authority → run-prepare` and `execution-authority → context-scope-adoption`
+- gate contention fails closed with `ProjectLockError`; callers can retry after the in-flight operation completes
+- stale-lock reclamation uses a separate OS advisory guard, so simultaneous reclaimers cannot remove a new owner's lock
+- the scope catalog is parsed from the exact same byte snapshot that is digested
+
+See ADR-037.
 
 ### M5.2b — General Execution Scope Policy & Enforcement Mode
 
-**Planned.**
+**Active milestone.**
 
 Promote the current parallel-named scope authority into one generic execution-scope policy, with a canonical generic schema/file and an explicit durable project governance mode such as `optional|required`. Historical parallel-scope contracts remain readable, but two simultaneous scope authorities must never be merged implicitly.
 
