@@ -1,0 +1,115 @@
+from __future__ import annotations
+
+import hashlib
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal
+
+import yaml
+from pydantic import ValidationError
+
+from projectctl.core.errors import ConfigurationError
+from projectctl.core.paths import resolve_inside_repo
+from projectctl.parallel.catalog import parse_parallel_scope_catalog_bytes
+from projectctl.schemas.execution_scope import ExecutionScopeCatalog, ExecutionTaskScope
+
+EXECUTION_SCOPE_PATH = "projectctl.scope.yaml"
+LEGACY_PARALLEL_SCOPE_PATH = "projectctl.parallel.yaml"
+
+
+@dataclass(frozen=True)
+class ResolvedExecutionScopeCatalog:
+    source: Literal["canonical", "legacy", "absent"]
+    catalog: ExecutionScopeCatalog | None
+    path: Path | None
+    raw_bytes: bytes | None
+    raw_digest: str | None
+
+
+def parse_execution_scope_catalog_bytes(raw_bytes: bytes) -> ExecutionScopeCatalog:
+    """Decode and validate exactly the bytes used by the caller for its digest."""
+    try:
+        raw = yaml.safe_load(raw_bytes.decode("utf-8"))
+        if not isinstance(raw, dict):
+            raise ConfigurationError("Execution scope catalog must be a YAML mapping.")
+        return ExecutionScopeCatalog.model_validate(raw)
+    except (UnicodeDecodeError, yaml.YAMLError, ValidationError) as exc:
+        raise ConfigurationError(f"Invalid execution scope catalog: {exc}") from exc
+
+
+def _policy_file(root: Path, relative: str) -> tuple[Path, bool]:
+    declared = root / relative
+    if declared.is_symlink():
+        raise ConfigurationError(
+            f"Refusing symlinked human-managed scope authority: {relative}."
+        )
+    path = resolve_inside_repo(root, relative, must_exist=False)
+    present = path.exists()
+    if present and not path.is_file():
+        raise ConfigurationError(f"Scope authority is not a regular file: {relative}.")
+    return path, present
+
+
+def resolve_execution_scope_catalog(project_root: Path) -> ResolvedExecutionScopeCatalog:
+    """Resolve one scope authority without side effects or implicit precedence.
+
+    The legacy catalog is parsed through its historical schema and converted in
+    memory. A malformed or competing authority always fails closed.
+    """
+    root = project_root.resolve()
+    canonical_path, canonical_present = _policy_file(root, EXECUTION_SCOPE_PATH)
+    legacy_path, legacy_present = _policy_file(root, LEGACY_PARALLEL_SCOPE_PATH)
+
+    if canonical_present and legacy_present:
+        raise ConfigurationError(
+            "Both projectctl.scope.yaml and projectctl.parallel.yaml exist; "
+            "resolve the conflicting human-managed scope authorities explicitly."
+        )
+    if not canonical_present and not legacy_present:
+        return ResolvedExecutionScopeCatalog("absent", None, None, None, None)
+
+    path = canonical_path if canonical_present else legacy_path
+    try:
+        raw_bytes = path.read_bytes()
+    except OSError as exc:
+        raise ConfigurationError(f"Cannot read execution scope authority {path}: {exc}") from exc
+
+    if canonical_present:
+        catalog = parse_execution_scope_catalog_bytes(raw_bytes)
+        source: Literal["canonical", "legacy", "absent"] = "canonical"
+    else:
+        legacy = parse_parallel_scope_catalog_bytes(raw_bytes)
+        catalog = ExecutionScopeCatalog(
+            tasks={
+                key: ExecutionTaskScope.model_validate(scope.model_dump(mode="python"))
+                for key, scope in legacy.tasks.items()
+            }
+        )
+        source = "legacy"
+
+    return ResolvedExecutionScopeCatalog(
+        source=source,
+        catalog=catalog,
+        path=path,
+        raw_bytes=raw_bytes,
+        raw_digest=hashlib.sha256(raw_bytes).hexdigest(),
+    )
+
+
+def load_execution_scope_catalog(project_root: Path) -> ExecutionScopeCatalog | None:
+    return resolve_execution_scope_catalog(project_root).catalog
+
+
+def task_execution_scope(project_root: Path, task_id: str) -> ExecutionTaskScope:
+    resolved = resolve_execution_scope_catalog(project_root)
+    if resolved.catalog is None:
+        raise ConfigurationError(
+            f"Missing human-managed execution scope catalog for task {task_id!r}."
+        )
+    scope = resolved.catalog.tasks.get(task_id)
+    if scope is None:
+        raise ConfigurationError(
+            f"Task {task_id!r} has no declared scope in "
+            f"{resolved.path.name}; execution scope is not proven."
+        )
+    return scope
