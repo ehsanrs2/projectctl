@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import uuid
 from dataclasses import dataclass
+from functools import wraps
 from pathlib import Path
 
 from projectctl.application.claims import (
@@ -388,6 +389,17 @@ def _assert_task_store_execution_capable(project_root: Path) -> None:
     require_project_execution_ready(project_root)
 
 
+def _execution_authority_gated(function):
+    @wraps(function)
+    def wrapped(project_root: Path, *args, **kwargs):
+        root = project_root.resolve()
+        with execution_authority_gate(root):
+            return function(root, *args, **kwargs)
+
+    return wrapped
+
+
+@_execution_authority_gated
 def prepare_next_run(
     project_root: Path,
     *,
@@ -400,245 +412,191 @@ def prepare_next_run(
 ) -> PreparedRun:
     root = project_root.resolve()
     actor = _actor()
-    with execution_authority_gate(root):
-        _assert_task_store_execution_capable(root)
-        with project_lock(root, "run-prepare"):
-            planning = build_next_execution_bundle(
-                root,
-                integration_target_ref=integration_target_ref,
-                requested_strategy=requested_strategy,
-                fallback=fallback,
-                expected_task_id=expected_task_id,
-                expected_task_snapshot_digest=expected_task_snapshot_digest,
-                expected_project_state_digest=expected_project_state_digest,
-            )
-            plan = planning.plan
-            run_id = f"run-{uuid.uuid4().hex}"
-            branch_name = f"projectctl/run/{run_id}"
-            worktree_id = run_id
-            manager = WorktreeManager(root)
-            worktree_path = manager.path_for(worktree_id)
-            run_dir = root / ".projectctl" / "runs" / run_id
+    _assert_task_store_execution_capable(root)
+    with project_lock(root, "run-prepare"):
+        planning = build_next_execution_bundle(
+            root,
+            integration_target_ref=integration_target_ref,
+            requested_strategy=requested_strategy,
+            fallback=fallback,
+            expected_task_id=expected_task_id,
+            expected_task_snapshot_digest=expected_task_snapshot_digest,
+            expected_project_state_digest=expected_project_state_digest,
+        )
+        plan = planning.plan
+        run_id = f"run-{uuid.uuid4().hex}"
+        branch_name = f"projectctl/run/{run_id}"
+        worktree_id = run_id
+        manager = WorktreeManager(root)
+        worktree_path = manager.path_for(worktree_id)
+        run_dir = root / ".projectctl" / "runs" / run_id
 
-            manifest = RunManifest(
-                run_id=run_id,
-                task_id=plan.task_id,
-                execution_plan_digest=digest(plan),
-                status=RunStatus.PLANNED,
-                base_commit=plan.base_commit,
-                branch_name=branch_name,
-                worktree_id=worktree_id,
-                worker=plan.worker,
-            )
-            store = RunStore(root)
-            execution_input = planning.execution_input
-            if execution_input is not None:
-                if (
-                    plan.execution_input_digest
-                    != execution_input_semantic_digest(execution_input)
-                ):
-                    raise RunStoreError(
-                        "ExecutionPlan is not bound to its ExecutionInputManifest."
-                    )
-            elif getattr(plan, "execution_input_digest", None) is not None:
+        manifest = RunManifest(
+            run_id=run_id,
+            task_id=plan.task_id,
+            execution_plan_digest=digest(plan),
+            status=RunStatus.PLANNED,
+            base_commit=plan.base_commit,
+            branch_name=branch_name,
+            worktree_id=worktree_id,
+            worker=plan.worker,
+        )
+        store = RunStore(root)
+        execution_input = planning.execution_input
+        if execution_input is not None:
+            if (
+                plan.execution_input_digest
+                != execution_input_semantic_digest(execution_input)
+            ):
                 raise RunStoreError(
-                    "ExecutionPlan references an ExecutionInputManifest that the "
-                    "planning bundle did not provide."
+                    "ExecutionPlan is not bound to its ExecutionInputManifest."
                 )
-
-            try:
-                _atomic_json(run_dir / "execution-plan.json", plan)
-                if execution_input is not None:
-                    persist_execution_input(
-                        run_dir / "execution-input-manifest.json",
-                        execution_input,
-                    )
-                _atomic_json(run_dir / "worker-capabilities.json", planning.capabilities)
-                _atomic_json(run_dir / "worker-strategy.json", planning.strategy)
-                store.create(
-                    manifest,
-                    worktree_path=worktree_path,
-                    lease_owner=actor,
-                )
-            except Exception:
-                shutil.rmtree(run_dir, ignore_errors=True)
-                raise
-
-            store.transition(
-                run_id,
-                expected={RunStatus.PLANNED},
-                status=RunStatus.PREPARING,
+        elif getattr(plan, "execution_input_digest", None) is not None:
+            raise RunStoreError(
+                "ExecutionPlan references an ExecutionInputManifest that the "
+                "planning bundle did not provide."
             )
 
+        try:
+            _atomic_json(run_dir / "execution-plan.json", plan)
             if execution_input is not None:
-                try:
-                    validate_preclaim_execution_input(root, execution_input)
-                except StaleSnapshotError:
-                    store.transition(
-                        run_id,
-                        expected={RunStatus.PREPARING},
-                        status=RunStatus.FAILED,
-                        terminal_reason=RunTerminalReason.CONTEXT_INVALID,
-                    )
-                    store.release_lease(run_id, owner=actor)
-                    raise
-            else:
-                stale_reason = _validate_plan_inputs(root, plan)
-                if stale_reason is not None:
-                    store.transition(
-                        run_id,
-                        expected={RunStatus.PREPARING},
-                        status=RunStatus.FAILED,
-                        terminal_reason=stale_reason,
-                    )
-                    store.release_lease(run_id, owner=actor)
-                    raise StaleSnapshotError(
-                        f"Execution plan became stale during legacy preflight: "
-                        f"{stale_reason.value}"
-                    )
+                persist_execution_input(
+                    run_dir / "execution-input-manifest.json",
+                    execution_input,
+                )
+            _atomic_json(run_dir / "worker-capabilities.json", planning.capabilities)
+            _atomic_json(run_dir / "worker-strategy.json", planning.strategy)
+            store.create(
+                manifest,
+                worktree_path=worktree_path,
+                lease_owner=actor,
+            )
+        except Exception:
+            shutil.rmtree(run_dir, ignore_errors=True)
+            raise
 
-            quota_reason = _prepare_quota_reason(root, plan.task_id)
-            if quota_reason is not None:
+        store.transition(
+            run_id,
+            expected={RunStatus.PLANNED},
+            status=RunStatus.PREPARING,
+        )
+
+        if execution_input is not None:
+            try:
+                validate_preclaim_execution_input(root, execution_input)
+            except StaleSnapshotError:
                 store.transition(
                     run_id,
                     expected={RunStatus.PREPARING},
                     status=RunStatus.FAILED,
-                    terminal_reason=quota_reason,
+                    terminal_reason=RunTerminalReason.CONTEXT_INVALID,
+                )
+                store.release_lease(run_id, owner=actor)
+                raise
+        else:
+            stale_reason = _validate_plan_inputs(root, plan)
+            if stale_reason is not None:
+                store.transition(
+                    run_id,
+                    expected={RunStatus.PREPARING},
+                    status=RunStatus.FAILED,
+                    terminal_reason=stale_reason,
                 )
                 store.release_lease(run_id, owner=actor)
                 raise StaleSnapshotError(
-                    "Execution quota policy changed before task claim acquisition."
+                    f"Execution plan became stale during legacy preflight: "
+                    f"{stale_reason.value}"
                 )
 
-            claimer = _claimer(root)
-            claim_request = TaskClaimRequest(
-                task_id=plan.task_id,
-                run_id=run_id,
-                actor=actor,
-                base_commit=plan.base_commit,
-                integration_target_ref=plan.integration_target_ref,
-                claim_token=uuid.uuid4().hex,
-                requested_at=utc_now(),
+        quota_reason = _prepare_quota_reason(root, plan.task_id)
+        if quota_reason is not None:
+            store.transition(
+                run_id,
+                expected={RunStatus.PREPARING},
+                status=RunStatus.FAILED,
+                terminal_reason=quota_reason,
             )
-            persist_claim_request(
+            store.release_lease(run_id, owner=actor)
+            raise StaleSnapshotError(
+                "Execution quota policy changed before task claim acquisition."
+            )
+
+        claimer = _claimer(root)
+        claim_request = TaskClaimRequest(
+            task_id=plan.task_id,
+            run_id=run_id,
+            actor=actor,
+            base_commit=plan.base_commit,
+            integration_target_ref=plan.integration_target_ref,
+            claim_token=uuid.uuid4().hex,
+            requested_at=utc_now(),
+        )
+        persist_claim_request(
+            root,
+            store=store,
+            request=claim_request,
+        )
+        try:
+            claim = claimer.claim(claim_request)
+            persist_claim(
                 root,
                 store=store,
                 request=claim_request,
+                claim=claim,
             )
+        except Exception as exc:
+            # The durable request is sufficient for providers that can reconcile
+            # exact ownership after a crash/transport failure. Do not guess that
+            # no remote mutation happened and do not discard the request.
+            store.append_event(
+                run_id,
+                "task.claim.unresolved",
+                {"error_type": type(exc).__name__, "error": str(exc)},
+            )
+            store.release_lease(run_id, owner=actor)
+            raise
+
+        if not claim.acquired:
+            store.transition(
+                run_id,
+                expected={RunStatus.PREPARING},
+                status=RunStatus.FAILED,
+                terminal_reason=RunTerminalReason.CLAIM_LOST,
+            )
+            store.release_lease(run_id, owner=actor)
+            raise ClaimConflictError(
+                claim.reason or f"Task {plan.task_id} could not be claimed."
+            )
+
+        # The claim itself may intentionally mutate canonical task state.
+        # Validate that exact provider-specific transition while requiring all
+        # relevant dependencies/project/base/scope inputs to remain stable.
+        if execution_input is not None:
             try:
-                claim = claimer.claim(claim_request)
-                persist_claim(
+                claim_transition = build_claim_transition_evidence(
                     root,
-                    store=store,
+                    run_id=run_id,
+                    manifest=execution_input,
                     request=claim_request,
                     claim=claim,
+                    claimer=claimer,
                 )
-            except Exception as exc:
-                # The durable request is sufficient for providers that can reconcile
-                # exact ownership after a crash/transport failure. Do not guess that
-                # no remote mutation happened and do not discard the request.
+                persist_claim_transition(
+                    run_dir / "claim-transition.json",
+                    claim_transition,
+                )
                 store.append_event(
                     run_id,
-                    "task.claim.unresolved",
-                    {"error_type": type(exc).__name__, "error": str(exc)},
+                    "task.claim.transition_validated",
+                    {
+                        "execution_input_digest": plan.execution_input_digest,
+                        "claim_transition_digest": digest(claim_transition),
+                        "postclaim_task_scope_digest": (
+                            claim_transition.postclaim_task_scope_digest
+                        ),
+                    },
                 )
-                store.release_lease(run_id, owner=actor)
-                raise
-
-            if not claim.acquired:
-                store.transition(
-                    run_id,
-                    expected={RunStatus.PREPARING},
-                    status=RunStatus.FAILED,
-                    terminal_reason=RunTerminalReason.CLAIM_LOST,
-                )
-                store.release_lease(run_id, owner=actor)
-                raise ClaimConflictError(
-                    claim.reason or f"Task {plan.task_id} could not be claimed."
-                )
-
-            # The claim itself may intentionally mutate canonical task state.
-            # Validate that exact provider-specific transition while requiring all
-            # relevant dependencies/project/base/scope inputs to remain stable.
-            if execution_input is not None:
-                try:
-                    claim_transition = build_claim_transition_evidence(
-                        root,
-                        run_id=run_id,
-                        manifest=execution_input,
-                        request=claim_request,
-                        claim=claim,
-                        claimer=claimer,
-                    )
-                    persist_claim_transition(
-                        run_dir / "claim-transition.json",
-                        claim_transition,
-                    )
-                    store.append_event(
-                        run_id,
-                        "task.claim.transition_validated",
-                        {
-                            "execution_input_digest": plan.execution_input_digest,
-                            "claim_transition_digest": digest(claim_transition),
-                            "postclaim_task_scope_digest": (
-                                claim_transition.postclaim_task_scope_digest
-                            ),
-                        },
-                    )
-                except StaleSnapshotError:
-                    release_ok = True
-                    try:
-                        claimer.release(claim)
-                        record_claim_release(store, claim)
-                    except Exception:
-                        release_ok = False
-                    store.transition(
-                        run_id,
-                        expected={RunStatus.PREPARING},
-                        status=(
-                            RunStatus.FAILED
-                            if release_ok
-                            else RunStatus.NEEDS_DECISION
-                        ),
-                        terminal_reason=(
-                            RunTerminalReason.CONTEXT_INVALID
-                            if release_ok
-                            else RunTerminalReason.RECOVERY_UNSAFE
-                        ),
-                    )
-                    store.release_lease(run_id, owner=actor)
-                    raise
-            else:
-                stale_after_claim = _validate_plan_inputs(root, plan)
-                if stale_after_claim is not None:
-                    release_ok = True
-                    try:
-                        claimer.release(claim)
-                        record_claim_release(store, claim)
-                    except Exception:
-                        release_ok = False
-                    store.transition(
-                        run_id,
-                        expected={RunStatus.PREPARING},
-                        status=(
-                            RunStatus.FAILED
-                            if release_ok
-                            else RunStatus.NEEDS_DECISION
-                        ),
-                        terminal_reason=(
-                            stale_after_claim
-                            if release_ok
-                            else RunTerminalReason.RECOVERY_UNSAFE
-                        ),
-                    )
-                    store.release_lease(run_id, owner=actor)
-                    raise StaleSnapshotError(
-                        "Legacy execution inputs changed after task claim acquisition: "
-                        f"{stale_after_claim.value}"
-                    )
-
-            quota_reason = _prepare_quota_reason(root, plan.task_id)
-            if quota_reason is not None:
+            except StaleSnapshotError:
                 release_ok = True
                 try:
                     claimer.release(claim)
@@ -654,55 +612,110 @@ def prepare_next_run(
                         else RunStatus.NEEDS_DECISION
                     ),
                     terminal_reason=(
-                        quota_reason
+                        RunTerminalReason.CONTEXT_INVALID
                         if release_ok
                         else RunTerminalReason.RECOVERY_UNSAFE
                     ),
                 )
                 store.release_lease(run_id, owner=actor)
-                raise StaleSnapshotError(
-                    "Execution quota policy changed during task claim acquisition."
-                )
-
-            try:
-                # Keep PREPARING until both remote ownership and the isolated
-                # workspace exist. A crash can then be reconciled deterministically.
-                worktree = manager.create(
-                    worktree_id=worktree_id,
-                    branch_name=branch_name,
-                    base_commit=plan.base_commit,
-                )
-            except Exception as exc:
+                raise
+        else:
+            stale_after_claim = _validate_plan_inputs(root, plan)
+            if stale_after_claim is not None:
                 release_ok = True
                 try:
                     claimer.release(claim)
                     record_claim_release(store, claim)
                 except Exception:
                     release_ok = False
-                reason = (
-                    RunTerminalReason.INFRASTRUCTURE_ERROR
-                    if release_ok
-                    else RunTerminalReason.RECOVERY_UNSAFE
-                )
-                status = RunStatus.FAILED if release_ok else RunStatus.NEEDS_DECISION
                 store.transition(
                     run_id,
                     expected={RunStatus.PREPARING},
-                    status=status,
-                    terminal_reason=reason,
+                    status=(
+                        RunStatus.FAILED
+                        if release_ok
+                        else RunStatus.NEEDS_DECISION
+                    ),
+                    terminal_reason=(
+                        stale_after_claim
+                        if release_ok
+                        else RunTerminalReason.RECOVERY_UNSAFE
+                    ),
                 )
                 store.release_lease(run_id, owner=actor)
-                raise WorktreeError(f"Could not prepare isolated worktree: {exc}") from exc
+                raise StaleSnapshotError(
+                    "Legacy execution inputs changed after task claim acquisition: "
+                    f"{stale_after_claim.value}"
+                )
 
+        quota_reason = _prepare_quota_reason(root, plan.task_id)
+        if quota_reason is not None:
+            release_ok = True
+            try:
+                claimer.release(claim)
+                record_claim_release(store, claim)
+            except Exception:
+                release_ok = False
             store.transition(
                 run_id,
                 expected={RunStatus.PREPARING},
-                status=RunStatus.CLAIMED,
+                status=(
+                    RunStatus.FAILED
+                    if release_ok
+                    else RunStatus.NEEDS_DECISION
+                ),
+                terminal_reason=(
+                    quota_reason
+                    if release_ok
+                    else RunTerminalReason.RECOVERY_UNSAFE
+                ),
             )
-            record = store.release_lease(run_id, owner=actor)
-            return PreparedRun(plan=plan, record=record, worktree=worktree)
+            store.release_lease(run_id, owner=actor)
+            raise StaleSnapshotError(
+                "Execution quota policy changed during task claim acquisition."
+            )
 
-   run_id: str,
+        try:
+            # Keep PREPARING until both remote ownership and the isolated
+            # workspace exist. A crash can then be reconciled deterministically.
+            worktree = manager.create(
+                worktree_id=worktree_id,
+                branch_name=branch_name,
+                base_commit=plan.base_commit,
+            )
+        except Exception as exc:
+            release_ok = True
+            try:
+                claimer.release(claim)
+                record_claim_release(store, claim)
+            except Exception:
+                release_ok = False
+            reason = (
+                RunTerminalReason.INFRASTRUCTURE_ERROR
+                if release_ok
+                else RunTerminalReason.RECOVERY_UNSAFE
+            )
+            status = RunStatus.FAILED if release_ok else RunStatus.NEEDS_DECISION
+            store.transition(
+                run_id,
+                expected={RunStatus.PREPARING},
+                status=status,
+                terminal_reason=reason,
+            )
+            store.release_lease(run_id, owner=actor)
+            raise WorktreeError(f"Could not prepare isolated worktree: {exc}") from exc
+
+        store.transition(
+            run_id,
+            expected={RunStatus.PREPARING},
+            status=RunStatus.CLAIMED,
+        )
+        record = store.release_lease(run_id, owner=actor)
+        return PreparedRun(plan=plan, record=record, worktree=worktree)
+
+def _mark_start_failure(
+    store: RunStore,
+    run_id: str,
     *,
     expected: RunStatus,
     status: RunStatus,
