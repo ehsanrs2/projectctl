@@ -47,6 +47,41 @@ def _can_reclaim(path: Path, *, hostname: str) -> bool:
 
 
 @contextmanager
+def _stale_reclamation_guard(lock_dir: Path):
+    """Serialize stale-lock reclamation across contenders.
+
+    The guard uses an OS advisory lock, which is released automatically if the
+    process crashes. This prevents two contenders from both observing a stale
+    lock and one unlinking the other's newly-created lock.
+    """
+    path = lock_dir / ".stale-reclamation.guard"
+    fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            if os.fstat(fd).st_size == 0:
+                os.write(fd, b"\0")
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+
+
+@contextmanager
 def project_lock(project_root: Path, name: str):
     lock_dir = project_root / ".projectctl" / "locks"
     lock_dir.mkdir(parents=True, exist_ok=True)
@@ -67,11 +102,20 @@ def project_lock(project_root: Path, name: str):
             fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
             break
         except FileExistsError as exc:
-            if attempt == 0 and _can_reclaim(path, hostname=hostname):
-                try:
-                    path.unlink()
-                except FileNotFoundError:
-                    pass
+            reclaimed = False
+            if attempt == 0:
+                with _stale_reclamation_guard(lock_dir):
+                    # All stale-lock removals are serialized. If the path
+                    # disappeared while waiting, simply retry O_EXCL.
+                    if not path.exists():
+                        reclaimed = True
+                    elif _can_reclaim(path, hostname=hostname):
+                        try:
+                            path.unlink()
+                        except FileNotFoundError:
+                            pass
+                        reclaimed = True
+            if reclaimed:
                 continue
             owner = _read_lock(path)
             detail = f" owner={owner}" if owner is not None else ""
@@ -98,3 +142,15 @@ def project_lock(project_root: Path, name: str):
                 path.unlink()
             except FileNotFoundError:
                 pass
+
+
+@contextmanager
+def execution_authority_gate(project_root: Path):
+    """Shared fail-fast gate for execution-scope mutation and run admission.
+
+    Callers must acquire this gate before their operation-specific lock. A
+    competing operation fails closed with ProjectLockError and may be retried
+    after the current authority transition finishes.
+    """
+    with project_lock(project_root, "execution-authority"):
+        yield
