@@ -16,7 +16,6 @@ from projectctl.context import adoption
 from projectctl.core.digest import digest
 from projectctl.core.enums import ResourceClass, TaskStatus
 from projectctl.core.errors import ConfigurationError, ProjectLockError, StaleSnapshotError
-from projectctl.parallel.catalog import parse_parallel_scope_catalog_bytes
 from projectctl.project.locking import execution_authority_gate
 from projectctl.schema_export import PUBLIC_SCHEMAS
 from projectctl.schemas.context_adoption import (
