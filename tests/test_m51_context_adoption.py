@@ -527,9 +527,9 @@ def test_catalog_state_parses_the_exact_bytes_it_digests(
     root = _repo(tmp_path)
     catalog_path = root / "projectctl.parallel.yaml"
     raw = (
-        "schema_kind: projectctl.parallel_scope_catalog\\n"
-        "schema_version: 1\\n"
-        "tasks: {}\\n"
+        "schema_kind: projectctl.parallel_scope_catalog\n"
+        "schema_version: 1\n"
+        "tasks: {}\n"
     ).encode("utf-8")
     catalog_path.write_bytes(raw)
     original_read_bytes = Path.read_bytes
