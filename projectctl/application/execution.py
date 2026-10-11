@@ -400,8 +400,7 @@ def prepare_next_run(
 ) -> PreparedRun:
     root = project_root.resolve()
     actor = _actor()
-    with project_lock(root, "run-prepare"):
-        with execution_authority_gate(root):
+    with execution_authority_gate(root):
         _assert_task_store_execution_capable(root)
         with project_lock(root, "run-prepare"):
             planning = build_next_execution_bundle(
