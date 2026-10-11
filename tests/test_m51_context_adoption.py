@@ -14,7 +14,7 @@ from projectctl.application import execution
 from projectctl.cli.entry import app
 from projectctl.context import adoption
 from projectctl.core.digest import digest
-from projectctl.core.enums import ResourceClass, TaskStatus
+from projectctl.core.enums import ModelProfile, ReasoningLevel, ResourceClass, RunStatus, TaskStatus
 from projectctl.core.errors import ConfigurationError, ProjectLockError, StaleSnapshotError
 from projectctl.project.locking import execution_authority_gate
 from projectctl.schema_export import PUBLIC_SCHEMAS
@@ -28,6 +28,9 @@ from projectctl.schemas.context_discovery import (
     ContextScopeSuggestion,
 )
 from projectctl.schemas.execution_input import ExecutionPathScope
+from projectctl.schemas.run import RunManifest, WorkerDescriptor
+from projectctl.storage.runs import RunStore
+from projectctl.storage.sqlite import initialize_project_state_db
 from projectctl.schemas.task import (
     NormalizedTask,
     TaskSnapshot,
@@ -620,7 +623,9 @@ def test_run_admission_gate_wins_and_adoption_rechecks_active_runs(
     monkeypatch,
 ):
     root = _repo(tmp_path)
+    real_active_run_guard = adoption._assert_no_active_runs
     review = _review(root, monkeypatch)
+    monkeypatch.setattr(adoption, "_assert_no_active_runs", real_active_run_guard)
     gate_entered = threading.Event()
     release_gate = threading.Event()
     gate_errors = []
@@ -628,6 +633,26 @@ def test_run_admission_gate_wins_and_adoption_rechecks_active_runs(
     def hold_run_admission_gate():
         try:
             with execution_authority_gate(root):
+                initialize_project_state_db(root / ".projectctl" / "state.sqlite")
+                store = RunStore(root)
+                active_manifest = RunManifest(
+                    run_id="run-active",
+                    task_id="TASK-1",
+                    execution_plan_digest="test-plan-digest",
+                    status=RunStatus.CLAIMED,
+                    base_commit=_git(root, "rev-parse", "HEAD"),
+                    branch_name="projectctl/run/run-active",
+                    worktree_id="run-active",
+                    worker=WorkerDescriptor(
+                        provider="codex",
+                        model_profile=ModelProfile.BALANCED,
+                        reasoning=ReasoningLevel.MEDIUM,
+                    ),
+                )
+                store.create(
+                    active_manifest,
+                    worktree_path=root / ".projectctl" / "worktrees" / "run-active",
+                )
                 gate_entered.set()
                 if not release_gate.wait(timeout=5):
                     raise AssertionError("Timed out waiting to release run-admission gate.")
@@ -652,15 +677,6 @@ def test_run_admission_gate_wins_and_adoption_rechecks_active_runs(
     assert not worker.is_alive()
     assert gate_errors == []
 
-    monkeypatch.setattr(
-        adoption,
-        "_assert_no_active_runs",
-        lambda project_root: (_ for _ in ()).throw(
-            ConfigurationError(
-                "Scope authority cannot change while project runs are active: run-1:claimed"
-            )
-        ),
-    )
     with pytest.raises(ConfigurationError, match="runs are active"):
         adoption.adopt_scope_review(
             root,
