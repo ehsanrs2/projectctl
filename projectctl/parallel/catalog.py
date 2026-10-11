@@ -12,6 +12,18 @@ from projectctl.schemas.parallel import ParallelScopeCatalog, ParallelTaskScope
 PARALLEL_SCOPE_PATH = "projectctl.parallel.yaml"
 
 
+def parse_parallel_scope_catalog_bytes(raw_bytes: bytes) -> ParallelScopeCatalog:
+    """Parse one immutable byte snapshot of the human-managed scope catalog."""
+    try:
+        text = raw_bytes.decode("utf-8")
+        raw = yaml.safe_load(text)
+        if not isinstance(raw, dict):
+            raise ConfigurationError("Parallel scope catalog must be a YAML mapping.")
+        return ParallelScopeCatalog.model_validate(raw)
+    except (UnicodeDecodeError, yaml.YAMLError, ValidationError) as exc:
+        raise ConfigurationError(f"Invalid parallel scope catalog: {exc}") from exc
+
+
 def load_parallel_scope_catalog(project_root: Path) -> ParallelScopeCatalog:
     root = project_root.resolve()
     path = resolve_inside_repo(root, PARALLEL_SCOPE_PATH, must_exist=False)
@@ -20,13 +32,7 @@ def load_parallel_scope_catalog(project_root: Path) -> ParallelScopeCatalog:
             f"Missing human-managed parallel scope catalog: {PARALLEL_SCOPE_PATH}. "
             "Parallel planning fails closed until task input/write/resource scopes are declared."
         )
-    try:
-        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            raise ConfigurationError("Parallel scope catalog must be a YAML mapping.")
-        return ParallelScopeCatalog.model_validate(raw)
-    except (yaml.YAMLError, ValidationError) as exc:
-        raise ConfigurationError(f"Invalid parallel scope catalog: {exc}") from exc
+    return parse_parallel_scope_catalog_bytes(path.read_bytes())
 
 
 def task_parallel_scope(
