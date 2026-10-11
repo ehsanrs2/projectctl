@@ -271,6 +271,7 @@ def test_stale_lock_reclamation_is_serialized_across_contenders(
     )
 
     first_reclaimer_check = threading.Event()
+    second_reclaimer_waiting = threading.Event()
     release_reclaimer_check = threading.Event()
     operation_entered = threading.Event()
     release_operation = threading.Event()
@@ -278,7 +279,25 @@ def test_stale_lock_reclamation_is_serialized_across_contenders(
     outcomes = []
     first_check = {"value": True}
     first_check_lock = threading.Lock()
+    guard_calls = {"count": 0}
+    original_guard = locking_module._stale_reclamation_guard
     original_can_reclaim = locking_module._can_reclaim
+
+    @contextmanager
+    def tracked_reclamation_guard(lock_directory: Path):
+        with first_check_lock:
+            guard_calls["count"] += 1
+            current_call = guard_calls["count"]
+        if current_call == 2:
+            second_reclaimer_waiting.set()
+        with original_guard(lock_directory):
+            yield
+
+    monkeypatch.setattr(
+        locking_module,
+        "_stale_reclamation_guard",
+        tracked_reclamation_guard,
+    )
 
     def delayed_can_reclaim(lock_path: Path, *, hostname: str) -> bool:
         with first_check_lock:
@@ -311,6 +330,7 @@ def test_stale_lock_reclamation_is_serialized_across_contenders(
 
     second = threading.Thread(target=contender)
     second.start()
+    assert second_reclaimer_waiting.wait(timeout=5)
     release_reclaimer_check.set()
 
     assert operation_entered.wait(timeout=5)
