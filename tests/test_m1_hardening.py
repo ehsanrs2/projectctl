@@ -1,5 +1,6 @@
 import json
 import socket
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -12,6 +13,7 @@ from projectctl.application import task_lifecycle
 from projectctl.core.enums import RunStatus, RunTerminalReason
 from projectctl.core.errors import ProjectLockError, RunLeaseError
 from projectctl.integrations.beads.completion import BeadsTaskCompletionWriter
+from projectctl.project import locking as locking_module
 from projectctl.project.locking import project_lock
 from projectctl.runtime import LeaseHeartbeat
 
@@ -246,3 +248,99 @@ def test_integration_is_serialized_by_project_lock(monkeypatch, tmp_path: Path):
     assert result is sentinel
     assert calls[0][2] == "integration"
     assert calls[-1][0] == "exit"
+
+
+def test_stale_lock_reclamation_is_serialized_across_contenders(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = tmp_path / "repo"
+    lock_dir = root / ".projectctl" / "locks"
+    lock_dir.mkdir(parents=True)
+    path = lock_dir / "execution-authority.lock"
+    path.write_text(
+        json.dumps(
+            {
+                "pid": 99999999,
+                "hostname": socket.gethostname(),
+                "token": "stale",
+                "acquired_at": "2026-10-03T00:00:00+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    first_reclaimer_check = threading.Event()
+    second_reclaimer_waiting = threading.Event()
+    release_reclaimer_check = threading.Event()
+    operation_entered = threading.Event()
+    release_operation = threading.Event()
+    blocked = threading.Event()
+    outcomes = []
+    first_check = {"value": True}
+    first_check_lock = threading.Lock()
+    guard_calls = {"count": 0}
+    original_guard = locking_module._stale_reclamation_guard
+    original_can_reclaim = locking_module._can_reclaim
+
+    @contextmanager
+    def tracked_reclamation_guard(lock_directory: Path):
+        with first_check_lock:
+            guard_calls["count"] += 1
+            current_call = guard_calls["count"]
+        if current_call == 2:
+            second_reclaimer_waiting.set()
+        with original_guard(lock_directory):
+            yield
+
+    monkeypatch.setattr(
+        locking_module,
+        "_stale_reclamation_guard",
+        tracked_reclamation_guard,
+    )
+
+    def delayed_can_reclaim(lock_path: Path, *, hostname: str) -> bool:
+        with first_check_lock:
+            pause = first_check["value"]
+            first_check["value"] = False
+        if pause:
+            first_reclaimer_check.set()
+            if not release_reclaimer_check.wait(timeout=5):
+                raise AssertionError("Timed out waiting to release stale-lock reclaimer.")
+        return original_can_reclaim(lock_path, hostname=hostname)
+
+    monkeypatch.setattr(locking_module, "_can_reclaim", delayed_can_reclaim)
+
+    def contender():
+        try:
+            with project_lock(root, "execution-authority"):
+                operation_entered.set()
+                if not release_operation.wait(timeout=5):
+                    raise AssertionError("Timed out waiting to release lock owner.")
+                outcomes.append("acquired")
+        except ProjectLockError:
+            outcomes.append("blocked")
+            blocked.set()
+        except BaseException as exc:
+            outcomes.append(exc)
+
+    first = threading.Thread(target=contender)
+    first.start()
+    assert first_reclaimer_check.wait(timeout=5)
+
+    second = threading.Thread(target=contender)
+    second.start()
+    assert second_reclaimer_waiting.wait(timeout=5)
+    release_reclaimer_check.set()
+
+    assert operation_entered.wait(timeout=5)
+    assert blocked.wait(timeout=5)
+    release_operation.set()
+    first.join(timeout=5)
+    second.join(timeout=5)
+
+    assert not first.is_alive()
+    assert not second.is_alive()
+    assert outcomes.count("acquired") == 1
+    assert outcomes.count("blocked") == 1
+    assert not any(isinstance(item, BaseException) for item in outcomes)

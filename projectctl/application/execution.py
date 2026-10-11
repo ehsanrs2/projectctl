@@ -60,7 +60,7 @@ from projectctl.integrations.execution_ownership import (
 )
 from projectctl.integrations.task_authority import resolve_task_authority
 from projectctl.project.loader import load_project_config
-from projectctl.project.locking import project_lock
+from projectctl.project.locking import execution_authority_gated, project_lock
 from projectctl.project.state import load_project_state, semantic_project_state_digest
 from projectctl.quota import (
     QuotaCheckpointMonitor,
@@ -388,6 +388,7 @@ def _assert_task_store_execution_capable(project_root: Path) -> None:
     require_project_execution_ready(project_root)
 
 
+@execution_authority_gated
 def prepare_next_run(
     project_root: Path,
     *,
@@ -401,7 +402,6 @@ def prepare_next_run(
     root = project_root.resolve()
     actor = _actor()
     _assert_task_store_execution_capable(root)
-
     with project_lock(root, "run-prepare"):
         planning = build_next_execution_bundle(
             root,
@@ -701,7 +701,6 @@ def prepare_next_run(
         )
         record = store.release_lease(run_id, owner=actor)
         return PreparedRun(plan=plan, record=record, worktree=worktree)
-
 
 def _mark_start_failure(
     store: RunStore,

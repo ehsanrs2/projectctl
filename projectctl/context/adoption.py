@@ -18,9 +18,13 @@ from projectctl.core.errors import ConfigurationError, StaleSnapshotError
 from projectctl.core.paths import resolve_inside_repo
 from projectctl.core.time import utc_now
 from projectctl.git import resolve_commit
-from projectctl.parallel.catalog import PARALLEL_SCOPE_PATH, load_parallel_scope_catalog
+from projectctl.parallel.catalog import (
+    PARALLEL_SCOPE_PATH,
+    load_parallel_scope_catalog,
+    parse_parallel_scope_catalog_bytes,
+)
 from projectctl.project.loader import load_project_config
-from projectctl.project.locking import project_lock
+from projectctl.project.locking import execution_authority_gated, project_lock
 from projectctl.scheduler.digests import semantic_task_digest
 from projectctl.schemas.context_adoption import (
     ContextScopeAdoptionReceipt,
@@ -109,7 +113,7 @@ def _catalog_state(
     if not path.exists():
         return path, None, _ABSENT_DIGEST, ParallelScopeCatalog()
     raw = path.read_bytes()
-    catalog = load_parallel_scope_catalog(root)
+    catalog = parse_parallel_scope_catalog_bytes(raw)
     return path, raw, _sha256_bytes(raw), catalog
 
 
@@ -580,6 +584,7 @@ def _make_receipt(
     )
 
 
+@execution_authority_gated
 def adopt_scope_review(
     project_root: Path,
     task_id: str,

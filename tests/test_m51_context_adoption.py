@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,11 +10,13 @@ from types import SimpleNamespace
 import pytest
 from typer.testing import CliRunner
 
+from projectctl.application import execution
 from projectctl.cli.entry import app
 from projectctl.context import adoption
 from projectctl.core.digest import digest
-from projectctl.core.enums import ResourceClass, TaskStatus
-from projectctl.core.errors import ConfigurationError, StaleSnapshotError
+from projectctl.core.enums import ModelProfile, ReasoningLevel, ResourceClass, RunStatus, TaskStatus
+from projectctl.core.errors import ConfigurationError, ProjectLockError, StaleSnapshotError
+from projectctl.project.locking import execution_authority_gate
 from projectctl.schema_export import PUBLIC_SCHEMAS
 from projectctl.schemas.context_adoption import (
     ContextScopeAdoptionReceipt,
@@ -25,6 +28,9 @@ from projectctl.schemas.context_discovery import (
     ContextScopeSuggestion,
 )
 from projectctl.schemas.execution_input import ExecutionPathScope
+from projectctl.schemas.run import RunManifest, WorkerDescriptor
+from projectctl.storage.runs import RunStore
+from projectctl.storage.sqlite import initialize_project_state_db
 from projectctl.schemas.task import (
     NormalizedTask,
     TaskSnapshot,
@@ -515,3 +521,167 @@ def test_adoption_refuses_scope_authority_symlink(
             "TASK-1",
             suggestion_id=suggestion.suggestion_id,
         )
+
+
+def test_catalog_state_parses_the_exact_bytes_it_digests(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _repo(tmp_path)
+    catalog_path = root / "projectctl.parallel.yaml"
+    raw = (
+        "schema_kind: projectctl.parallel_scope_catalog\n"
+        "schema_version: 1\n"
+        "tasks: {}\n"
+    ).encode("utf-8")
+    catalog_path.write_bytes(raw)
+    original_read_bytes = Path.read_bytes
+    reads = []
+
+    def counted_read_bytes(path: Path):
+        if path == catalog_path:
+            reads.append(path)
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", counted_read_bytes)
+    path, captured, before_digest, catalog = adoption._catalog_state(root)
+
+    assert path == catalog_path
+    assert captured == raw
+    assert len(reads) == 1
+    assert before_digest == adoption._sha256_bytes(raw)
+    assert catalog.tasks == {}
+
+
+def test_scope_adoption_gate_excludes_new_run_admission(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _repo(tmp_path)
+    review = _review(root, monkeypatch)
+    validation_entered = threading.Event()
+    continue_validation = threading.Event()
+    validation_calls = 0
+    adoption_errors = []
+    original_validate = adoption._validate_review_before_apply
+
+    def pause_validation(project_root: Path, current_review: ContextScopeReview):
+        nonlocal validation_calls
+        validation_calls += 1
+        if validation_calls == 1:
+            validation_entered.set()
+            if not continue_validation.wait(timeout=5):
+                raise AssertionError("Timed out waiting to resume adoption validation.")
+        return original_validate(project_root, current_review)
+
+    monkeypatch.setattr(adoption, "_validate_review_before_apply", pause_validation)
+    preflight_calls = []
+    monkeypatch.setattr(
+        execution,
+        "_assert_task_store_execution_capable",
+        lambda project_root: preflight_calls.append(project_root),
+    )
+    monkeypatch.setattr(
+        execution,
+        "build_next_execution_bundle",
+        lambda *args, **kwargs: pytest.fail(
+            "Run planning must not begin while scope adoption owns the authority gate."
+        ),
+    )
+
+    def adopt():
+        try:
+            adoption.adopt_scope_review(
+                root,
+                "TASK-1",
+                review_id=review.review_id,
+                approval_digest=digest(review),
+            )
+        except BaseException as exc:
+            adoption_errors.append(exc)
+
+    worker = threading.Thread(target=adopt)
+    worker.start()
+    assert validation_entered.wait(timeout=5)
+
+    with pytest.raises(ProjectLockError, match="execution-authority"):
+        execution.prepare_next_run(root)
+    assert preflight_calls == []
+    assert not (root / "projectctl.parallel.yaml").exists()
+
+    continue_validation.set()
+    worker.join(timeout=5)
+    assert not worker.is_alive()
+    assert adoption_errors == []
+    assert (root / "projectctl.parallel.yaml").read_text(encoding="utf-8") == (
+        review.proposed_catalog_yaml
+    )
+
+
+def test_run_admission_gate_wins_and_adoption_rechecks_active_runs(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _repo(tmp_path)
+    real_active_run_guard = adoption._assert_no_active_runs
+    review = _review(root, monkeypatch)
+    monkeypatch.setattr(adoption, "_assert_no_active_runs", real_active_run_guard)
+    gate_entered = threading.Event()
+    release_gate = threading.Event()
+    gate_errors = []
+
+    def hold_run_admission_gate():
+        try:
+            with execution_authority_gate(root):
+                initialize_project_state_db(root / ".projectctl" / "state.sqlite")
+                store = RunStore(root)
+                active_manifest = RunManifest(
+                    run_id="run-active",
+                    task_id="TASK-1",
+                    execution_plan_digest="test-plan-digest",
+                    status=RunStatus.CLAIMED,
+                    base_commit=_git(root, "rev-parse", "HEAD"),
+                    branch_name="projectctl/run/run-active",
+                    worktree_id="run-active",
+                    worker=WorkerDescriptor(
+                        provider="codex",
+                        model_profile=ModelProfile.BALANCED,
+                        reasoning=ReasoningLevel.MEDIUM,
+                    ),
+                )
+                store.create(
+                    active_manifest,
+                    worktree_path=root / ".projectctl" / "worktrees" / "run-active",
+                )
+                gate_entered.set()
+                if not release_gate.wait(timeout=5):
+                    raise AssertionError("Timed out waiting to release run-admission gate.")
+        except BaseException as exc:
+            gate_errors.append(exc)
+
+    worker = threading.Thread(target=hold_run_admission_gate)
+    worker.start()
+    assert gate_entered.wait(timeout=5)
+
+    with pytest.raises(ProjectLockError, match="execution-authority"):
+        adoption.adopt_scope_review(
+            root,
+            "TASK-1",
+            review_id=review.review_id,
+            approval_digest=digest(review),
+        )
+    assert not (root / "projectctl.parallel.yaml").exists()
+
+    release_gate.set()
+    worker.join(timeout=5)
+    assert not worker.is_alive()
+    assert gate_errors == []
+
+    with pytest.raises(ConfigurationError, match="runs are active"):
+        adoption.adopt_scope_review(
+            root,
+            "TASK-1",
+            review_id=review.review_id,
+            approval_digest=digest(review),
+        )
+    assert not (root / "projectctl.parallel.yaml").exists()

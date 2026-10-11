@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-The **Post-M5 Architecture Review** is complete. M5.0/M5.1 established a sound derived-context → reviewed-policy chain, but the review found two required closure milestones before the next major product direction. The active milestone is now **M5.2a — Execution Authority Mutation Serialization**.
+The **Post-M5 Architecture Review** and **M5.2a — Execution Authority Mutation Serialization** are complete. M5.2a closes the policy-adoption/run-admission race; the active milestone is now **M5.2b — General Execution Scope Policy & Enforcement Mode**.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -2038,9 +2038,9 @@ M5.1   Context Review & Adoption Workflow                   completed
    ↓
 POST-M5 Post-M5 Architecture Review                         completed
    ↓
-M5.2a  Execution Authority Mutation Serialization           next
+M5.2a  Execution Authority Mutation Serialization           completed
    ↓
-M5.2b  General Execution Scope Policy & Enforcement Mode    planned
+M5.2b  General Execution Scope Policy & Enforcement Mode    next
 ```
 
 M4.2a now separates full scheduler observation from execution validity through
@@ -2210,19 +2210,33 @@ human-managed projectctl.parallel.yaml
 ExecutionInputManifest / ParallelPlan authority
 ```
 
-The Post-M5 review accepted the M5 authority design but found three material gaps: scope-policy mutation is not atomically serialized with new run admission; ordinary serial execution still treats scope as optional without an explicit project governance mode; and the generic execution-scope authority is still named/versioned as a parallel-only contract.
+### M5.2a — Execution Authority Mutation Serialization
 
-Two closure milestones are now required:
+**Completed.**
 
-- **M5.2a — Execution Authority Mutation Serialization**: one shared project-level authority gate for reviewed scope mutation and the no-active→active run admission transition, plus single-read catalog snapshots.
-- **M5.2b — General Execution Scope Policy & Enforcement Mode**: promote the current parallel-named catalog into a generic execution-scope policy and make optional/required scope governance explicit.
+M5.2a closes the policy-mutation/run-admission TOCTOU race:
+
+- scope adoption and new run preparation acquire the same project-level `execution-authority` gate before their operation-specific locks
+- run preparation holds the gate through planning, task claim, worktree setup and durable `CLAIMED` state; a competing operation fails closed with `ProjectLockError`
+- scope adoption holds the gate from the final catalog/no-active-run checks through request persistence, policy write, post-write validation and receipt persistence
+- explicit lock order is `execution-authority → run-prepare` or `execution-authority → context-scope-adoption`
+- stale-lock reclamation is itself serialized with an OS advisory guard, preventing concurrent reclaimers from deleting a newly-created lock
+- catalog bytes are read once, and the same byte snapshot is both digested and parsed
+- deterministic concurrency tests cover both gate acquisition orderings and the active-run recheck
+
+See ADR-037.
+
+### M5.2b — General Execution Scope Policy & Enforcement Mode
+
+**Active milestone.**
+
+Promote the current parallel-named scope authority into one generic execution-scope policy, with a canonical generic schema/file and an explicit durable project governance mode such as `optional|required`. Historical parallel-scope contracts remain readable, but two simultaneous scope authorities must never be merged implicitly.
 
 See `docs/architecture/POST_M5_ARCHITECTURE_REVIEW.md`.
 
-See ADR-029 through ADR-036, `docs/architecture/POST_M4_ARCHITECTURE_REVIEW.md`,
+See ADR-029 through ADR-037, `docs/architecture/POST_M4_ARCHITECTURE_REVIEW.md`,
 `docs/architecture/POST_M5_ARCHITECTURE_REVIEW.md`, and `docs/PROJECTCTL_BLUEPRINT.md`.
 
 Next:
 
-- **M5.2a — Execution Authority Mutation Serialization**
 - **M5.2b — General Execution Scope Policy & Enforcement Mode**
