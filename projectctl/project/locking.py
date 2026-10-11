@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from functools import wraps
 import socket
 import uuid
 from contextlib import contextmanager
@@ -154,3 +155,15 @@ def execution_authority_gate(project_root: Path):
     """
     with project_lock(project_root, "execution-authority"):
         yield
+
+
+def execution_authority_gated(function):
+    """Decorate a project operation with the shared execution-authority gate."""
+
+    @wraps(function)
+    def wrapped(project_root: Path, *args, **kwargs):
+        root = project_root.resolve()
+        with execution_authority_gate(root):
+            return function(root, *args, **kwargs)
+
+    return wrapped
