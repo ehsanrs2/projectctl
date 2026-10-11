@@ -14,6 +14,7 @@ from projectctl.schemas.config import (
     ProjectConfigV6,
     ProjectConfigV7,
     ProjectConfigV8,
+    ProjectConfigV9,
 )
 
 
@@ -38,30 +39,36 @@ def load_project_config(project_root: Path) -> ProjectConfig:
             raise ConfigurationError("Project config must be a YAML mapping.")
 
         version = raw.get("schema_version", 1)
-        if version == 9:
+        if version == 10:
             return ProjectConfig.model_validate(raw)
+        if version == 9:
+            legacy = ProjectConfigV9.model_validate(raw)
+            upgraded = legacy.model_dump(mode="python")
+            upgraded["schema_version"] = 10
+            upgraded["scope_governance"] = {"mode": "optional"}
+            return ProjectConfig.model_validate(upgraded)
         if version == 8:
             legacy = ProjectConfigV8.model_validate(raw)
             upgraded = legacy.model_dump(mode="python")
-            upgraded["schema_version"] = 9
+            upgraded["schema_version"] = 10
             upgraded["orchestration"] = {"max_active_runs": 1}
             return ProjectConfig.model_validate(upgraded)
         if version == 7:
             legacy = ProjectConfigV7.model_validate(raw)
             upgraded = legacy.model_dump(mode="python")
-            upgraded["schema_version"] = 9
+            upgraded["schema_version"] = 10
             upgraded.setdefault("orchestration", {"max_active_runs": 1})
             return ProjectConfig.model_validate(upgraded)
         if version == 6:
             legacy = ProjectConfigV6.model_validate(raw)
             upgraded = legacy.model_dump(mode="python")
-            upgraded["schema_version"] = 9
+            upgraded["schema_version"] = 10
             upgraded.setdefault("orchestration", {"max_active_runs": 1})
             return ProjectConfig.model_validate(upgraded)
         if version == 5:
             legacy = ProjectConfigV5.model_validate(raw)
             upgraded = legacy.model_dump(mode="python")
-            upgraded["schema_version"] = 9
+            upgraded["schema_version"] = 10
             upgraded["code_delivery"] = _delivery_for_legacy(
                 legacy.task_store.provider,
                 legacy.task_store.repository,
@@ -72,7 +79,7 @@ def load_project_config(project_root: Path) -> ProjectConfig:
         if version == 4:
             legacy = ProjectConfigV4.model_validate(raw)
             upgraded = legacy.model_dump(mode="python")
-            upgraded["schema_version"] = 9
+            upgraded["schema_version"] = 10
             if legacy.task_store.provider == "github" and legacy.task_store.repository:
                 upgraded["code_transport"] = {
                     "mode": "git_remote",
@@ -91,7 +98,7 @@ def load_project_config(project_root: Path) -> ProjectConfig:
         if version == 3:
             legacy = ProjectConfigV3.model_validate(raw)
             upgraded = legacy.model_dump(mode="python")
-            upgraded["schema_version"] = 9
+            upgraded["schema_version"] = 10
             upgraded["task_store"] = {
                 "provider": legacy.task_store.provider,
                 "repository": legacy.task_store.repository,
@@ -116,7 +123,7 @@ def load_project_config(project_root: Path) -> ProjectConfig:
         if version == 2:
             legacy = ProjectConfigV2.model_validate(raw)
             upgraded = legacy.model_dump(mode="python")
-            upgraded["schema_version"] = 9
+            upgraded["schema_version"] = 10
             upgraded["task_store"] = {
                 "provider": legacy.task_store.provider,
                 "repository": legacy.task_store.repository,
@@ -141,7 +148,7 @@ def load_project_config(project_root: Path) -> ProjectConfig:
         if version == 1:
             legacy = ProjectConfigV1.model_validate(raw)
             upgraded = legacy.model_dump(mode="python")
-            upgraded["schema_version"] = 9
+            upgraded["schema_version"] = 10
             upgraded["task_store"] = {
                 "provider": legacy.task_store.provider,
                 "repository": None,
