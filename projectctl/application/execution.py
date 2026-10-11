@@ -10,7 +10,6 @@ import subprocess
 import tempfile
 import uuid
 from dataclasses import dataclass
-from functools import wraps
 from pathlib import Path
 
 from projectctl.application.claims import (
@@ -61,7 +60,7 @@ from projectctl.integrations.execution_ownership import (
 )
 from projectctl.integrations.task_authority import resolve_task_authority
 from projectctl.project.loader import load_project_config
-from projectctl.project.locking import execution_authority_gate, project_lock
+from projectctl.project.locking import execution_authority_gated, project_lock
 from projectctl.project.state import load_project_state, semantic_project_state_digest
 from projectctl.quota import (
     QuotaCheckpointMonitor,
@@ -389,17 +388,7 @@ def _assert_task_store_execution_capable(project_root: Path) -> None:
     require_project_execution_ready(project_root)
 
 
-def _execution_authority_gated(function):
-    @wraps(function)
-    def wrapped(project_root: Path, *args, **kwargs):
-        root = project_root.resolve()
-        with execution_authority_gate(root):
-            return function(root, *args, **kwargs)
-
-    return wrapped
-
-
-@_execution_authority_gated
+@execution_authority_gated
 def prepare_next_run(
     project_root: Path,
     *,
