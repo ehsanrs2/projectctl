@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Serialize ProjectCTL-controlled execution-scope authority mutation with the no-active-to-active run admission transition so a run cannot be admitted under old scope while reviewed policy adoption completes.
+current_goal: Promote the human-managed task scope contract into a generic execution-scope policy and make serial scope governance explicit without silently breaking existing projects.
 active_milestone:
-  id: M5.2a
-  title: Execution Authority Mutation Serialization
+  id: M5.2b
+  title: General Execution Scope Policy & Enforcement Mode
   aliases:
-    - Scope Mutation Serialization
-    - Authority Gate
-    - Run Admission Policy Gate
+    - Execution Scope Policy
+    - Scope Governance Mode
+    - Generic Scope Catalog
 updated_at: null
