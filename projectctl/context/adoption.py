@@ -18,9 +18,13 @@ from projectctl.core.errors import ConfigurationError, StaleSnapshotError
 from projectctl.core.paths import resolve_inside_repo
 from projectctl.core.time import utc_now
 from projectctl.git import resolve_commit
-from projectctl.parallel.catalog import PARALLEL_SCOPE_PATH, load_parallel_scope_catalog
+from projectctl.parallel.catalog import (
+    PARALLEL_SCOPE_PATH,
+    load_parallel_scope_catalog,
+    parse_parallel_scope_catalog_bytes,
+)
 from projectctl.project.loader import load_project_config
-from projectctl.project.locking import project_lock
+from projectctl.project.locking import execution_authority_gate, project_lock
 from projectctl.scheduler.digests import semantic_task_digest
 from projectctl.schemas.context_adoption import (
     ContextScopeAdoptionReceipt,
@@ -109,7 +113,7 @@ def _catalog_state(
     if not path.exists():
         return path, None, _ABSENT_DIGEST, ParallelScopeCatalog()
     raw = path.read_bytes()
-    catalog = load_parallel_scope_catalog(root)
+    catalog = parse_parallel_scope_catalog_bytes(raw)
     return path, raw, _sha256_bytes(raw), catalog
 
 
@@ -602,109 +606,110 @@ def adopt_scope_review(
             "Approval digest does not match the exact durable review artifact."
         )
 
-    with project_lock(root, "context-scope-adoption"):
-        adoption_dir, request, receipt = _existing_adoption(
-            root,
-            review,
-            review_digest,
-        )
-        if receipt is not None:
-            _validate_request_against_review(
-                request,
+    with execution_authority_gate(root):
+        with project_lock(root, "context-scope-adoption"):
+            adoption_dir, request, receipt = _existing_adoption(
+                root,
                 review,
                 review_digest,
-                approval_digest,
             )
-            if (
-                receipt.approval_digest != approval_digest
-                or receipt.review_digest != review_digest
-                or receipt.request_digest != digest(request)
-                or receipt.adoption_id != request.adoption_id
-            ):
-                raise ConfigurationError(
-                    "Existing adoption receipt does not match its durable request/review."
+            if receipt is not None:
+                _validate_request_against_review(
+                    request,
+                    review,
+                    review_digest,
+                    approval_digest,
                 )
-            return receipt
-
-        path, raw, current_digest, catalog = _catalog_state(root)
-
-        if request is not None:
-            _validate_request_against_review(
-                request,
-                review,
-                review_digest,
-                approval_digest,
-            )
-            if current_digest == request.proposed_catalog_digest:
-                adopted = load_parallel_scope_catalog(root)
-                scope = adopted.tasks.get(task_id)
-                if scope is None or digest(scope) != request.proposed_scope_digest:
+                if (
+                    receipt.approval_digest != approval_digest
+                    or receipt.review_digest != review_digest
+                    or receipt.request_digest != digest(request)
+                    or receipt.adoption_id != request.adoption_id
+                ):
                     raise ConfigurationError(
-                        "Catalog matches adoption bytes but reviewed scope is missing; "
-                        "manual audit required."
+                        "Existing adoption receipt does not match its durable request/review."
                     )
-                receipt = _make_receipt(request=request, review=review)
-                _atomic_json(adoption_dir / "receipt.json", receipt)
                 return receipt
-            if current_digest != request.catalog_before_digest:
-                raise ConfigurationError(
-                    "Pending adoption is in an ambiguous catalog state; "
-                    "manual audit is required."
-                )
-        else:
-            _validate_review_before_apply(root, review)
-            adoption_id = f"context-adoption-{uuid.uuid4().hex}"
-            adoption_dir = _adoption_root(root, task_id) / adoption_id
-            request = ContextScopeAdoptionRequest(
-                adoption_id=adoption_id,
-                requested_at=utc_now(),
-                actor=_actor(),
-                project_id=review.project_id,
-                task_id=task_id,
-                review_id=review.review_id,
-                review_digest=review_digest,
-                approval_digest=approval_digest,
-                base_commit=review.base_commit,
-                task_digest=review.task_digest,
-                catalog_path=review.catalog_path,
-                catalog_before_digest=review.catalog_before_digest,
-                proposed_catalog_digest=review.proposed_catalog_digest,
-                proposed_scope_digest=digest(review.proposed_scope),
-            )
-            _atomic_json(adoption_dir / "request.json", request)
 
-        # Revalidate immediately before the authoritative write. This also
-        # covers retry of a durable request that remained in before-state.
-        validated_path, before_bytes, validated_digest, _ = (
-            _validate_review_before_apply(root, review)
-        )
-        if validated_path != path or validated_digest != request.catalog_before_digest:
-            raise StaleSnapshotError(
-                "Scope catalog changed between adoption validation snapshots."
-            )
-        try:
-            _atomic_bytes(path, review.proposed_catalog_yaml.encode("utf-8"))
-            adopted = load_parallel_scope_catalog(root)
-            adopted_scope = adopted.tasks.get(task_id)
-            if adopted_scope is None or digest(adopted_scope) != digest(review.proposed_scope):
-                raise ConfigurationError(
-                    "Post-write scope validation does not match the reviewed proposal."
+            path, raw, current_digest, catalog = _catalog_state(root)
+
+            if request is not None:
+                _validate_request_against_review(
+                    request,
+                    review,
+                    review_digest,
+                    approval_digest,
                 )
-            after_digest = _sha256_bytes(path.read_bytes())
-            if after_digest != review.proposed_catalog_digest:
-                raise ConfigurationError(
-                    "Post-write catalog bytes do not match the reviewed proposal."
-                )
-        except Exception:
-            if before_bytes is None:
-                try:
-                    path.unlink()
-                except FileNotFoundError:
-                    pass
+                if current_digest == request.proposed_catalog_digest:
+                    adopted = load_parallel_scope_catalog(root)
+                    scope = adopted.tasks.get(task_id)
+                    if scope is None or digest(scope) != request.proposed_scope_digest:
+                        raise ConfigurationError(
+                            "Catalog matches adoption bytes but reviewed scope is missing; "
+                            "manual audit required."
+                        )
+                    receipt = _make_receipt(request=request, review=review)
+                    _atomic_json(adoption_dir / "receipt.json", receipt)
+                    return receipt
+                if current_digest != request.catalog_before_digest:
+                    raise ConfigurationError(
+                        "Pending adoption is in an ambiguous catalog state; "
+                        "manual audit is required."
+                    )
             else:
-                _atomic_bytes(path, before_bytes)
-            raise
+                _validate_review_before_apply(root, review)
+                adoption_id = f"context-adoption-{uuid.uuid4().hex}"
+                adoption_dir = _adoption_root(root, task_id) / adoption_id
+                request = ContextScopeAdoptionRequest(
+                    adoption_id=adoption_id,
+                    requested_at=utc_now(),
+                    actor=_actor(),
+                    project_id=review.project_id,
+                    task_id=task_id,
+                    review_id=review.review_id,
+                    review_digest=review_digest,
+                    approval_digest=approval_digest,
+                    base_commit=review.base_commit,
+                    task_digest=review.task_digest,
+                    catalog_path=review.catalog_path,
+                    catalog_before_digest=review.catalog_before_digest,
+                    proposed_catalog_digest=review.proposed_catalog_digest,
+                    proposed_scope_digest=digest(review.proposed_scope),
+                )
+                _atomic_json(adoption_dir / "request.json", request)
 
-        receipt = _make_receipt(request=request, review=review)
-        _atomic_json(adoption_dir / "receipt.json", receipt)
-        return receipt
+            # Revalidate immediately before the authoritative write. This also
+            # covers retry of a durable request that remained in before-state.
+            validated_path, before_bytes, validated_digest, _ = (
+                _validate_review_before_apply(root, review)
+            )
+            if validated_path != path or validated_digest != request.catalog_before_digest:
+                raise StaleSnapshotError(
+                    "Scope catalog changed between adoption validation snapshots."
+                )
+            try:
+                _atomic_bytes(path, review.proposed_catalog_yaml.encode("utf-8"))
+                adopted = load_parallel_scope_catalog(root)
+                adopted_scope = adopted.tasks.get(task_id)
+                if adopted_scope is None or digest(adopted_scope) != digest(review.proposed_scope):
+                    raise ConfigurationError(
+                        "Post-write scope validation does not match the reviewed proposal."
+                    )
+                after_digest = _sha256_bytes(path.read_bytes())
+                if after_digest != review.proposed_catalog_digest:
+                    raise ConfigurationError(
+                        "Post-write catalog bytes do not match the reviewed proposal."
+                    )
+            except Exception:
+                if before_bytes is None:
+                    try:
+                        path.unlink()
+                    except FileNotFoundError:
+                        pass
+                else:
+                    _atomic_bytes(path, before_bytes)
+                raise
+
+            receipt = _make_receipt(request=request, review=review)
+            _atomic_json(adoption_dir / "receipt.json", receipt)
+            return receipt
