@@ -10,8 +10,8 @@ from pydantic import ValidationError
 
 from projectctl.core.errors import ConfigurationError
 from projectctl.core.paths import resolve_inside_repo
-from projectctl.parallel.catalog import parse_parallel_scope_catalog_bytes
 from projectctl.schemas.execution_scope import ExecutionScopeCatalog, ExecutionTaskScope
+from projectctl.schemas.parallel import ParallelScopeCatalog
 
 EXECUTION_SCOPE_PATH = "projectctl.scope.yaml"
 LEGACY_PARALLEL_SCOPE_PATH = "projectctl.parallel.yaml"
@@ -26,15 +26,19 @@ class ResolvedExecutionScopeCatalog:
     raw_digest: str | None
 
 
-def parse_execution_scope_catalog_bytes(raw_bytes: bytes) -> ExecutionScopeCatalog:
-    """Decode and validate exactly the bytes used by the caller for its digest."""
+def _parse_catalog_bytes(raw_bytes: bytes, model, label: str):
+    """Validate one immutable byte snapshot against one exact catalog schema."""
     try:
         raw = yaml.safe_load(raw_bytes.decode("utf-8"))
         if not isinstance(raw, dict):
-            raise ConfigurationError("Execution scope catalog must be a YAML mapping.")
-        return ExecutionScopeCatalog.model_validate(raw)
+            raise ConfigurationError(f"{label} catalog must be a YAML mapping.")
+        return model.model_validate(raw)
     except (UnicodeDecodeError, yaml.YAMLError, ValidationError) as exc:
-        raise ConfigurationError(f"Invalid execution scope catalog: {exc}") from exc
+        raise ConfigurationError(f"Invalid {label} catalog: {exc}") from exc
+
+
+def parse_execution_scope_catalog_bytes(raw_bytes: bytes) -> ExecutionScopeCatalog:
+    return _parse_catalog_bytes(raw_bytes, ExecutionScopeCatalog, "execution scope")
 
 
 def _policy_file(root: Path, relative: str) -> tuple[Path, bool]:
@@ -78,7 +82,7 @@ def resolve_execution_scope_catalog(project_root: Path) -> ResolvedExecutionScop
         catalog = parse_execution_scope_catalog_bytes(raw_bytes)
         source: Literal["canonical", "legacy", "absent"] = "canonical"
     else:
-        legacy = parse_parallel_scope_catalog_bytes(raw_bytes)
+        legacy = _parse_catalog_bytes(raw_bytes, ParallelScopeCatalog, "legacy parallel scope")
         catalog = ExecutionScopeCatalog(
             tasks={
                 key: ExecutionTaskScope.model_validate(scope.model_dump(mode="python"))
