@@ -27,6 +27,8 @@ from projectctl.schemas.config import (
     ProjectConfig,
     ProjectConfigV1,
     ProjectConfigV8,
+    ProjectConfigV9,
+    ScopeGovernanceConfig,
 )
 from projectctl.schemas.delivery import (
     PublicationManifest,
@@ -58,6 +60,7 @@ from projectctl.schemas.execution_input import (
     ExecutionPathScope,
     ExecutionTaskInput,
 )
+from projectctl.schemas.execution_scope import ExecutionScopeCatalog, ExecutionTaskScope
 from projectctl.schemas.health import HealthCheckResult, HealthReport
 from projectctl.schemas.integration import (
     IntegrationManifest,
@@ -144,6 +147,8 @@ __all__ = [
     "ExecutionCodeInput",
     "ExecutionInputManifest",
     "ExecutionPathScope",
+    "ExecutionScopeCatalog",
+    "ExecutionTaskScope",
     "ExecutionPlan",
     "ExecutionPlanV1",
     "ExecutionPlanV2",
@@ -165,6 +170,8 @@ __all__ = [
     "PermissionRequest",
     "ProjectConfig",
     "ProjectConfigV8",
+    "ProjectConfigV9",
+    "ScopeGovernanceConfig",
     "ProjectConfigV1",
     "ProjectInspection",
     "ProjectInspectionV1",
