@@ -57,7 +57,8 @@ a matching durable journal and exact bytes.
   as execution. Discovery does not grant write permission.
 - Legacy-only repositories still permit execution through the read-only legacy
   resolver under their project governance policy, **but they cannot write new
-  reviewed scopes** until an explicit catalog migration and Git commit.
+  reviewed scopes** until an explicit catalog migration; committing the
+  migrated policy is required before automated run preparation.
 - Existing historical ParallelPlan, Run and ExecutionInput artifacts remain
   versioned; no silent rewriting.
 
