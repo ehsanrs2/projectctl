@@ -488,7 +488,7 @@ def _assert_no_active_runs(root: Path) -> None:
 def _validate_review_before_apply(
     root: Path,
     review: ContextScopeReview,
-) -> tuple[Path, bytes | None, str, ParallelScopeCatalog]:
+) -> tuple[Path, bytes | None, str, ExecutionScopeCatalog]:
     if review.schema_version != 2 or review.catalog_path != EXECUTION_SCOPE_PATH:
         raise ConfigurationError("Non-canonical scope review cannot be applied.")
     config = load_project_config(root)
