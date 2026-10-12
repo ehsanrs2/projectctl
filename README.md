@@ -2,7 +2,7 @@
 
 ProjectCTL is a local-first deterministic control plane for AI-assisted software engineering.
 
-The **Post-M5 Architecture Review** and **M5.2a — Execution Authority Mutation Serialization** are complete. M5.2a closes the policy-adoption/run-admission race; the active milestone is now **M5.2b — General Execution Scope Policy & Enforcement Mode**.
+The **Post-M5 Architecture Review** and **M5.2a — Execution Authority Mutation Serialization** are complete. **M5.2b — General Execution Scope Policy & Enforcement Mode** is merged and has passing operator-reported local regression tests; Codex SDK/CI and formal architecture-acceptance gates remain open. `docs/PROJECT_STATE.yaml` still identifies M5.2b as the active milestone.
 
 For the canonical product vision, authority map, architecture invariants, current reality check, and roadmap, read **`docs/PROJECTCTL_BLUEPRINT.md`**. `docs/PROJECT_STATE.yaml` remains the only authority for the active goal and milestone.
 
@@ -2230,7 +2230,7 @@ See ADR-037.
 
 ### M5.2b — General Execution Scope Policy & Enforcement Mode
 
-**Active milestone — Slices A–C merged; Slice D safety/acceptance validation pending.**
+**Active milestone — Slices A–D and regression fixes merged; local full-suite and closure tests passed on the corresponding Git tree; remaining CI/SDK and architecture sign-off pending.**
 
 The canonical scope authority is `projectctl.scope.yaml` (`ExecutionScopeCatalog v1`) with task-level input/write/resource boundaries. `projectctl.parallel.yaml` is accepted only as a single valid legacy source. Simultaneous files, invalid catalogs and incomplete migration journals fail closed.
 
@@ -2247,7 +2247,7 @@ projectctl scope migrate --project /path/to/repo --recover
 
 New scope reviews and adoptions target the canonical policy and use `ContextScopeReview/AdoptionRequest/AdoptionReceipt v2`; legacy v1 approvals are audit-only. Neither discovery nor Worker suggestions create permission.
 
-**Do not treat M5.2b as accepted or released yet.** The Slice D migration-receipt integrity hardening, complete local tests and Post-M5.2 architecture closure remain gates. Run `bash scripts/m52b-closure-check.sh` in a real checkout and retain the test evidence.
+**Do not treat M5.2b as accepted or released yet.** PR #50's locally tested Git tree is identical to the merge commit's tree and the user-reported full suite and closure script passed. A distinct Codex SDK test, CI failure disposition and architecture/roadmap acceptance remain. For full evidence and exact commands see `docs/architecture/M5_2B_CLOSURE_AUDIT.md`. To verify the SDK without an optional-import skip: `uv pip install -e ".[dev,codex]"` followed by `bash scripts/m52b-codex-sdk-contract-check.sh`.
 
 See `docs/architecture/M5_2B_SCOPE_MIGRATION.md`, `docs/architecture/M5_2B_CLOSURE_AUDIT.md`, proposed ADR-038 and the Post-M5 architecture review.
 
@@ -2256,4 +2256,4 @@ See ADR-029 through ADR-037, `docs/architecture/POST_M4_ARCHITECTURE_REVIEW.md`,
 
 Next:
 
-- **M5.2b Slice D — regression verification, receipt-integrity hardening and architecture closure**
+- **Post-M5.2 closure review:** Codex SDK contract, CI disposition, ADR-038 acceptance and explicit selection of the next major product direction.
