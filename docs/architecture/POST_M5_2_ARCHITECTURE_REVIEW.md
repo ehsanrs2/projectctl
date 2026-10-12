@@ -109,19 +109,15 @@ admission, evidence, migration, or approval checks.
 
 **Decision: Accept ADR-038 as the documented M5.2b execution-scope architecture** with the recorded operator-confirmed GitHub Actions quota exception and local suite / pinned SDK evidence. This acceptance does not promise platform-independent durability, cryptographic identity, live worker acceptance or green hosted CI.
 
-On acceptance:
+The closure PR records this accepted direction by updating ADR-038 to
+`Accepted`, marking M5.2b `Completed` in Blueprint/README and advancing the
+single `docs/PROJECT_STATE.yaml` authority to the owner-selected M6.0. The
+recorded GitHub Actions quota exception remains non-green CI. The release
+version remains `0.41.0`; any future bump, tag or publication requires a
+separate release decision. The specific M6.0 evidence and privacy contracts
+are still **proposed** under ADR-039 and must be approved before implementation.
 
-1. Change ADR-038 status to `Accepted` and replace outdated
-   pre-implementation tense with an as-built summary and evidence refs.
-2. Mark M5.2b **Completed** in the Blueprint/README, while preserving the
-   hosted-CI quota exception and residual limitations.
-3. Preserve `docs/PROJECT_STATE.yaml` as the **sole active-state authority**.
-   Advance it only when the next goal/milestone is explicitly selected.
-4. Review the release version separately (potential next minor pre-1.0
-   release candidate: `0.42.0`, **not yet chosen**). Do not tag or publish
-   automatically.
-
-**The closure PR records this decision; the effect is conditional on its merge.**
+**The closure PR makes these recorded architecture decisions effective on merge.**
 
 ## 5. Next major product-direction decision
 
@@ -164,4 +160,4 @@ skill or automation authorities. This sequencing is now the owner-selected produ
 
 ## 6. Review and transition gate
 
-The approved milestone closure PR implements the accepted decision: ADR-038 is recorded as Accepted, M5.2b as Completed and `docs/PROJECT_STATE.yaml` advances to M6.0. The current release remains **0.41.0**, with no tag or publication; versioning is a separate release decision. The GitHub Actions quota exception is documented rather than treated as a passing hosted run. M6.0 implementation requires its own proposed ADR and bounded acceptance gates; no new worker authority is granted merely by selecting the milestone.
+The milestone closure PR accepts ADR-038 and advances the sole active state to M6.0 without tagging a release. The owner-confirmed GitHub Actions quota exception remains documented rather than treated as a passing hosted run. ADR-039 and the M6.0 implementation plan define the next **proposed** privacy, provenance and read-only acceptance gates; no new worker authority is granted merely by selecting M6.0.
