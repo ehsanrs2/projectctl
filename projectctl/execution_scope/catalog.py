@@ -54,13 +54,26 @@ def _policy_file(root: Path, relative: str) -> tuple[Path, bool]:
     return path, present
 
 
-def resolve_execution_scope_catalog(project_root: Path) -> ResolvedExecutionScopeCatalog:
-    """Resolve one scope authority without side effects or implicit precedence.
-
-    The legacy catalog is parsed through its historical schema and converted in
-    memory. A malformed or competing authority always fails closed.
-    """
+def resolve_execution_scope_catalog(
+    project_root: Path, *, allow_pending_migration: bool = False,
+) -> ResolvedExecutionScopeCatalog:
+    """Resolve exactly one authority; pending migrations are not executable."""
     root = project_root.resolve()
+    if not allow_pending_migration:
+        folder = root / ".projectctl" / "scope-migrations"
+        if folder.is_symlink():
+            raise ConfigurationError("Scope migration journal is symlinked.")
+        if folder.exists():
+            for child in folder.iterdir():
+                if (
+                    not child.is_dir()
+                    or not (child / "request.json").is_file()
+                    or not (child / "receipt.json").is_file()
+                ):
+                    raise ConfigurationError(
+                        "Pending/ambiguous scope migration blocks execution; "
+                        "inspect journal and run projectctl scope migrate --recover."
+                    )
     canonical_path, canonical_present = _policy_file(root, EXECUTION_SCOPE_PATH)
     legacy_path, legacy_present = _policy_file(root, LEGACY_PARALLEL_SCOPE_PATH)
 
