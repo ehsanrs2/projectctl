@@ -4,6 +4,7 @@ import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
+from projectctl.application.execution_inputs import validate_execution_scope_authority
 from projectctl.application.tasks import task_store_for_project
 from projectctl.core.digest import digest
 from projectctl.core.errors import ConfigurationError
@@ -175,6 +176,19 @@ def assemble_context(
     execution_input: ExecutionInputManifest | None = None,
     claim_transition: ClaimTransitionEvidence | None = None,
 ) -> ContextBundle:
+    # A required-mode worker request must never be assembled from unscoped
+    # or historical execution evidence, including direct adapter callers.
+    if load_project_config(project_root).scope_governance.mode == "required":
+        if (
+            execution_input is None
+            or execution_input.schema_version != 2
+            or not execution_input.write_scopes
+            or not execution_input.code_inputs
+        ):
+            raise ConfigurationError(
+                "Required scope governance prohibits an unscoped WorkerRequest."
+            )
+        validate_execution_scope_authority(project_root, execution_input)
     task = task_store_for_project(project_root).get(plan.task_id)
     artifacts = _task_artifacts(worktree, task)
     instructions = _instruction_sources(worktree)
