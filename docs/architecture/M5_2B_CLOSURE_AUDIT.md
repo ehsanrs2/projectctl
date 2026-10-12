@@ -63,7 +63,7 @@ The latest `main` CI run for
 [run 38241675582](https://github.com/ehsanrs2/projectctl/actions/runs/38241675582),
 `completed/failure`. Both jobs `test` and `codex-sdk-contract` are
 marked `failure`. Job metadata did not expose usable step details.
-This **does not prove** either a test regression or a runner/credits problem.
+This **does not prove** either a test regression or a runner/credits problem. The subsequent PR #51 Actions [run 38242378674](https://github.com/ehsanrs2/projectctl/actions/runs/38242378674) also reports `completed/failure`; the local SDK pass does not change that CI result.
 Resolve by obtaining the actual logs, rerunning in a provisioned CI runner
 or documenting the infrastructure blocker separately. Never label this green.
 
@@ -83,7 +83,7 @@ bash scripts/m52b-codex-sdk-contract-check.sh
 
 **Observed terminal output, reported by the operator on 2026-10-12:**
 
-- `uv pip install -e "[dev,codex]"` (editable install executed as `.[dev,codex]`): installed `openai-codex==0.160.0` and `openai-codex-cli-bin==0.160.0`.
+- `uv pip install -e ".[dev,codex]"`: installed `openai-codex==0.160.0` and `openai-codex-cli-bin==0.160.0`.
 - `Pinned Codex SDK importable; version=0.160.0`.
 - The contract and adapter suite displayed `....... [100%]` (7 tests).
 - Terminal ended with `Pinned Codex SDK public contract and adapter checks passed.`
