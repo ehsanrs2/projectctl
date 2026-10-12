@@ -23,6 +23,7 @@ from projectctl.schemas.config import (
     ProjectConfigV6,
     ProjectConfigV7,
     ProjectConfigV8,
+    ProjectConfigV9,
 )
 from projectctl.schemas.ownership import ExecutionOwnershipPolicy
 from projectctl.schemas.delivery import (
@@ -75,6 +76,7 @@ from projectctl.schemas.onboarding import (
     ProjectInspectionV1,
     ProjectInspectionV2,
 )
+from projectctl.schemas.execution_scope import ExecutionScopeCatalog
 from projectctl.schemas.parallel import (
     ParallelBatchResult,
     ParallelIntegrationQueue,
@@ -127,7 +129,8 @@ PUBLIC_SCHEMAS = {
     "project-config.v6.schema.json": ProjectConfigV6,
     "project-config.v7.schema.json": ProjectConfigV7,
     "project-config.v8.schema.json": ProjectConfigV8,
-    "project-config.v9.schema.json": ProjectConfig,
+    "project-config.v9.schema.json": ProjectConfigV9,
+    "project-config.v10.schema.json": ProjectConfig,
     "worker-capabilities.v1.schema.json": WorkerCapabilities,
     "worker-strategy-decision.v1.schema.json": WorkerStrategyDecision,
     "quota-snapshot.v1.schema.json": QuotaSnapshotV1,
@@ -164,6 +167,7 @@ PUBLIC_SCHEMAS = {
     "portfolio-turn-result.v1.schema.json": PortfolioTurnResultV1,
     "portfolio-turn-result.v2.schema.json": PortfolioTurnResult,
     "portfolio-cycle-result.v1.schema.json": PortfolioCycleResult,
+    "execution-scope-catalog.v1.schema.json": ExecutionScopeCatalog,
     "parallel-scope-catalog.v1.schema.json": ParallelScopeCatalog,
     "parallel-plan.v1.schema.json": ParallelPlanV1,
     "parallel-plan.v2.schema.json": ParallelPlan,

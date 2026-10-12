@@ -454,7 +454,7 @@ class ProjectConfigV8(ProjectCtlModel):
         return self
 
 
-class ProjectConfig(ProjectCtlModel):
+class ProjectConfigV9(ProjectCtlModel):
     schema_kind: Literal["projectctl.project_config"] = "projectctl.project_config"
     schema_version: Literal[9] = 9
     project: ProjectIdentity
@@ -492,3 +492,18 @@ class ProjectConfig(ProjectCtlModel):
                 "task_store.jira_policy is only valid with provider='jira'."
             )
         return self
+
+
+class ScopeGovernanceConfig(ProjectCtlModel):
+    """Durable project policy for serial execution scope enforcement."""
+
+    mode: Literal["optional", "required"] = "optional"
+
+
+class ProjectConfig(ProjectConfigV9):
+    """Current configuration; legacy versions remain independently parseable."""
+
+    schema_version: Literal[10] = 10
+    scope_governance: ScopeGovernanceConfig = Field(
+        default_factory=ScopeGovernanceConfig
+    )

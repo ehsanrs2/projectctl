@@ -14,10 +14,11 @@ from projectctl.schemas.config import (
     ProjectConfigV6,
     ProjectConfigV7,
     ProjectConfigV8,
+    ProjectConfigV9,
 )
 
 
-def test_project_config_v1_is_loaded_as_v9_without_rewrite(tmp_path: Path):
+def test_project_config_v1_is_loaded_as_v10_without_rewrite(tmp_path: Path):
     ctl = tmp_path / ".projectctl"
     ctl.mkdir()
     path = ctl / "config.yaml"
@@ -36,7 +37,8 @@ def test_project_config_v1_is_loaded_as_v9_without_rewrite(tmp_path: Path):
 
     config = load_project_config(tmp_path)
 
-    assert config.schema_version == 9
+    assert config.schema_version == 10
+    assert config.scope_governance.mode == "optional"
     assert config.task_store.provider == "beads"
     assert config.task_store.repository is None
     assert config.task_store.team is None
@@ -50,7 +52,7 @@ def test_project_config_v1_is_loaded_as_v9_without_rewrite(tmp_path: Path):
     assert "repository" not in persisted["task_store"]
 
 
-def test_project_config_v1_through_v9_are_public():
+def test_project_config_v1_through_v10_are_public():
     assert PUBLIC_SCHEMAS["project-config.v1.schema.json"] is ProjectConfigV1
     assert PUBLIC_SCHEMAS["project-config.v2.schema.json"] is ProjectConfigV2
     assert PUBLIC_SCHEMAS["project-config.v3.schema.json"] is ProjectConfigV3
@@ -59,7 +61,8 @@ def test_project_config_v1_through_v9_are_public():
     assert PUBLIC_SCHEMAS["project-config.v6.schema.json"] is ProjectConfigV6
     assert PUBLIC_SCHEMAS["project-config.v7.schema.json"] is ProjectConfigV7
     assert PUBLIC_SCHEMAS["project-config.v8.schema.json"] is ProjectConfigV8
-    assert PUBLIC_SCHEMAS["project-config.v9.schema.json"] is ProjectConfig
+    assert PUBLIC_SCHEMAS["project-config.v9.schema.json"] is ProjectConfigV9
+    assert PUBLIC_SCHEMAS["project-config.v10.schema.json"] is ProjectConfig
     assert ProjectConfigV1.model_fields["schema_version"].default == 1
     assert ProjectConfigV2.model_fields["schema_version"].default == 2
     assert ProjectConfigV3.model_fields["schema_version"].default == 3
@@ -68,4 +71,5 @@ def test_project_config_v1_through_v9_are_public():
     assert ProjectConfigV6.model_fields["schema_version"].default == 6
     assert ProjectConfigV7.model_fields["schema_version"].default == 7
     assert ProjectConfigV8.model_fields["schema_version"].default == 8
-    assert ProjectConfig.model_fields["schema_version"].default == 9
+    assert ProjectConfigV9.model_fields["schema_version"].default == 9
+    assert ProjectConfig.model_fields["schema_version"].default == 10
