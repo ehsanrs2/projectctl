@@ -45,7 +45,7 @@ from projectctl.core.errors import (
 )
 from projectctl.core.time import utc_now
 from projectctl.git import WorktreeManager, current_branch, resolve_commit
-from projectctl.parallel.catalog import task_parallel_scope
+from projectctl.execution_scope.catalog import task_execution_scope
 from projectctl.parallel.service import (
     _atomic_json,
     _input_scope_digest,
@@ -575,7 +575,7 @@ def _assert_runtime_inputs_stable(
             "Parallel run task/dependency authority changed after admission."
         )
 
-    scope = task_parallel_scope(root, plan.task_id)
+    scope = task_execution_scope(root, plan.task_id)
     if digest(scope) != plan.scope_digest:
         raise StaleSnapshotError("Parallel run scope declaration changed.")
 
