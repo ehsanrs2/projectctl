@@ -1,6 +1,6 @@
 # M5.2b — Slice D closure and architecture acceptance audit
 
-**Status: LOCAL REGRESSION GATE PASSED; FINAL ACCEPTANCE OPEN.**
+**Status: LOCAL REGRESSION AND PINNED CODEX SDK CONTRACT GATES PASSED; CI AND FORMAL ARCHITECTURE ACCEPTANCE OPEN.**
 
 This document is a recorded evidence review, not a second source of
 milestone authority. `docs/PROJECT_STATE.yaml` continues to name M5.2b
@@ -42,7 +42,7 @@ The operator supplied terminal output from the PR #50 feature checkout:
 
 This is valid **operator-reported local regression evidence** for the current
 main tree. It is not independently reproduced within this connected session,
-and is not a substitute for green GitHub CI or the optional SDK contract check.
+and is not a substitute for green GitHub CI or formal architecture acceptance.
 
 ## Acceptance matrix
 
@@ -52,7 +52,7 @@ and is not a substitute for green GitHub CI or the optional SDK contract check.
 | Serial/parallel scope and run/verification enforcement | Targeted M4/M5 suites and complete suite | **Local pass reported** |
 | Migration crash windows, receipt-integrity, and historical adoption approval | Targeted migration/adoption suites | **Local pass reported** |
 | Historical schemas, config in-memory upgrades and v2 review YAML byte integrity | Complete suite including fixed v8–v10 fixtures | **Local pass reported** |
-| Public SDK contract with real pinned `openai-codex` | Must import real SDK and run both contract/adapter modules | **Not yet demonstrated** |
+| Public SDK contract with real pinned `openai-codex` | Operator installed the exact pinned SDK in uv and ran the non-skippable contract script | **7 local tests passed; reported** |
 | GitHub Actions test and SDK jobs | Run on PR #50 merge SHA reported completed/failure | **Not green; cause unproven** |
 | ADR-038 architecture acceptance, docs/version release policy, next milestone | Architecture owner must approve final design and explicitly select next step | **Pending human acceptance** |
 
@@ -67,13 +67,13 @@ This **does not prove** either a test regression or a runner/credits problem.
 Resolve by obtaining the actual logs, rerunning in a provisioned CI runner
 or documenting the infrastructure blocker separately. Never label this green.
 
-### Verify optional Codex SDK with uv
+### Pinned Codex SDK verification with uv — completed locally
 
 The Codex public API test uses
 `pytest.importorskip("openai_codex")`. A passing complete suite may
 therefore have **skipped** this test when the optional dependency is absent.
-The following is a distinct required acceptance check, with import and
-pinned-version preconditions that cannot silently skip:
+The operator has now run the following distinct acceptance check on PR #51's
+feature checkout. Import and pinned-version preconditions cannot silently skip:
 
 ```bash
 source .venv/bin/activate
@@ -81,9 +81,15 @@ uv pip install -e ".[dev,codex]"
 bash scripts/m52b-codex-sdk-contract-check.sh
 ```
 
-Record the tested SHA, Python and pytest versions, explicit pass/fail/skip
-summary and exit code. This contract test is separate from remote Codex worker
-acceptance and does not exercise a live worker.
+**Observed terminal output, reported by the operator on 2026-10-12:**
+
+- `uv pip install -e "[dev,codex]"` (editable install executed as `.[dev,codex]`): installed `openai-codex==0.160.0` and `openai-codex-cli-bin==0.160.0`.
+- `Pinned Codex SDK importable; version=0.160.0`.
+- The contract and adapter suite displayed `....... [100%]` (7 tests).
+- Terminal ended with `Pinned Codex SDK public contract and adapter checks passed.`
+- The operator checked out branch `docs/m5.2b-closure-evidence-sdk-gates` before running. The branch head at PR #51 check time was `e2177a2b04dc944f5866a826470850c27090bde1`; the terminal did not print `git rev-parse HEAD`.
+
+The SDK gate is therefore **operator-reported locally passed**, not independently run here. It is separate from remote Codex worker acceptance and does not exercise a live worker. A post-report documentation-only commit does not change the pinned SDK checker itself.
 
 ## Architecture invariants for ADR acceptance
 
@@ -115,9 +121,9 @@ acceptance and does not exercise a live worker.
 
 Do **not** change `docs/PROJECT_STATE.yaml`, tag a release, or claim
 ADR-038 accepted solely because this report has a local pass.
-Final acceptance additionally needs: explicit SDK evidence or documented
-exception, CI failure disposition, ADR decision review and a human-selected
-next roadmap direction. The implementation can be described accurately as
+The pinned SDK evidence is now recorded. Final acceptance still needs CI
+failure disposition, ADR decision review and a human-selected next roadmap
+direction. The implementation can be described accurately as
 **merged and locally regression-tested**, while the milestone remains active.
 
 See `docs/architecture/M5_2B_IMPLEMENTATION_PLAN.md`,
