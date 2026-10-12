@@ -7,7 +7,11 @@ from typer.testing import CliRunner
 from projectctl.application import portfolio as portfolio_app
 from projectctl.cli.entry import app
 from projectctl.core.enums import QuotaMode, ResourceClass, RunStatus
-from projectctl.schemas.orchestration import ProjectTurnEnvelope, ProjectTurnResult
+from projectctl.schemas.orchestration import (
+    ProjectMaintenanceResult,
+    ProjectTurnEnvelope,
+    ProjectTurnResult,
+)
 from projectctl.schemas.portfolio import (
     PortfolioCandidate,
     PortfolioDecision,
@@ -393,8 +397,12 @@ def test_portfolio_cycle_runs_maintenance_before_worker_decision(
     tmp_path,
 ):
     calls = []
-    maintenance_result = SimpleNamespace(
-        model_dump=lambda mode=None: {},
+    # PortfolioCycleResult is strictly typed; maintain the actual result
+    # contract rather than a duck-typed SimpleNamespace model_dump stub.
+    maintenance_result = ProjectMaintenanceResult(
+        generated_at=NOW,
+        project_id="test-project",
+        project_root=str(tmp_path),
     )
     monkeypatch.setattr(
         portfolio_app,
