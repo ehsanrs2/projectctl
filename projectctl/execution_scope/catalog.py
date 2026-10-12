@@ -60,20 +60,14 @@ def resolve_execution_scope_catalog(
     """Resolve exactly one authority; pending migrations are not executable."""
     root = project_root.resolve()
     if not allow_pending_migration:
-        folder = root / ".projectctl" / "scope-migrations"
-        if folder.is_symlink():
-            raise ConfigurationError("Scope migration journal is symlinked.")
-        if folder.exists():
-            for child in folder.iterdir():
-                if (
-                    not child.is_dir()
-                    or not (child / "request.json").is_file()
-                    or not (child / "receipt.json").is_file()
-                ):
-                    raise ConfigurationError(
-                        "Pending/ambiguous scope migration blocks execution; "
-                        "inspect journal and run projectctl scope migrate --recover."
-                    )
+        # The presence of receipt.json is not completion evidence by itself:
+        # its content must match the recorded migration identity and digests.
+        # Import lazily to keep the reader independent of mutation at import time.
+        from projectctl.execution_scope.migration import (
+            assert_no_pending_scope_migration,
+        )
+
+        assert_no_pending_scope_migration(root)
     canonical_path, canonical_present = _policy_file(root, EXECUTION_SCOPE_PATH)
     legacy_path, legacy_present = _policy_file(root, LEGACY_PARALLEL_SCOPE_PATH)
 

@@ -122,10 +122,10 @@ Exactly one authority should exist for each mutable concern.
 | Quota observations / provider selection | `$PROJECTCTL_HOME/state.sqlite` | Account-global |
 | Account execution admission | `$PROJECTCTL_HOME/state.sqlite -> execution_admissions` | Implemented in M4.0a; exclusive per quota account, expiring, and distinct from project/task ownership |
 | Cross-project portfolio arbitration | Registered projects + project-local scheduler envelopes + admission history | Implemented in M4.0b; chooses project/action, never raw cross-project task scores |
-| Parallel execution scope | `projectctl.parallel.yaml` | Human-managed input/write/resource authorization used by M4.1 proofs |
-| Execution input validity | `ExecutionInputManifest v1` + `ClaimTransitionEvidence v1` | Unified in M4.2a; scheduler full-snapshot digest is audit/ranking evidence, not execution invalidation authority |
+| Execution scope policy | `projectctl.scope.yaml` (canonical), `projectctl.parallel.yaml` (legacy read-only) | Human-managed task input/write/resource authorization for serial and parallel runs; two simultaneous files fail closed |
+| Execution input validity | `ExecutionInputManifest v2` (v1 historical reader) + `ClaimTransitionEvidence v1` | Unified in M4.2a, extended in M5.2b to bind scope-governance mode/catalog source; scheduler full-snapshot digest remains audit/ranking evidence |
 | Context discovery evidence | `ContextDiscoveryReport v1` / `ContextScopeSuggestion v1` | Derived only; assists scope authoring and never overrides human-managed scope or ExecutionInput authority |
-| Reviewed scope adoption | `ContextScopeReview v1` + AdoptionRequest/Receipt v1 | Digest-bound human approval may mutate `projectctl.parallel.yaml`; after mutation the catalog is ordinary human-managed execution authority |
+| Reviewed scope adoption | `ContextScopeReview v2` + AdoptionRequest/Receipt v2 (v1 audit-only) | Digest-bound human approval may mutate the canonical `projectctl.scope.yaml`; historic approvals cannot be replayed against the new path |
 | Project quota policy | `.projectctl/config.yaml` | Local policy, not quota observation/admission authority |
 | Generated status dashboards | `docs/generated/*` | Derived and non-authoritative |
 | Telemetry | `.projectctl/telemetry.sqlite` | Observational only |
@@ -1638,7 +1638,7 @@ See ADR-036.
 
 The review accepts the core M5 authority chain but requires two closure milestones before further product expansion.
 
-Key findings:
+Key findings (at the time of the Post-M5 review; see M5.2b status below for subsequent implementation):
 
 - **closed by M5.2a (critical):** the previous separate adoption/run-preparation locks are now nested under one shared `execution-authority` gate
 - **open for M5.2b (high):** serial execution still allows absent task scope, so scope optionality needs an explicit project governance mode
@@ -1666,9 +1666,20 @@ See ADR-037.
 
 ### M5.2b — General Execution Scope Policy & Enforcement Mode
 
-**Active milestone.**
+**Active milestone — Slices A–C merged; final test evidence and architecture acceptance remain outstanding.**
 
-Promote the current parallel-named scope authority into one generic execution-scope policy, with a canonical generic schema/file and an explicit durable project governance mode such as `optional|required`. Historical parallel-scope contracts remain readable, but two simultaneous scope authorities must never be merged implicitly.
+Implemented foundation and enforcement contracts:
+
+- `ExecutionScopeCatalog v1` / `ExecutionTaskScope` with sole canonical human-managed `projectctl.scope.yaml`; old `projectctl.parallel.yaml` remains a validated legacy source only. Both sources together fail closed.
+- `ProjectConfig v10.scope_governance.mode` supports `optional|required`. Historical config upgrades preserve `optional` without rewriting the operator's file. Parallel planning requires declared scope in either mode; required serial planning must have it as well.
+- `ExecutionInputManifest v2` binds the governance mode and source identity to run evidence while preserving strict legacy v1 parsing/digest semantics. Start/resume/recovery and independent Verification recheck those inputs.
+- `projectctl scope migrate` provides explicit preview/apply/recover, with an exact source/target journal and fail-closed incomplete states; Git diff inspection and commit remain human decisions.
+- Context Discovery resolves effective scope using the same authority resolver. New `ContextScopeReview/AdoptionRequest/AdoptionReceipt v2` targets only the canonical file; v1 approval records remain audit-only.
+- `projectctl.scope.yaml` and `projectctl.parallel.yaml` are human-managed worker-protected paths.
+
+**Open gate:** the Slice D hardening patch for migration receipt-integrity checks, actual local test execution (including historical contracts and failure injection), review of CI failures and final architecture sign-off. Do not promote `docs/PROJECT_STATE.yaml` or ADR-038 to completed/accepted before those checks are evidenced.
+
+See `docs/architecture/M5_2B_CLOSURE_AUDIT.md`, `docs/architecture/M5_2B_SCOPE_MIGRATION.md` and ADR-038 (proposed).
 
 ### Later product directions
 

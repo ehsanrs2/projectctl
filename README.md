@@ -1913,7 +1913,7 @@ tasks:
       - parser-registry
 ```
 
-The catalog is protected from worker modification by verification policy.
+The example above is the **historical** `ParallelScopeCatalog v1` format. M5.2b adds the canonical human-managed `projectctl.scope.yaml` (schema kind `projectctl.execution_scope_catalog`, version 1); the legacy file remains readable but may not coexist with the canonical file. Both files are protected against worker modifications.
 
 Build one proof artifact:
 
@@ -1969,7 +1969,7 @@ still permits at most one quota-consuming worker turn at a time. ProjectCTL does
 token-cost model merely to increase concurrency.
 
 Each admitted run receives a durable `ParallelRunBinding` after task claim. Its verified changed
-paths must remain inside the human-managed `projectctl.parallel.yaml` write scope.
+paths must remain inside the human-managed execution-scope write boundary (canonical `projectctl.scope.yaml` or a validated legacy-only `projectctl.parallel.yaml`).
 
 Integration order is deterministic by run creation time plus run id, rather than worker finish
 time. Earlier unfinished/review-waiting runs remain ahead of later candidates.
@@ -2040,11 +2040,11 @@ POST-M5 Post-M5 Architecture Review                         completed
    ↓
 M5.2a  Execution Authority Mutation Serialization           completed
    ↓
-M5.2b  General Execution Scope Policy & Enforcement Mode    next
+M5.2b  General Execution Scope Policy & Enforcement Mode    A–C merged; Slice D validation pending
 ```
 
-M4.2a now separates full scheduler observation from execution validity through
-`ExecutionInputManifest v1`. The selected task + relevant dependency proof, project/base identity,
+M4.2a separates full scheduler observation from execution validity through
+`ExecutionInputManifest`. M5.2b uses **v2** for new runs, binding project scope-governance mode and the selected catalog source; historical **v1** manifests retain their original digest and audit-reader semantics. The selected task + relevant dependency proof, project/base identity,
 references and optional code scopes are the execution invalidation authority; the full scheduler
 snapshot remains audit material.
 
@@ -2112,7 +2112,7 @@ Two public artifacts are persisted under `.projectctl/context/`:
 - `ContextDiscoveryReport v1`
 - `ContextScopeSuggestion v1`
 
-Both are explicitly non-authoritative. `suggest-scope --yaml` prints a **review-only** snippet and never writes `projectctl.parallel.yaml`.
+Both are explicitly non-authoritative. `suggest-scope --yaml` prints a **review-only** snippet and never writes `projectctl.scope.yaml`.
 
 Scope comparison reports suggested-vs-declared differences, but the human-managed catalog remains execution authority even when discovery disagrees.
 
@@ -2135,7 +2135,7 @@ human copies/approves that exact digest
         ↓
 ContextScopeAdoptionRequest
         ↓
-atomic projectctl.parallel.yaml mutation
+atomic projectctl.scope.yaml mutation
         ↓
 ContextScopeAdoptionReceipt
         ↓
@@ -2178,7 +2178,7 @@ M5.1 safety properties:
 - project/base/task/suggestion/catalog-before identities are revalidated immediately before mutation
 - stale target/task/catalog changes require a fresh review
 - any active project run blocks scope-authority mutation
-- `projectctl.parallel.yaml` symlinks are refused for adoption
+- `projectctl.scope.yaml` symlinks and conflicting dual catalogs are refused for adoption
 - an `AdoptionRequest` is persisted before policy mutation
 - crash recovery only accepts exact before-state or exact reviewed after-state; any third state fails closed
 - the catalog write is atomic and post-write schema/scope digests are revalidated
@@ -2188,9 +2188,11 @@ M5.1 safety properties:
 
 Public artifacts:
 
-- `ContextScopeReview v1`
-- `ContextScopeAdoptionRequest v1`
-- `ContextScopeAdoptionReceipt v1`
+- `ContextScopeReview v2`
+- `ContextScopeAdoptionRequest v2`
+- `ContextScopeAdoptionReceipt v2`
+
+Historical v1 review/request/receipt artifacts remain parseable for audit only; their approvals cannot authorize changes to the canonical file. Legacy-only projects must explicitly migrate before creating a new reviewed adoption.
 
 See ADR-036.
 
@@ -2205,9 +2207,9 @@ digest-bound human review
       ↓
 explicit adoption
       ↓
-human-managed projectctl.parallel.yaml
+human-managed projectctl.scope.yaml
       ↓
-ExecutionInputManifest / ParallelPlan authority
+ExecutionInputManifest v2 / ParallelPlan authority
 ```
 
 ### M5.2a — Execution Authority Mutation Serialization
@@ -2228,15 +2230,30 @@ See ADR-037.
 
 ### M5.2b — General Execution Scope Policy & Enforcement Mode
 
-**Active milestone.**
+**Active milestone — Slices A–C merged; Slice D safety/acceptance validation pending.**
 
-Promote the current parallel-named scope authority into one generic execution-scope policy, with a canonical generic schema/file and an explicit durable project governance mode such as `optional|required`. Historical parallel-scope contracts remain readable, but two simultaneous scope authorities must never be merged implicitly.
+The canonical scope authority is `projectctl.scope.yaml` (`ExecutionScopeCatalog v1`) with task-level input/write/resource boundaries. `projectctl.parallel.yaml` is accepted only as a single valid legacy source. Simultaneous files, invalid catalogs and incomplete migration journals fail closed.
 
-See `docs/architecture/POST_M5_ARCHITECTURE_REVIEW.md`.
+`ProjectConfig v10` adds durable `scope_governance.mode: optional|required`. Older projects upgrade in memory to `optional` without being silently made stricter. A `required` project cannot admit a newly unscoped run. New `ExecutionInputManifest v2` evidence binds governance policy and source identity through run checks and independent Verification; historical v1 manifests remain audit-readable.
+
+Operators migrate the old file explicitly, without hidden writes or Git commits:
+
+```bash
+projectctl scope migrate --project /path/to/repo
+projectctl scope migrate --project /path/to/repo --apply
+# After a crash with exact durable migration evidence:
+projectctl scope migrate --project /path/to/repo --recover
+```
+
+New scope reviews and adoptions target the canonical policy and use `ContextScopeReview/AdoptionRequest/AdoptionReceipt v2`; legacy v1 approvals are audit-only. Neither discovery nor Worker suggestions create permission.
+
+**Do not treat M5.2b as accepted or released yet.** The Slice D migration-receipt integrity hardening, complete local tests and Post-M5.2 architecture closure remain gates. Run `bash scripts/m52b-closure-check.sh` in a real checkout and retain the test evidence.
+
+See `docs/architecture/M5_2B_SCOPE_MIGRATION.md`, `docs/architecture/M5_2B_CLOSURE_AUDIT.md`, proposed ADR-038 and the Post-M5 architecture review.
 
 See ADR-029 through ADR-037, `docs/architecture/POST_M4_ARCHITECTURE_REVIEW.md`,
 `docs/architecture/POST_M5_ARCHITECTURE_REVIEW.md`, and `docs/PROJECTCTL_BLUEPRINT.md`.
 
 Next:
 
-- **M5.2b — General Execution Scope Policy & Enforcement Mode**
+- **M5.2b Slice D — regression verification, receipt-integrity hardening and architecture closure**

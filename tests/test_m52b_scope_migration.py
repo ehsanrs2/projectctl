@@ -135,7 +135,7 @@ def test_dual_file_crash_state_is_fail_closed_then_recoverable(tmp_path, monkeyp
 
     assert (root / "projectctl.scope.yaml").exists()
     assert (root / "projectctl.parallel.yaml").exists()
-    with pytest.raises(ConfigurationError, match="Pending/ambiguous"):
+    with pytest.raises(ConfigurationError, match="scope migration is pending"):
         resolve_execution_scope_catalog(root)
     assert len(_pending_journals(root)) == 1
 
@@ -165,7 +165,7 @@ def test_crash_after_legacy_retirement_is_recoverable(tmp_path, monkeypatch):
     assert not (root / "projectctl.parallel.yaml").exists()
     assert (root / "projectctl.scope.yaml").exists()
     assert len(_pending_journals(root)) == 1
-    with pytest.raises(ConfigurationError, match="Pending/ambiguous"):
+    with pytest.raises(ConfigurationError, match="scope migration is pending"):
         resolve_execution_scope_catalog(root)
     receipt = migration.apply_scope_migration(root, recover=True)
     assert receipt["applied"] is True
@@ -282,3 +282,61 @@ def test_v1_review_can_be_read_but_not_adopted_into_new_catalog(tmp_path):
             review_id=old.review_id,
             approval_digest=digest(old),
         )
+
+
+def test_completed_receipt_tampering_blocks_normal_scope_resolution(tmp_path):
+    root = repo(tmp_path)
+    apply_scope_migration(root)
+    assert resolve_execution_scope_catalog(root).source == "canonical"
+
+    journal = next((root / ".projectctl" / "scope-migrations").iterdir())
+    receipt_path = journal / "receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["target_sha256"] = "0" * 64
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    # Merely having a receipt file must never bypass exact request/receipt
+    # integrity checks, even when the canonical policy file is fully valid.
+    with pytest.raises(ConfigurationError, match="receipt is invalid"):
+        resolve_execution_scope_catalog(root)
+    with pytest.raises(ConfigurationError, match="receipt is invalid"):
+        preview_scope_migration(root)
+
+
+def test_forged_receipt_after_crash_cannot_authorize_canonical_scope(tmp_path, monkeypatch):
+    import projectctl.execution_scope.migration as migration
+
+    root = repo(tmp_path)
+    original = migration._atomic_write
+
+    def crash_before_receipt(path, payload):
+        if path.name == "receipt.json":
+            raise RuntimeError("simulated receipt crash")
+        return original(path, payload)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(migration, "_atomic_write", crash_before_receipt)
+        with pytest.raises(RuntimeError, match="simulated receipt crash"):
+            migration.apply_scope_migration(root)
+
+    assert not (root / "projectctl.parallel.yaml").exists()
+    assert (root / "projectctl.scope.yaml").exists()
+
+    journal = next((root / ".projectctl" / "scope-migrations").iterdir())
+    forged_receipt = {
+        "schema_kind": "projectctl.scope_migration_receipt",
+        "schema_version": 1,
+        "migration_id": journal.name,
+        "source_sha256": "wrong",
+        "target_sha256": "wrong",
+        "canonical_path": "projectctl.scope.yaml",
+        "applied": True,
+    }
+    (journal / "receipt.json").write_text(
+        json.dumps(forged_receipt), encoding="utf-8"
+    )
+
+    with pytest.raises(ConfigurationError, match="receipt is invalid"):
+        resolve_execution_scope_catalog(root)
+    with pytest.raises(ConfigurationError, match="receipt is invalid"):
+        migration.apply_scope_migration(root, recover=True)
