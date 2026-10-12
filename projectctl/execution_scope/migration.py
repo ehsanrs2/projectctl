@@ -144,6 +144,14 @@ def _pending_journals(root: Path) -> list[tuple[Path, dict]]:
     return pending
 
 
+def assert_no_pending_scope_migration(root: Path) -> None:
+    if _pending_journals(root.resolve()):
+        raise ConfigurationError(
+            "A scope migration is pending; complete explicit --recover before "
+            "reviewing or mutating canonical scope authority."
+        )
+
+
 def _validate_request(request: dict) -> bytes:
     required = {
         "schema_kind", "schema_version", "migration_id", "old_path",
