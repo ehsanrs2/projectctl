@@ -697,3 +697,68 @@ def test_run_admission_gate_wins_and_adoption_rechecks_active_runs(
             approval_digest=digest(review),
         )
     assert not (root / "projectctl.scope.yaml").exists()
+
+
+
+def test_v2_review_preserves_exact_proposed_yaml_through_durable_roundtrip(
+    tmp_path: Path,
+    monkeypatch,
+):
+    """Reviewed bytes, not a normalized Pydantic string, are approval authority."""
+    root = _repo(tmp_path)
+    review = _review(root, monkeypatch)
+    expected = review.proposed_catalog_yaml.encode("utf-8")
+
+    assert expected.endswith(b"\\n")
+    assert review.proposed_catalog_digest == adoption._sha256_bytes(expected)
+    review_path = (
+        root / ".projectctl" / "context" / "reviews" / "TASK-1"
+        / f"{review.review_id}.json"
+    )
+    persisted = adoption._load_review(review_path)
+    assert persisted.proposed_catalog_yaml.encode("utf-8") == expected
+    assert digest(persisted) == digest(review)
+
+    # The before-state is still unchanged: the strict approval check succeeds
+    # without weakening its YAML/byte-digest comparison.
+    adoption._validate_review_before_apply(root, persisted)
+
+    receipt = adoption.adopt_scope_review(
+        root,
+        "TASK-1",
+        review_id=review.review_id,
+        approval_digest=digest(persisted),
+    )
+    assert receipt.catalog_after_digest == review.proposed_catalog_digest
+    assert (root / "projectctl.scope.yaml").read_bytes() == expected
+
+
+def test_v2_review_keeps_original_before_yaml_including_comments_and_newlines(
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = _repo(tmp_path)
+    before = (
+        "# human-approved file, including trailing whitespace\\n"
+        "schema_kind: projectctl.execution_scope_catalog\\n"
+        "schema_version: 1\\n"
+        "tasks: {}\\n"
+        "\\n"
+    )
+    catalog = root / "projectctl.scope.yaml"
+    catalog.write_text(before, encoding="utf-8")
+    review = _review(root, monkeypatch)
+    assert review.catalog_before_yaml == before
+    assert review.catalog_before_digest == adoption._sha256_bytes(
+        before.encode("utf-8")
+    )
+    assert review.proposed_catalog_yaml.endswith("\\n")
+    persisted = adoption._load_review(
+        root / ".projectctl" / "context" / "reviews" / "TASK-1"
+        / f"{review.review_id}.json"
+    )
+    assert persisted.catalog_before_yaml == before
+    assert persisted.proposed_catalog_yaml == review.proposed_catalog_yaml
+    assert digest(persisted) == digest(review)
+    adoption._validate_review_before_apply(root, persisted)
+    assert catalog.read_text(encoding="utf-8") == before
