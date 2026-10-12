@@ -19,7 +19,7 @@ from projectctl.core.enums import TaskStatus
 from projectctl.core.errors import ConfigurationError, StaleSnapshotError
 from projectctl.core.time import utc_now
 from projectctl.git.worktrees import current_branch, resolve_commit
-from projectctl.execution_scope.catalog import task_execution_scope
+from projectctl.execution_scope.catalog import task_execution_scope as task_parallel_scope
 from projectctl.project.loader import load_project_config
 from projectctl.project.state import (
     load_project_state,
@@ -242,7 +242,7 @@ def build_parallel_plan(
             f"Task {task_id!r} is {task.status.value!r}; parallel planning requires READY."
         )
 
-    scope = task_execution_scope(root, task_id)
+    scope = task_parallel_scope(root, task_id)
     target_ref = integration_target_ref or current_branch(root)
     base_commit = resolve_commit(root, target_ref)
     project_state_digest = semantic_project_state_digest(state)
@@ -328,7 +328,7 @@ def revalidate_parallel_plan(
             "Parallel plan scoped task/dependency input changed."
         )
 
-    scope = task_execution_scope(root, plan.task_id)
+    scope = task_parallel_scope(root, plan.task_id)
 
     if getattr(plan, "execution_input_digest", None):
         current_input = build_execution_input_manifest(
