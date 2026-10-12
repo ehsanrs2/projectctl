@@ -1,121 +1,125 @@
 # M5.2b — Slice D closure and architecture acceptance audit
 
-**Audit status: OPEN — M5.2b is NOT yet validated or released.**  
-Baseline reviewed: `main@e6092d6469688c141f3dd58c07725e490dfe606c` (merged PR #47).  
-Authoritative active milestone: `docs/PROJECT_STATE.yaml`.  
-Architecture candidate: `docs/decisions/ADR-038-general-execution-scope-governance.md` (**Proposed** until explicit acceptance).
+**Status: LOCAL REGRESSION GATE PASSED; FINAL ACCEPTANCE OPEN.**
 
-This is an evidence/gate tracker, not a second source of project-state authority.
+This document is a recorded evidence review, not a second source of
+milestone authority. `docs/PROJECT_STATE.yaml` continues to name M5.2b
+until outstanding acceptance requirements and the next-goal decision are
+explicitly resolved.
 
-## Delivered implementation, subject to acceptance tests
+## Implementation and source revisions
 
-| Slice | Code landed on main | Outstanding evidence |
-| --- | --- | --- |
-| A | PR #45: generic scope model/resolver, `ProjectConfig v10`, historical schema readers | Local schema/fixture regression |
-| B | PR #46: `ExecutionInputManifest v2`, required-mode run/worker/verification enforcement, protected policy paths | Independent verification, admission/recovery regression |
-| C | PR #47: explicit journaled migration, canonical Context Discovery/Review/Adoption v2, v1 audit compatibility | Filesystem crash and concurrency tests |
-| D | This hardening branch: strict receipt validation, regression tests, documentation and local gate script | **Must be run and reviewed before merge and milestone closure** |
+- PR #45: Slice A — generic execution-scope catalog and ProjectConfig v10.
+- PR #46: Slice B — ExecutionInputManifest v2 and lifecycle enforcement.
+- PR #47: Slice C — explicit migration and canonical reviewed adoption.
+- PR #48: Slice D — strict receipt validation, regression gates and docs.
+- PR #49: preserve exact YAML bytes in ContextScopeReview v2.
+- PR #50: restore compatibility of the 13 stale/full-suite test fixtures.
+- PR #50 merged on **2026-10-12** at
+  `main@f6aa8b5cdcf5a6ab552045b54e403ff24a16667a`.
+- The locally tested PR #50 head is
+  `07ab421906c39c5953519f3f89679d44c88fee90`.
+  GitHub Git commit metadata reports **the same tree SHA**
+  `e0a4120580c208e6854a64121fa4398d04407e25` for both
+  the tested PR head and the merge commit. The merger introduced no
+  tree-content difference from the locally tested revision.
 
-## Concrete Slice D defect and disposition
+## Human-supplied local test evidence
 
-**D-01 — Completed migration receipt presence treated as evidence of completion.**
+The operator supplied terminal output from the PR #50 feature checkout:
 
-The merged Slice C resolver checked for the mere *existence* of
-`receipt.json`, whereas `migration._pending_journals` already has a stronger
-validator that verifies the exact request fields, target digest, journal identity,
-and receipt identity/digests. A forged/corrupted completed receipt could therefore
-make the normal runtime reader treat a canonical-only state as usable even when
-migration evidence was not valid.
+1. `python -m pytest -q`: **100% displayed; no failures or errors**.
+2. `bash scripts/m52b-closure-check.sh`:
+   - targeted scope, historic and execution regressions: **100% displayed**;
+   - complete suite re-run: **100% displayed**;
+   - `git diff --check` gate reached;
+   - final output: **"M5.2b local closure checks passed."**
+3. Earlier terminal output from the same local uv-based setup reported
+   Python **3.12.15** and pytest **9.1.1**. The latest invocation did not
+   separately print versions or the tested SHA. Revision identity is supported
+   by the checked-out branch and GitHub tree equality, not a command-captured
+   `git rev-parse HEAD` from the terminal.
 
-**Fix in this branch:** the normal resolver calls
-`assert_no_pending_scope_migration` (with its exact journal validation) instead
-of checking filenames alone. Migration's internal postcondition check explicitly
-retains `allow_pending_migration=True` solely while holding the transition
-locks. New regression cases create tampered completed receipts and forged
-receipts after a simulated crash. Neither is permitted as runtime authority.
-
-**Important:** tests for this fix have been authored but not executed here.
-
-## External CI evidence observed
-
-For PR #47 head `81beb3b8725548b4e460fb8ff90e5435cb3c4b5d`:
-
-- GitHub Actions run: `38217243686`, status `completed`, conclusion `failure`.
-- Jobs: `test` (`114704742122`) and `codex-sdk-contract`
-  (`114704741896`), both reported `failure`.
-- Step summaries were empty; the log download returned a BlobNotFound/404
-  response. The failed jobs **must not be reported as test failures or
-  infrastructure-only failures without further evidence**.
-- No successful CI or local `pytest` evidence is available from this session.
-
-The repository was inspected through a connected private GitHub account; this
-session did **not** execute `pytest` in a working checkout and did not perform a
-production migration.
+This is valid **operator-reported local regression evidence** for the current
+main tree. It is not independently reproduced within this connected session,
+and is not a substitute for green GitHub CI or the optional SDK contract check.
 
 ## Acceptance matrix
 
-| Gate | Required evidence | Current result |
+| Gate | Evidence | Current status |
 | --- | --- | --- |
-| A: Architecture | Review ADR-038 decisions, version invariants and operator approval boundary | **Pending** — ADR Proposed |
-| B: Schema/backward compatibility | Old ProjectConfig v1–v9 and ExecutionInput v1 digest/reader; new v10/v2; legacy parallel scopes | **Untested locally** |
-| C: Runtime enforcement | Required/optional serial, parallel, preclaim/admitted, worker start/resume, verification, read-only/worker write paths | **Untested locally** |
-| D: Migration/adoption | Exact three crash windows, dual/pending states, forged receipts, symlink rejection, lock ordering, legacy v1 audit-only and review replay refusal | **Untested locally** |
-| E: Release readiness | Full `pytest`, relevant SDK contract tests in a correctly provisioned environment, `git diff --check`, docs/README/Blueprint review | **Blocked by missing execution evidence** |
+| Generic catalog, no dual authority, optional/required modes | M5.2b scope tests included in targeted gate | **Local pass reported** |
+| Serial/parallel scope and run/verification enforcement | Targeted M4/M5 suites and complete suite | **Local pass reported** |
+| Migration crash windows, receipt-integrity, and historical adoption approval | Targeted migration/adoption suites | **Local pass reported** |
+| Historical schemas, config in-memory upgrades and v2 review YAML byte integrity | Complete suite including fixed v8–v10 fixtures | **Local pass reported** |
+| Public SDK contract with real pinned `openai-codex` | Must import real SDK and run both contract/adapter modules | **Not yet demonstrated** |
+| GitHub Actions test and SDK jobs | Run on PR #50 merge SHA reported completed/failure | **Not green; cause unproven** |
+| ADR-038 architecture acceptance, docs/version release policy, next milestone | Architecture owner must approve final design and explicitly select next step | **Pending human acceptance** |
 
-### Required reproducible local command
+### GitHub Actions observation
 
-From the feature branch in a genuine checkout, with Python >=3.12 and
-`python -m pip install -e '.[dev]'` already completed:
+The latest `main` CI run for
+`f6aa8b5cdcf5a6ab552045b54e403ff24a16667a` was
+[run 38241675582](https://github.com/ehsanrs2/projectctl/actions/runs/38241675582),
+`completed/failure`. Both jobs `test` and `codex-sdk-contract` are
+marked `failure`. Job metadata did not expose usable step details.
+This **does not prove** either a test regression or a runner/credits problem.
+Resolve by obtaining the actual logs, rerunning in a provisioned CI runner
+or documenting the infrastructure blocker separately. Never label this green.
+
+### Verify optional Codex SDK with uv
+
+The Codex public API test uses
+`pytest.importorskip("openai_codex")`. A passing complete suite may
+therefore have **skipped** this test when the optional dependency is absent.
+The following is a distinct required acceptance check, with import and
+pinned-version preconditions that cannot silently skip:
 
 ```bash
-bash scripts/m52b-closure-check.sh
+source .venv/bin/activate
+uv pip install -e ".[dev,codex]"
+bash scripts/m52b-codex-sdk-contract-check.sh
 ```
 
-Capture and attach: `git rev-parse HEAD`, `python --version`, the full
-terminal output and process exit code. Follow up separately with the SDK
-contract workflow in a provisioned environment (the optional Codex SDK
-dependency is pinned in `pyproject.toml`). Re-run or inspect the GitHub
-Actions jobs once runners/logging are available. **Do not equate empty job
-steps or absent logs with passed tests.**
+Record the tested SHA, Python and pytest versions, explicit pass/fail/skip
+summary and exit code. This contract test is separate from remote Codex worker
+acceptance and does not exercise a live worker.
 
-### Manual review / destructive-state checklist
+## Architecture invariants for ADR acceptance
 
-1. Confirm new projects default to `optional` without silently upgrading old
-   persisted configs, and `required` rejects missing input/write evidence.
-2. Confirm planning, start, resume, recovery and verification reject policy
-   drift, catalog-source changes and unauthorized scope mutation.
-3. Confirm only one canonical/legacy authority can exist; incomplete,
-   malformed or tampered journals block all ordinary execution.
-4. Inject crashes before canonical write, during dual-file state and before
-   receipt; recover only exact recorded source/target states.
-5. Confirm v1 review/request/receipt and ExecutionInput artifacts remain
-   readable for audit but never authorize new canonical policy mutation.
-6. Confirm the full suite, schema export and git hygiene checks pass without
-   disabling any historical tests.
+- Exactly one human-managed canonical or validated legacy scope authority.
+  Both present, malformed files, symlinks and pending/tampered journals fail closed.
+- Scope `optional` preserves backward-compatible serial planning.
+  `required` refuses unscoped work; parallel planning requires scope in both.
+- ExecutionInputManifest v2 binds selected policy and source identity across
+  prepare, worker start/resume, recovery and independent verification.
+  Historical v1 artifacts retain their own parser/digest semantics.
+- Human digest approval is content-bound (not cryptographic identity);
+  v1 review/request/receipt evidence is audit-only for canonical mutations.
+- Migration requires explicit human action, durable source/target evidence,
+  exact recovery states, and subsequent human Git commit. It is not a
+  multi-file atomic transaction.
+- Shared execution-authority locking serializes adoption and new run
+  admission; derived discovery/Graphify does not grant write authority.
 
-## Residual limitations to acknowledge
+## Residual limitations
 
-- The two-file migration is **not** a single atomic filesystem transaction.
-  Journaled crash recovery, not atomic rename of both files, provides
-  consistency. Directory `fsync` behavior may differ across platforms.
-- Exact review-digest confirmation is operator content approval, **not**
-  cryptographic human identity. Direct human edits lie outside ProjectCTL's
-  execution-authority lock, but their freshness must be checked.
-- M5 local adoption/migration evidence is stored in `.projectctl/` and is not
-  automatically repository-portable attestation.
-- Historical ParallelPlan and ExecutionInput evidence cannot be silently
-  reinterpreted under a newer governance policy.
-- Running the full tests alone is not enough: actual observed success and
-  architecture sign-off are mandatory.
+- Cross-platform directory fsync/power-loss durability differs. Local test
+  success does not establish filesystem-wide transactional guarantees.
+- External direct file edits are outside application-held locks and require
+  freshness checks. Local `.projectctl/` journals are not portable signing.
+- A successful suite verifies coded contracts, not all operational
+  environments, live Codex worker behavior or GitHub Actions availability.
 
-## Decision after acceptance
+## Milestone promotion rule
 
-Only **after** all gates are backed by real evidence: accept the final form of
-ADR-038, update the canonical `docs/PROJECT_STATE.yaml` to the selected next
-milestone, update release notes and version according to release policy, and
-prepare the post-M5.2 architecture closure. Until then, leave M5.2b active and
-this hardening PR in Draft status.
+Do **not** change `docs/PROJECT_STATE.yaml`, tag a release, or claim
+ADR-038 accepted solely because this report has a local pass.
+Final acceptance additionally needs: explicit SDK evidence or documented
+exception, CI failure disposition, ADR decision review and a human-selected
+next roadmap direction. The implementation can be described accurately as
+**merged and locally regression-tested**, while the milestone remains active.
 
-Reference: `docs/architecture/M5_2B_IMPLEMENTATION_PLAN.md`,
+See `docs/architecture/M5_2B_IMPLEMENTATION_PLAN.md`,
 `docs/architecture/M5_2B_SCOPE_MIGRATION.md`,
-`docs/architecture/POST_M5_ARCHITECTURE_REVIEW.md`.
+`docs/architecture/POST_M5_ARCHITECTURE_REVIEW.md` and ADR-038.
