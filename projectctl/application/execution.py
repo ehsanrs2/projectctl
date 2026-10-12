@@ -792,8 +792,13 @@ def _load_admitted_execution_contract(
         raise RunStoreError(
             "M4.2a run is missing execution input or claim-transition evidence."
         )
-    execution_input = load_execution_input(input_path)
-    transition = load_claim_transition(transition_path)
+    try:
+        execution_input = load_execution_input(input_path)
+        transition = load_claim_transition(transition_path)
+    except ConfigurationError as exc:
+        raise RunStoreError(
+            "Malformed execution scope or claim evidence prevents worker admission."
+        ) from exc
     if execution_input_semantic_digest(execution_input) != expected:
         raise RunStoreError(
             "ExecutionInputManifest semantic digest no longer matches ExecutionPlan."
