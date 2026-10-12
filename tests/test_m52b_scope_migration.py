@@ -135,7 +135,7 @@ def test_dual_file_crash_state_is_fail_closed_then_recoverable(tmp_path, monkeyp
 
     assert (root / "projectctl.scope.yaml").exists()
     assert (root / "projectctl.parallel.yaml").exists()
-    with pytest.raises(ConfigurationError, match="Both"):
+    with pytest.raises(ConfigurationError, match="Pending/ambiguous"):
         resolve_execution_scope_catalog(root)
     assert len(_pending_journals(root)) == 1
 
@@ -165,6 +165,8 @@ def test_crash_after_legacy_retirement_is_recoverable(tmp_path, monkeypatch):
     assert not (root / "projectctl.parallel.yaml").exists()
     assert (root / "projectctl.scope.yaml").exists()
     assert len(_pending_journals(root)) == 1
+    with pytest.raises(ConfigurationError, match="Pending/ambiguous"):
+        resolve_execution_scope_catalog(root)
     receipt = migration.apply_scope_migration(root, recover=True)
     assert receipt["applied"] is True
 
@@ -234,10 +236,49 @@ def test_historical_review_request_and_receipt_schemas_are_preserved():
     assert PUBLIC_SCHEMAS["context-scope-review.v2.schema.json"] is ContextScopeReview
     assert PUBLIC_SCHEMAS["context-scope-adoption-request.v1.schema.json"] is ContextScopeAdoptionRequestV1
     assert PUBLIC_SCHEMAS["context-scope-adoption-receipt.v1.schema.json"] is ContextScopeAdoptionReceiptV1
-    assert parse_context_scope_review({"schema_version": 3}) if False else True
     with pytest.raises(ValueError, match="Unsupported"):
         parse_context_scope_review({"schema_version": 3})
     with pytest.raises(ValueError, match="Unsupported"):
         parse_context_scope_adoption_request({"schema_version": 3})
     with pytest.raises(ValueError, match="Unsupported"):
         parse_context_scope_adoption_receipt({"schema_version": 3})
+
+
+def test_v1_review_can_be_read_but_not_adopted_into_new_catalog(tmp_path):
+    from datetime import datetime, timezone
+    from projectctl.core.digest import digest
+    from projectctl.context.adoption import adopt_scope_review, _load_review
+
+    root = repo(tmp_path)
+    old = ContextScopeReviewV1(
+        review_id="legacy-review",
+        created_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        project_id="demo",
+        task_id="task-a",
+        integration_target_ref="main",
+        base_commit="a" * 40,
+        task_digest="task",
+        discovery_digest="discovery",
+        suggestion_id="suggestion",
+        suggestion_digest="suggestion-digest",
+        suggestion_artifact=".projectctl/context/suggestions/task-a/suggestion.json",
+        catalog_before_present=True,
+        catalog_before_digest="before",
+        proposed_scope={
+            "task_id": "task-a",
+            "inputs": [{"path": "src/app.py"}],
+            "writes": [{"path": "src/app.py"}],
+        },
+        proposed_catalog_digest="after",
+        proposed_catalog_yaml="schema_kind: projectctl.parallel_scope_catalog\\n",
+    )
+    path = root / ".projectctl" / "context" / "reviews" / "task-a" / "legacy-review.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(old.model_dump(mode="json")), encoding="utf-8")
+    assert isinstance(_load_review(path), ContextScopeReviewV1)
+    with pytest.raises(ConfigurationError, match="audit-only"):
+        adopt_scope_review(
+            root, "task-a",
+            review_id=old.review_id,
+            approval_digest=digest(old),
+        )
