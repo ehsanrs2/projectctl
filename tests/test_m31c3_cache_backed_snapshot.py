@@ -10,7 +10,7 @@ from projectctl.integrations.github.client import GitHubIssuesClient
 from projectctl.integrations.github.task_store import GitHubIssuesTaskStore
 from projectctl.project.loader import load_project_config
 from projectctl.schema_export import PUBLIC_SCHEMAS
-from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3, ProjectConfigV4, ProjectConfigV5, ProjectConfigV6, ProjectConfigV7
+from projectctl.schemas.config import ProjectConfig, ProjectConfigV1, ProjectConfigV2, ProjectConfigV3, ProjectConfigV4, ProjectConfigV5, ProjectConfigV6, ProjectConfigV7, ProjectConfigV8, ProjectConfigV9
 
 
 def issue(number: int):
@@ -227,7 +227,7 @@ def test_successful_issue_mutation_invalidates_repository_cache(tmp_path: Path):
     ]
 
 
-def test_project_config_v2_upgrades_to_v8_with_explicit_cache_policy(tmp_path: Path):
+def test_project_config_v2_upgrades_to_v10_with_explicit_cache_policy(tmp_path: Path):
     ctl = tmp_path / ".projectctl"
     ctl.mkdir()
     (ctl / "config.yaml").write_text(
@@ -248,7 +248,8 @@ def test_project_config_v2_upgrades_to_v8_with_explicit_cache_policy(tmp_path: P
 
     config = load_project_config(tmp_path)
 
-    assert config.schema_version == 8
+    assert config.schema_version == 10
+    assert config.scope_governance.mode == "optional"
     assert config.task_store.provider == "github"
     assert config.task_store.repository == "acme/widget"
     assert config.task_store.team is None
@@ -278,7 +279,9 @@ def test_project_config_contract_is_additively_versioned():
     assert PUBLIC_SCHEMAS["project-config.v5.schema.json"] is ProjectConfigV5
     assert PUBLIC_SCHEMAS["project-config.v6.schema.json"] is ProjectConfigV6
     assert PUBLIC_SCHEMAS["project-config.v7.schema.json"] is ProjectConfigV7
-    assert PUBLIC_SCHEMAS["project-config.v8.schema.json"] is ProjectConfig
+    assert PUBLIC_SCHEMAS["project-config.v8.schema.json"] is ProjectConfigV8
+    assert PUBLIC_SCHEMAS["project-config.v9.schema.json"] is ProjectConfigV9
+    assert PUBLIC_SCHEMAS["project-config.v10.schema.json"] is ProjectConfig
     assert ProjectConfigV1.model_fields["schema_version"].default == 1
     assert ProjectConfigV2.model_fields["schema_version"].default == 2
     assert ProjectConfigV3.model_fields["schema_version"].default == 3
@@ -286,7 +289,9 @@ def test_project_config_contract_is_additively_versioned():
     assert ProjectConfigV5.model_fields["schema_version"].default == 5
     assert ProjectConfigV6.model_fields["schema_version"].default == 6
     assert ProjectConfigV7.model_fields["schema_version"].default == 7
-    assert ProjectConfig.model_fields["schema_version"].default == 8
+    assert ProjectConfigV8.model_fields["schema_version"].default == 8
+    assert ProjectConfigV9.model_fields["schema_version"].default == 9
+    assert ProjectConfig.model_fields["schema_version"].default == 10
 
 
 def test_capture_task_snapshot_forwards_explicit_freshness_override(
