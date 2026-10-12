@@ -1,12 +1,12 @@
 schema_kind: projectctl.project_state
 schema_version: 1
 project_id: projectctl
-current_goal: Promote the human-managed task scope contract into a generic execution-scope policy and make serial scope governance explicit without silently breaking existing projects.
+current_goal: Design and implement a deterministic, read-only trace and evaluation export over existing ProjectCTL run and verification evidence, preserving all human-managed execution authority and avoiding new worker privileges.
 active_milestone:
-  id: M5.2b
-  title: General Execution Scope Policy & Enforcement Mode
+  id: M6.0
+  title: Read-only Trace & Evaluation Export
   aliases:
-    - Execution Scope Policy
-    - Scope Governance Mode
-    - Generic Scope Catalog
+    - Execution Trace Export
+    - Evaluation Evidence Export
+    - Read-only Run Observability
 updated_at: null
