@@ -1681,17 +1681,34 @@ Implemented foundation and enforcement contracts:
 
 See `docs/architecture/M5_2B_CLOSURE_AUDIT.md`, `docs/architecture/POST_M5_2_ARCHITECTURE_REVIEW.md`, `docs/architecture/M5_2B_SCOPE_MIGRATION.md` and accepted ADR-038.
 
-### Later product directions
+### M6.0 — Read-only Trace & Evaluation Export
 
-The owner selected **M6.0 — Read-only Trace & Evaluation Export**, as recorded in the accepted Post-M5.2 architecture review. The active goal is defined only by `docs/PROJECT_STATE.yaml`; an M6-specific design ADR remains Proposed until accepted.
+**Active design milestone — roadmap selected, implementation not started.**
 
-Deferred product directions (not current M6.0 scope):
+M6.0 produces a reproducible, local-only, redacted view derived from the
+existing authoritative RunStore, ExecutionInputManifest, VerificationManifest,
+EvidenceManifest and integration/delivery evidence. The export is always
+**non-authoritative**; it cannot change claim, scheduling, scope governance,
+verification, task completion or worker permissions. Historical schemas must
+be interpreted using their own versioned contracts; unsupported or missing
+evidence is explicit, never inferred as success.
+
+Design proposal: `docs/decisions/ADR-039-read-only-execution-trace-export.md`
+(**Proposed**). Bounded milestone gates:
+`docs/architecture/M6_0_IMPLEMENTATION_PLAN.md`.
+
+The active goal is set only in `docs/PROJECT_STATE.yaml`; the current package
+version remains `0.41.0` pending a separate release decision.
+
+### Deferred product directions
+
+The owner selected M6.0 after the accepted Post-M5.2 review. Other roadmap
+candidates remain deferred and are not implied by the active milestone:
 
 - broader language-aware context discovery
 - additional worker providers
 - governed skills registry and supply-chain policy
 - first-class Research / Hypothesis / Experiment / Evidence / Decision flows
-- richer evaluation and trace export
 - Obsidian or another human cockpit as a non-authoritative UI
 - multi-agent orchestration only after safe concurrency semantics are proven
 
