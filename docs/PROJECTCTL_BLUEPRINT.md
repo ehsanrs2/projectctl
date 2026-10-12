@@ -1683,6 +1683,11 @@ See `docs/architecture/M5_2B_CLOSURE_AUDIT.md`, `docs/architecture/M5_2B_SCOPE_M
 
 ### Later product directions
 
+A non-binding closure review and comparison of next product directions is recorded in
+`docs/architecture/POST_M5_2_ARCHITECTURE_REVIEW.md`. It proposes read-only
+trace/evaluation export as a candidate; no next milestone has been selected,
+and `docs/PROJECT_STATE.yaml` remains authoritative.
+
 Retained after M5.2 closure:
 
 - broader language-aware context discovery
