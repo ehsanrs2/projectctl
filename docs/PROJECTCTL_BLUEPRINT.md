@@ -1666,7 +1666,7 @@ See ADR-037.
 
 ### M5.2b — General Execution Scope Policy & Enforcement Mode
 
-**Active milestone — Slices A–C merged; final test evidence and architecture acceptance remain outstanding.**
+**Active milestone — Slices A–D and follow-up regression fixes merged; operator-reported local full-suite/closure checks passed. SDK/CI and architecture acceptance remain outstanding.**
 
 Implemented foundation and enforcement contracts:
 
@@ -1677,7 +1677,7 @@ Implemented foundation and enforcement contracts:
 - Context Discovery resolves effective scope using the same authority resolver. New `ContextScopeReview/AdoptionRequest/AdoptionReceipt v2` targets only the canonical file; v1 approval records remain audit-only.
 - `projectctl.scope.yaml` and `projectctl.parallel.yaml` are human-managed worker-protected paths.
 
-**Open gate:** the Slice D hardening patch for migration receipt-integrity checks, actual local test execution (including historical contracts and failure injection), review of CI failures and final architecture sign-off. Do not promote `docs/PROJECT_STATE.yaml` or ADR-038 to completed/accepted before those checks are evidenced.
+**Open gate:** The hardening and regression code is merged, and user-reported local full-suite/closure checks pass on a Git tree identical to the current main commit. A separate pinned Codex SDK import/contract gate, investigation or documented disposition of failing GitHub Actions, formal ADR-038 acceptance and next roadmap selection remain open. Do not promote `docs/PROJECT_STATE.yaml` or mark ADR-038 accepted before these gates are evidenced.
 
 See `docs/architecture/M5_2B_CLOSURE_AUDIT.md`, `docs/architecture/M5_2B_SCOPE_MIGRATION.md` and ADR-038 (proposed).
 
