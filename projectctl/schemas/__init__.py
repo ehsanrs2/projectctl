@@ -14,6 +14,9 @@ from projectctl.schemas.context_adoption import (
     ContextScopeAdoptionReceipt,
     ContextScopeAdoptionRequest,
     ContextScopeReview,
+    ContextScopeAdoptionReceiptV1,
+    ContextScopeAdoptionRequestV1,
+    ContextScopeReviewV1,
 )
 from projectctl.schemas.context_discovery import (
     ContextDiscoveryEvidence,
@@ -136,6 +139,9 @@ __all__ = [
     "ContextPathCandidate",
     "ContextScopeSuggestion",
     "ContextScopeReview",
+    "ContextScopeReviewV1",
+    "ContextScopeAdoptionRequestV1",
+    "ContextScopeAdoptionReceiptV1",
     "ContextScopeAdoptionRequest",
     "ContextScopeAdoptionReceipt",
     "ContextManifestV1",
