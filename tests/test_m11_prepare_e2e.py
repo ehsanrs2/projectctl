@@ -186,6 +186,17 @@ def test_prepare_and_abort_use_durable_run_state_and_external_worktree(
         "projectctl.application.execution._claimer",
         lambda root: claimer,
     )
+    # The run lifecycle here uses a fake Beads claimer and a prebuilt plan;
+    # avoid requiring the real bd executable or live quota/task provider.
+    # Dedicated preflight tests still exercise their production guards.
+    monkeypatch.setattr(
+        "projectctl.application.execution._assert_task_store_execution_capable",
+        lambda root: None,
+    )
+    monkeypatch.setattr(
+        "projectctl.application.execution._prepare_quota_reason",
+        lambda root, task_id: None,
+    )
 
     prepared = runner.invoke(
         app,

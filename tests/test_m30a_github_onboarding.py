@@ -112,7 +112,8 @@ def test_inspection_and_adoption_pin_github_repository(tmp_path: Path, monkeypat
     config = load_project_config(repo)
     assert config.task_store.provider == "github"
     assert config.task_store.repository == "acme/widget"
-    assert config.schema_version == 8
+    assert config.schema_version == 10
+    assert config.scope_governance.mode == "optional"
     assert config.task_store.team is None
     assert config.task_store.cache_max_age_seconds == 30
     assert config.code_transport.mode == "git_remote"
