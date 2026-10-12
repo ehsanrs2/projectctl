@@ -2256,4 +2256,4 @@ See ADR-029 through ADR-037, `docs/architecture/POST_M4_ARCHITECTURE_REVIEW.md`,
 
 Next:
 
-- **Post-M5.2 closure review:** Codex SDK contract, CI disposition, ADR-038 acceptance and explicit selection of the next major product direction.
+- **Post-M5.2 architecture decision:** local regression and pinned SDK tests have passed, and the owner has documented GitHub Actions quota exhaustion. Review the non-binding direction analysis in `docs/architecture/POST_M5_2_ARCHITECTURE_REVIEW.md`, then explicitly accept ADR-038, choose the next active goal and decide release/version policy in a separate change.
