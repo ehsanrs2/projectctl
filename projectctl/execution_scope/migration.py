@@ -242,7 +242,7 @@ def _resume_request(root: Path, child: Path, request: dict) -> dict:
         old.unlink()
         _fsync_dir(root)
 
-    effective = resolve_execution_scope_catalog(root)
+    effective = resolve_execution_scope_catalog(root, allow_pending_migration=True)
     if (
         effective.source != "canonical"
         or effective.raw_bytes != new_bytes
