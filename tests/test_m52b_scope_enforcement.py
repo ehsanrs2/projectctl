@@ -287,3 +287,27 @@ def test_new_manifest_schema_cannot_omit_governance_fields(tmp_path):
     payload["schema_version"] = 100
     with pytest.raises(ValueError, match="Unsupported"):
         parse_execution_input_manifest(payload)
+
+
+def test_required_scope_blocks_legacy_worker_start_and_direct_context(tmp_path):
+    from types import SimpleNamespace
+    from projectctl.application.execution import _load_admitted_execution_contract
+    from projectctl.context.assembler import assemble_context
+
+    root = tmp_path / "repo"
+    _init(root, mode="required")
+    legacy_plan = SimpleNamespace(execution_input_digest=None)
+    with pytest.raises(StaleSnapshotError, match="Legacy run"):
+        _load_admitted_execution_contract(root, root, legacy_plan)
+    with pytest.raises(ConfigurationError, match="unscoped WorkerRequest"):
+        assemble_context(
+            root,
+            worktree=root,
+            run_id="run-test",
+            plan=None,
+            strategy=None,
+            context_manifest_path=".projectctl/runs/run-test/context-manifest.json",
+        )
+
+    _set_policy(root, "optional")
+    assert _load_admitted_execution_contract(root, root, legacy_plan) == (None, None)
