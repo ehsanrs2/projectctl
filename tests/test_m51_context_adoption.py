@@ -709,7 +709,7 @@ def test_v2_review_preserves_exact_proposed_yaml_through_durable_roundtrip(
     review = _review(root, monkeypatch)
     expected = review.proposed_catalog_yaml.encode("utf-8")
 
-    assert expected.endswith(b"\\n")
+    assert expected.endswith(b"\n")
     assert review.proposed_catalog_digest == adoption._sha256_bytes(expected)
     review_path = (
         root / ".projectctl" / "context" / "reviews" / "TASK-1"
@@ -739,11 +739,11 @@ def test_v2_review_keeps_original_before_yaml_including_comments_and_newlines(
 ):
     root = _repo(tmp_path)
     before = (
-        "# human-approved file, including trailing whitespace\\n"
-        "schema_kind: projectctl.execution_scope_catalog\\n"
-        "schema_version: 1\\n"
-        "tasks: {}\\n"
-        "\\n"
+        "# human-approved file, including trailing whitespace\n"
+        "schema_kind: projectctl.execution_scope_catalog\n"
+        "schema_version: 1\n"
+        "tasks: {}\n"
+        "\n"
     )
     catalog = root / "projectctl.scope.yaml"
     catalog.write_text(before, encoding="utf-8")
@@ -752,7 +752,7 @@ def test_v2_review_keeps_original_before_yaml_including_comments_and_newlines(
     assert review.catalog_before_digest == adoption._sha256_bytes(
         before.encode("utf-8")
     )
-    assert review.proposed_catalog_yaml.endswith("\\n")
+    assert review.proposed_catalog_yaml.endswith("\n")
     persisted = adoption._load_review(
         root / ".projectctl" / "context" / "reviews" / "TASK-1"
         / f"{review.review_id}.json"
