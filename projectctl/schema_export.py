@@ -51,6 +51,7 @@ from projectctl.schemas.execution import (
 from projectctl.schemas.execution_input import (
     ClaimTransitionEvidence,
     ExecutionInputManifest,
+    ExecutionInputManifestV1,
 )
 from projectctl.schemas.jira_lifecycle import JiraLifecycleMarker
 from projectctl.schemas.integration import (
@@ -185,7 +186,8 @@ PUBLIC_SCHEMAS = {
     "context-manifest.v1.schema.json": ContextManifestV1,
     "context-manifest.v2.schema.json": ContextManifestV2,
     "context-manifest.v3.schema.json": ContextManifest,
-    "execution-input-manifest.v1.schema.json": ExecutionInputManifest,
+    "execution-input-manifest.v1.schema.json": ExecutionInputManifestV1,
+    "execution-input-manifest.v2.schema.json": ExecutionInputManifest,
     "claim-transition-evidence.v1.schema.json": ClaimTransitionEvidence,
     "execution-plan.v1.schema.json": ExecutionPlanV1,
     "execution-plan.v2.schema.json": ExecutionPlanV2,
