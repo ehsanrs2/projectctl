@@ -13,7 +13,7 @@ from projectctl.application.tasks import capture_task_snapshot
 from projectctl.core.digest import digest
 from projectctl.core.errors import ConfigurationError, StaleSnapshotError
 from projectctl.core.time import utc_now
-from projectctl.parallel.catalog import PARALLEL_SCOPE_PATH, load_parallel_scope_catalog
+from projectctl.execution_scope.catalog import resolve_execution_scope_catalog
 from projectctl.project.loader import load_project_config
 from projectctl.project.state import load_project_state, semantic_project_state_digest
 from projectctl.scheduler.digests import (
@@ -25,6 +25,8 @@ from projectctl.schemas.execution_input import (
     ExecutionCodeInput,
     ExecutionInputLineage,
     ExecutionInputManifest,
+    ExecutionInputManifestV1,
+    parse_execution_input_manifest,
     ExecutionPathScope,
     ExecutionTaskInput,
 )
@@ -152,8 +154,7 @@ def execution_code_input_digest(
 
 def execution_input_semantic_digest(manifest: ExecutionInputManifest) -> str:
     """Digest execution-invalidating inputs, excluding scheduler audit/time identity."""
-    return digest(
-        {
+    material = {
             "project_id": manifest.project_id,
             "task_id": manifest.task_id,
             "integration_target_ref": manifest.integration_target_ref,
@@ -184,15 +185,16 @@ def execution_input_semantic_digest(manifest: ExecutionInputManifest) -> str:
                 else None
             ),
         }
-    )
+    if manifest.schema_version == 2:
+        material["scope_governance_mode"] = manifest.scope_governance_mode
+        material["scope_catalog_source"] = manifest.scope_catalog_source
+    return digest(material)
 
 
-def _optional_scope(root: Path, task_id: str):
-    path = root / PARALLEL_SCOPE_PATH
-    if not path.exists():
-        return None
-    catalog = load_parallel_scope_catalog(root)
-    return catalog.tasks.get(task_id)
+def _resolved_scope(root: Path, task_id: str):
+    resolved = resolve_execution_scope_catalog(root)
+    scope = resolved.catalog.tasks.get(task_id) if resolved.catalog is not None else None
+    return resolved, scope
 
 
 def _task_inputs(snapshot: TaskSnapshot, ids: list[str]) -> list[ExecutionTaskInput]:
@@ -242,7 +244,19 @@ def build_execution_input_manifest(
         raise ConfigurationError(f"Selected task {task_id!r} is missing.")
 
     scoped_digest, scoped_ids = semantic_task_scope_digest(tasks, task_id)
-    scope = explicit_scope if explicit_scope is not None else _optional_scope(root, task_id)
+    config = load_project_config(root)
+    resolved, scope = _resolved_scope(root, task_id)
+    if explicit_scope is not None and (
+        scope is None or digest(explicit_scope) != digest(scope)
+    ):
+        raise ConfigurationError(
+            "Explicit execution scope must match the current human-managed task authority."
+        )
+    if config.scope_governance.mode == "required" and scope is None:
+        raise ConfigurationError(
+            f"Task {task_id!r} has no human-managed execution scope; "
+            "scope_governance.mode=required prevents new run admission."
+        )
     code_inputs: list[ExecutionCodeInput] = []
     write_scopes: list[ExecutionPathScope] = []
     resources: list[str] = []
@@ -282,6 +296,8 @@ def build_execution_input_manifest(
         write_scopes=write_scopes,
         resources=resources,
         scope_policy_digest=scope_policy_digest,
+        scope_governance_mode=config.scope_governance.mode,
+        scope_catalog_source=resolved.source,
         created_at=now,
     )
 
@@ -296,7 +312,7 @@ def persist_claim_transition(path: Path, evidence: ClaimTransitionEvidence) -> N
 
 def load_execution_input(path: Path) -> ExecutionInputManifest:
     try:
-        return ExecutionInputManifest.model_validate(
+        return parse_execution_input_manifest(
             json.loads(path.read_text(encoding="utf-8"))
         )
     except Exception as exc:
@@ -312,15 +328,47 @@ def load_claim_transition(path: Path) -> ClaimTransitionEvidence:
         raise ConfigurationError(f"Invalid claim transition evidence {path}: {exc}") from exc
 
 
-def _validate_project_base_and_scope(
+def validate_execution_scope_authority(
     root: Path,
-    manifest: ExecutionInputManifest,
-    *,
-    require_target_at_base: bool,
-) -> TaskSnapshot:
+    manifest: ExecutionInputManifest | ExecutionInputManifestV1,
+) -> None:
+    """Check current human authority, without consulting the task provider.
+
+    Used by preclaim/admitted checks and independent verification.
+    """
     config = load_project_config(root)
     if config.project.id != manifest.project_id:
         raise StaleSnapshotError("Execution input project identity changed.")
+    resolved, scope = _resolved_scope(root, manifest.task_id)
+    if manifest.schema_version == 1:
+        if config.scope_governance.mode == "required":
+            raise StaleSnapshotError(
+                "Historical v1 execution input cannot prove required scope governance."
+            )
+    else:
+        if config.scope_governance.mode != manifest.scope_governance_mode:
+            raise StaleSnapshotError("Execution scope governance mode changed.")
+        if resolved.source != manifest.scope_catalog_source:
+            raise StaleSnapshotError("Execution scope catalog authority changed.")
+        if config.scope_governance.mode == "required" and scope is None:
+            raise StaleSnapshotError("Required task execution scope is missing.")
+
+    if manifest.scope_policy_digest is None:
+        if scope is not None:
+            raise StaleSnapshotError(
+                "A task scope declaration appeared after execution planning."
+            )
+    elif scope is None or digest(scope) != manifest.scope_policy_digest:
+        raise StaleSnapshotError("Execution scope declaration changed.")
+
+
+def _validate_project_base_and_scope(
+    root: Path,
+    manifest: ExecutionInputManifest | ExecutionInputManifestV1,
+    *,
+    require_target_at_base: bool,
+) -> TaskSnapshot:
+    validate_execution_scope_authority(root, manifest)
 
     if require_target_at_base:
         from projectctl.git import resolve_commit
@@ -331,16 +379,6 @@ def _validate_project_base_and_scope(
     state = load_project_state(root, allow_missing=True)
     if semantic_project_state_digest(state) != manifest.project_state_digest:
         raise StaleSnapshotError("Execution input project state changed.")
-
-    scope = _optional_scope(root, manifest.task_id)
-    if manifest.scope_policy_digest is None:
-        if scope is not None:
-            raise StaleSnapshotError(
-                "A task scope declaration appeared after execution planning."
-            )
-    else:
-        if scope is None or digest(scope) != manifest.scope_policy_digest:
-            raise StaleSnapshotError("Execution scope declaration changed.")
 
     current_code_inputs = [
         ExecutionCodeInput(
