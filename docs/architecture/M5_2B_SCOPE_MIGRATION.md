@@ -1,6 +1,6 @@
 # M5.2b Slice C — Scope migration and canonical reviewed adoption
 
-**Status:** Slice C merged in PR #47; Slice D receipt-integrity hardening and final test evidence still pending. This is not milestone closure.
+**Status:** Slice C, Slice D receipt-integrity hardening and follow-up regression fixes are merged. Operator-reported local full-suite and closure checks pass on PR #50's main-equivalent tree. SDK/CI and formal milestone acceptance remain outstanding.
 
 ## Operator workflow
 
@@ -75,5 +75,5 @@ Inspect failure injection at each transition and verify that no worker starts
 against an incomplete migration. GitHub Actions not starting is **not** passing
 test evidence.
 
-See proposed ADR-038 and `docs/architecture/M5_2B_IMPLEMENTATION_PLAN.md`.
+See proposed ADR-038, `docs/architecture/M5_2B_CLOSURE_AUDIT.md` and `docs/architecture/M5_2B_IMPLEMENTATION_PLAN.md`.
 M5.2b cannot be marked complete until Slice D test and architecture gates pass.
