@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import AwareDatetime, Field
+from pydantic import AwareDatetime, Field, StringConstraints
 
 from projectctl.schemas.base import ProjectCtlModel
 from projectctl.schemas.config import RepoRelativePath
@@ -99,6 +99,15 @@ class ContextScopeReview(ContextScopeReviewV1):
     schema_version: Literal[2] = 2
     catalog_path: Literal["projectctl.scope.yaml"] = "projectctl.scope.yaml"
     proposed_scope: ExecutionTaskScope
+    # Scope review is byte-bound authority: global ProjectCtlModel's
+    # str_strip_whitespace=True would silently remove the final YAML newline,
+    # breaking exact proposed-catalog validation and the approval digest.
+    proposed_catalog_yaml: Annotated[
+        str, StringConstraints(strip_whitespace=False)
+    ] = Field(min_length=1)
+    catalog_before_yaml: Annotated[
+        str, StringConstraints(strip_whitespace=False)
+    ] | None = None
 
 
 class ContextScopeAdoptionRequest(ContextScopeAdoptionRequestV1):
