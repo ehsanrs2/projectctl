@@ -109,6 +109,7 @@ def portfolio_decision(
 def turn_result(run_id, action="admit_task", status=RunStatus.VERIFYING):
     return SimpleNamespace(
         run_id=run_id,
+        action=action,
         run_status=status,
         project_turn=SimpleNamespace(
             envelope=SimpleNamespace(
