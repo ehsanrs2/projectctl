@@ -1,6 +1,6 @@
 # M5.2b — Implementation and Acceptance Plan
 
-Status: **Design proposal / no implementation changes yet**
+Status: **Slices A–C merged; Slice D validation and architecture sign-off pending.**
 Baseline: `main@8dd6a53d8f71bac353c48803587ee9fa690d7e4c`
 Required review: proposed `docs/decisions/ADR-038-general-execution-scope-governance.md`
 Authority: `docs/PROJECT_STATE.yaml` is the *only* active-milestone authority; this document is a bounded design/acceptance plan, not a second roadmap.
@@ -96,4 +96,4 @@ Authority: `docs/PROJECT_STATE.yaml` is the *only* active-milestone authority; t
 - **Gate D:** Verified migration/adoption and deterministic crash handling.
 - **Gate E:** Local test evidence, documentation consistency, and Post-M5.2 closure review.
 
-This plan does not authorize merging, production deployment, or automation outside the accepted gates.
+This plan does not authorize production deployment or milestone promotion outside the accepted gates. M5.2b's merged implementation still requires the evidence recorded in `docs/architecture/M5_2B_CLOSURE_AUDIT.md`.
