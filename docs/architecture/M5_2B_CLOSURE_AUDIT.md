@@ -1,6 +1,6 @@
 # M5.2b — Slice D closure and architecture acceptance audit
 
-**Status: LOCAL REGRESSION AND PINNED CODEX SDK CONTRACT GATES PASSED; CI AND FORMAL ARCHITECTURE ACCEPTANCE OPEN.**
+**Status: LOCAL REGRESSION AND PINNED CODEX SDK CONTRACT GATES PASSED; GITHUB ACTIONS QUOTA BLOCK DOCUMENTED; FORMAL ARCHITECTURE ACCEPTANCE OPEN.**
 
 This document is a recorded evidence review, not a second source of
 milestone authority. `docs/PROJECT_STATE.yaml` continues to name M5.2b
@@ -53,7 +53,7 @@ and is not a substitute for green GitHub CI or formal architecture acceptance.
 | Migration crash windows, receipt-integrity, and historical adoption approval | Targeted migration/adoption suites | **Local pass reported** |
 | Historical schemas, config in-memory upgrades and v2 review YAML byte integrity | Complete suite including fixed v8–v10 fixtures | **Local pass reported** |
 | Public SDK contract with real pinned `openai-codex` | Operator installed the exact pinned SDK in uv and ran the non-skippable contract script | **7 local tests passed; reported** |
-| GitHub Actions test and SDK jobs | Run on PR #50 merge SHA reported completed/failure | **Not green; cause unproven** |
+| GitHub Actions test and SDK jobs | The repository owner confirms the GitHub Actions usage limit has been exhausted. Hosted CI is unavailable; local full-suite and pinned SDK tests passed separately. | **Infrastructure quota blocker (operator-confirmed); no green hosted CI run** |
 | ADR-038 architecture acceptance, docs/version release policy, next milestone | Architecture owner must approve final design and explicitly select next step | **Pending human acceptance** |
 
 ### GitHub Actions observation
@@ -63,9 +63,8 @@ The latest `main` CI run for
 [run 38241675582](https://github.com/ehsanrs2/projectctl/actions/runs/38241675582),
 `completed/failure`. Both jobs `test` and `codex-sdk-contract` are
 marked `failure`. Job metadata did not expose usable step details.
-This **does not prove** either a test regression or a runner/credits problem. The subsequent PR #51 Actions [run 38242378674](https://github.com/ehsanrs2/projectctl/actions/runs/38242378674) also reports `completed/failure`; the local SDK pass does not change that CI result.
-Resolve by obtaining the actual logs, rerunning in a provisioned CI runner
-or documenting the infrastructure blocker separately. Never label this green.
+The subsequent PR #51 Actions [run 38242378674](https://github.com/ehsanrs2/projectctl/actions/runs/38242378674) also reports `completed/failure`.
+**Operator explanation (2026-10-12):** the GitHub Actions usage quota for this account is exhausted; the owner confirms these failures are unrelated to the project code. We record this as an **operator-confirmed infrastructure/billing blocker**, not an independently established log-level cause. No job-level logs were available through the connected API. These runs remain failed in GitHub and must not be described as green. When Actions quota is restored, rerun the same revision's normal `test` and `codex-sdk-contract` jobs; until then the passing local full-suite and real-SDK results constitute the available functional verification evidence.
 
 ### Pinned Codex SDK verification with uv — completed locally
 
@@ -121,9 +120,7 @@ The SDK gate is therefore **operator-reported locally passed**, not independentl
 
 Do **not** change `docs/PROJECT_STATE.yaml`, tag a release, or claim
 ADR-038 accepted solely because this report has a local pass.
-The pinned SDK evidence is now recorded. Final acceptance still needs CI
-failure disposition, ADR decision review and a human-selected next roadmap
-direction. The implementation can be described accurately as
+The pinned SDK evidence and the operator's GitHub Actions quota-exhaustion explanation are now recorded. Hosted CI remains unavailable rather than green; future rerun is required once quota is restored. The remaining formal closure decisions are ADR-038 architecture acceptance, release/version policy, and a human-selected next roadmap direction. The implementation can be described accurately as
 **merged and locally regression-tested**, while the milestone remains active.
 
 See `docs/architecture/M5_2B_IMPLEMENTATION_PLAN.md`,
