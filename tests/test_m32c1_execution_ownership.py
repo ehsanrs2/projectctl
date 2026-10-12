@@ -280,7 +280,8 @@ def test_project_config_v4_github_migrates_to_remote_transport(tmp_path: Path):
 
     config = load_project_config(tmp_path)
 
-    assert config.schema_version == 8
+    assert config.schema_version == 10
+    assert config.scope_governance.mode == "optional"
     assert config.code_transport.mode == "git_remote"
     assert config.code_transport.remote_name == "origin"
     assert config.code_transport.remote_identity == "github.com/acme/widget"
@@ -311,7 +312,8 @@ def test_project_config_v4_linear_migrates_to_local_transport(tmp_path: Path):
 
     config = load_project_config(tmp_path)
 
-    assert config.schema_version == 8
+    assert config.schema_version == 10
+    assert config.scope_governance.mode == "optional"
     assert config.code_transport.mode == "local"
     assert config.code_delivery.mode == "local"
 
