@@ -2230,7 +2230,7 @@ See ADR-037.
 
 ### M5.2b — General Execution Scope Policy & Enforcement Mode
 
-**Active milestone — Slices A–D and regression fixes merged; local full-suite and closure tests passed on the corresponding Git tree; hosted CI unavailable due to operator-confirmed Actions quota exhaustion; architecture sign-off pending.**
+**Completed — Slices A–D and regression fixes merged; the owner-reported local regression suite and pinned Codex SDK gate passed, and ADR-038 was accepted for the M5.2b architecture. Hosted GitHub Actions remained unavailable because the owner exhausted the Actions quota; those runs are not green CI.**
 
 The canonical scope authority is `projectctl.scope.yaml` (`ExecutionScopeCatalog v1`) with task-level input/write/resource boundaries. `projectctl.parallel.yaml` is accepted only as a single valid legacy source. Simultaneous files, invalid catalogs and incomplete migration journals fail closed.
 
@@ -2247,13 +2247,13 @@ projectctl scope migrate --project /path/to/repo --recover
 
 New scope reviews and adoptions target the canonical policy and use `ContextScopeReview/AdoptionRequest/AdoptionReceipt v2`; legacy v1 approvals are audit-only. Neither discovery nor Worker suggestions create permission.
 
-**Do not treat M5.2b as accepted or released yet.** PR #50's locally tested Git tree is identical to the merge commit's tree and the user-reported full suite and closure script passed. The real pinned Codex SDK test also passed (7 tests, user-reported). The owner confirmed GitHub Actions quota exhaustion as the cause of unavailable hosted CI; this is a documented infrastructure exception, not green CI. Architecture and roadmap acceptance remain. For full evidence and exact commands see `docs/architecture/M5_2B_CLOSURE_AUDIT.md`. To verify the SDK without an optional-import skip: `uv pip install -e ".[dev,codex]"` followed by `bash scripts/m52b-codex-sdk-contract-check.sh`.
+M5.2b is **architecture-accepted, not separately released**. The full local suite and closure script passed on a tree identical to merged main; the pinned Codex SDK check also passed (7 tests). Hosted CI was blocked by owner-confirmed exhausted Actions quota and should be rerun later. For evidence see `docs/architecture/M5_2B_CLOSURE_AUDIT.md`. The package version remains `0.41.0`; no tag or publication is implied.
 
-See `docs/architecture/M5_2B_SCOPE_MIGRATION.md`, `docs/architecture/M5_2B_CLOSURE_AUDIT.md`, proposed ADR-038 and the Post-M5 architecture review.
+See `docs/architecture/M5_2B_SCOPE_MIGRATION.md`, `docs/architecture/M5_2B_CLOSURE_AUDIT.md`, accepted ADR-038 and the Post-M5.2 architecture review.
 
 See ADR-029 through ADR-037, `docs/architecture/POST_M4_ARCHITECTURE_REVIEW.md`,
 `docs/architecture/POST_M5_ARCHITECTURE_REVIEW.md`, and `docs/PROJECTCTL_BLUEPRINT.md`.
 
 Next:
 
-- **Post-M5.2 architecture decision:** local regression and pinned SDK tests have passed, and the owner has documented GitHub Actions quota exhaustion. Review the non-binding direction analysis in `docs/architecture/POST_M5_2_ARCHITECTURE_REVIEW.md`, then explicitly accept ADR-038, choose the next active goal and decide release/version policy in a separate change.
+- **M6.0 — Read-only Trace & Evaluation Export:** active design milestone. Build a versioned, deterministic, redacted, read-only view over existing execution and verification evidence, without creating new Worker or mutation authority. See `docs/PROJECT_STATE.yaml` and the proposed M6 architecture ADR.
