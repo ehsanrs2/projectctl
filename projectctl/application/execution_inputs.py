@@ -152,39 +152,41 @@ def execution_code_input_digest(
     )
 
 
-def execution_input_semantic_digest(manifest: ExecutionInputManifest) -> str:
+def execution_input_semantic_digest(
+    manifest: ExecutionInputManifest | ExecutionInputManifestV1,
+) -> str:
     """Digest execution-invalidating inputs, excluding scheduler audit/time identity."""
     material = {
-            "project_id": manifest.project_id,
-            "task_id": manifest.task_id,
-            "integration_target_ref": manifest.integration_target_ref,
-            "base_commit": manifest.base_commit,
-            "project_state_digest": manifest.project_state_digest,
-            "task_scope_digest": manifest.task_scope_digest,
-            "task_scope_ids": manifest.task_scope_ids,
-            "task_inputs": [
-                {"task_id": item.task_id, "digest": item.digest}
-                for item in manifest.task_inputs
-            ],
-            "references_digest": manifest.references_digest,
-            "code_inputs": [
-                {
-                    "scope": item.scope.model_dump(mode="json"),
-                    "digest": item.digest,
-                }
-                for item in manifest.code_inputs
-            ],
-            "write_scopes": [
-                item.model_dump(mode="json") for item in manifest.write_scopes
-            ],
-            "resources": manifest.resources,
-            "scope_policy_digest": manifest.scope_policy_digest,
-            "lineage": (
-                manifest.lineage.model_dump(mode="json")
-                if manifest.lineage is not None
-                else None
-            ),
-        }
+        "project_id": manifest.project_id,
+        "task_id": manifest.task_id,
+        "integration_target_ref": manifest.integration_target_ref,
+        "base_commit": manifest.base_commit,
+        "project_state_digest": manifest.project_state_digest,
+        "task_scope_digest": manifest.task_scope_digest,
+        "task_scope_ids": manifest.task_scope_ids,
+        "task_inputs": [
+            {"task_id": item.task_id, "digest": item.digest}
+            for item in manifest.task_inputs
+        ],
+        "references_digest": manifest.references_digest,
+        "code_inputs": [
+            {
+                "scope": item.scope.model_dump(mode="json"),
+                "digest": item.digest,
+            }
+            for item in manifest.code_inputs
+        ],
+        "write_scopes": [
+            item.model_dump(mode="json") for item in manifest.write_scopes
+        ],
+        "resources": manifest.resources,
+        "scope_policy_digest": manifest.scope_policy_digest,
+        "lineage": (
+            manifest.lineage.model_dump(mode="json")
+            if manifest.lineage is not None
+            else None
+        ),
+    }
     if manifest.schema_version == 2:
         material["scope_governance_mode"] = manifest.scope_governance_mode
         material["scope_catalog_source"] = manifest.scope_catalog_source
@@ -310,7 +312,7 @@ def persist_claim_transition(path: Path, evidence: ClaimTransitionEvidence) -> N
     _atomic_json(path, evidence)
 
 
-def load_execution_input(path: Path) -> ExecutionInputManifest:
+def load_execution_input(path: Path) -> ExecutionInputManifest | ExecutionInputManifestV1:
     try:
         return parse_execution_input_manifest(
             json.loads(path.read_text(encoding="utf-8"))
