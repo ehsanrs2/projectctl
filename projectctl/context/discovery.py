@@ -18,7 +18,7 @@ from projectctl.core.errors import ConfigurationError
 from projectctl.core.paths import resolve_inside_repo
 from projectctl.core.time import utc_now
 from projectctl.git import current_branch, resolve_commit
-from projectctl.parallel.catalog import PARALLEL_SCOPE_PATH, load_parallel_scope_catalog
+from projectctl.execution_scope.catalog import resolve_execution_scope_catalog
 from projectctl.project.loader import load_project_config
 from projectctl.scheduler.digests import semantic_task_digest
 from projectctl.schemas.context_discovery import (
@@ -782,11 +782,11 @@ def suggest_scope(
     inputs = [ExecutionPathScope(path=path, kind="exact") for path in sorted(set(input_paths))]
     writes = [ExecutionPathScope(path=path, kind="exact") for path in sorted(set(write_paths))]
 
-    declared = None
-    catalog_path = root / PARALLEL_SCOPE_PATH
-    if catalog_path.exists():
-        catalog = load_parallel_scope_catalog(root)
-        declared = catalog.tasks.get(task_id)
+    authority = resolve_execution_scope_catalog(root)
+    declared = (
+        authority.catalog.tasks.get(task_id)
+        if authority.catalog is not None else None
+    )
 
     coverage = ScopeCoverage()
     declared_digest = None
@@ -819,7 +819,7 @@ def suggest_scope(
         )
     warnings.append(
         "This scope suggestion is derived evidence only. ProjectCTL will not write "
-        "projectctl.parallel.yaml or expand execution authority from this artifact."
+        "projectctl.scope.yaml or expand execution authority from this artifact."
     )
 
     suggestion = ContextScopeSuggestion(

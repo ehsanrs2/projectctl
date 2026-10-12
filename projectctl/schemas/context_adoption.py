@@ -7,9 +7,10 @@ from pydantic import AwareDatetime, Field
 from projectctl.schemas.base import ProjectCtlModel
 from projectctl.schemas.config import RepoRelativePath
 from projectctl.schemas.parallel import ParallelTaskScope
+from projectctl.schemas.execution_scope import ExecutionTaskScope
 
 
-class ContextScopeReview(ProjectCtlModel):
+class ContextScopeReviewV1(ProjectCtlModel):
     schema_kind: Literal["projectctl.context_scope_review"] = (
         "projectctl.context_scope_review"
     )
@@ -43,7 +44,7 @@ class ContextScopeReview(ProjectCtlModel):
     warnings: list[str] = Field(default_factory=list)
 
 
-class ContextScopeAdoptionRequest(ProjectCtlModel):
+class ContextScopeAdoptionRequestV1(ProjectCtlModel):
     schema_kind: Literal["projectctl.context_scope_adoption_request"] = (
         "projectctl.context_scope_adoption_request"
     )
@@ -65,7 +66,7 @@ class ContextScopeAdoptionRequest(ProjectCtlModel):
     proposed_scope_digest: str = Field(min_length=1)
 
 
-class ContextScopeAdoptionReceipt(ProjectCtlModel):
+class ContextScopeAdoptionReceiptV1(ProjectCtlModel):
     schema_kind: Literal["projectctl.context_scope_adoption_receipt"] = (
         "projectctl.context_scope_adoption_receipt"
     )
@@ -89,3 +90,60 @@ class ContextScopeAdoptionReceipt(ProjectCtlModel):
     scope_after_digest: str = Field(min_length=1)
     adopted_scope: ParallelTaskScope
     applied: Literal[True] = True
+
+
+
+class ContextScopeReview(ContextScopeReviewV1):
+    """New canonical scope review; v1 review identity remains audit-only."""
+
+    schema_version: Literal[2] = 2
+    catalog_path: Literal["projectctl.scope.yaml"] = "projectctl.scope.yaml"
+    proposed_scope: ExecutionTaskScope
+
+
+class ContextScopeAdoptionRequest(ContextScopeAdoptionRequestV1):
+    """New canonical approval request; no v1 approval can change this policy."""
+
+    schema_version: Literal[2] = 2
+    catalog_path: Literal["projectctl.scope.yaml"] = "projectctl.scope.yaml"
+
+
+class ContextScopeAdoptionReceipt(ContextScopeAdoptionReceiptV1):
+    """Durable applied receipt for canonical scope authority."""
+
+    schema_version: Literal[2] = 2
+    catalog_path: Literal["projectctl.scope.yaml"] = "projectctl.scope.yaml"
+    adopted_scope: ExecutionTaskScope
+
+
+def _parse_versioned(raw: object, v1, v2, label: str):
+    if not isinstance(raw, dict):
+        raise ValueError(f"{label} must be an object.")
+    version = raw.get("schema_version", 1)
+    if version == 1:
+        return v1.model_validate(raw)
+    if version == 2:
+        return v2.model_validate(raw)
+    raise ValueError(f"Unsupported {label} version: {version!r}")
+
+
+def parse_context_scope_review(raw: object) -> ContextScopeReview | ContextScopeReviewV1:
+    return _parse_versioned(raw, ContextScopeReviewV1, ContextScopeReview, "scope review")
+
+
+def parse_context_scope_adoption_request(
+    raw: object,
+) -> ContextScopeAdoptionRequest | ContextScopeAdoptionRequestV1:
+    return _parse_versioned(
+        raw, ContextScopeAdoptionRequestV1, ContextScopeAdoptionRequest,
+        "scope adoption request",
+    )
+
+
+def parse_context_scope_adoption_receipt(
+    raw: object,
+) -> ContextScopeAdoptionReceipt | ContextScopeAdoptionReceiptV1:
+    return _parse_versioned(
+        raw, ContextScopeAdoptionReceiptV1, ContextScopeAdoptionReceipt,
+        "scope adoption receipt",
+    )

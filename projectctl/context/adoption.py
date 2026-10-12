@@ -18,11 +18,12 @@ from projectctl.core.errors import ConfigurationError, StaleSnapshotError
 from projectctl.core.paths import resolve_inside_repo
 from projectctl.core.time import utc_now
 from projectctl.git import resolve_commit
-from projectctl.parallel.catalog import (
-    PARALLEL_SCOPE_PATH,
-    load_parallel_scope_catalog,
-    parse_parallel_scope_catalog_bytes,
+from projectctl.execution_scope.catalog import (
+    EXECUTION_SCOPE_PATH,
+    load_execution_scope_catalog,
+    resolve_execution_scope_catalog,
 )
+from projectctl.execution_scope.migration import assert_no_pending_scope_migration
 from projectctl.project.loader import load_project_config
 from projectctl.project.locking import execution_authority_gated, project_lock
 from projectctl.scheduler.digests import semantic_task_digest
@@ -30,16 +31,16 @@ from projectctl.schemas.context_adoption import (
     ContextScopeAdoptionReceipt,
     ContextScopeAdoptionRequest,
     ContextScopeReview,
+    parse_context_scope_review,
+    parse_context_scope_adoption_request,
+    parse_context_scope_adoption_receipt,
 )
 from projectctl.schemas.context_discovery import (
     ContextDiscoveryReport,
     ContextScopeSuggestion,
 )
-from projectctl.schemas.parallel import (
-    ParallelPathScope,
-    ParallelScopeCatalog,
-    ParallelTaskScope,
-)
+from projectctl.schemas.execution_input import ExecutionPathScope
+from projectctl.schemas.execution_scope import ExecutionScopeCatalog, ExecutionTaskScope
 from projectctl.storage.runs import RunStore
 
 
@@ -53,6 +54,7 @@ _ACTIVE_RUN_STATUSES = {
     RunStatus.READY_TO_INTEGRATE,
     RunStatus.INTEGRATING,
     RunStatus.AWAITING_REVIEW,
+    RunStatus.NEEDS_DECISION,
 }
 
 
@@ -97,27 +99,25 @@ def _atomic_json(path: Path, value) -> None:
     _atomic_bytes(path, payload)
 
 
-def _catalog_path(root: Path) -> Path:
-    declared = root / PARALLEL_SCOPE_PATH
-    if declared.is_symlink():
-        raise ConfigurationError(
-            "Refusing to mutate human-managed scope authority through a symlink."
-        )
-    return resolve_inside_repo(root, PARALLEL_SCOPE_PATH, must_exist=False)
-
-
 def _catalog_state(
     root: Path,
-) -> tuple[Path, bytes | None, str, ParallelScopeCatalog]:
-    path = _catalog_path(root)
-    if not path.exists():
-        return path, None, _ABSENT_DIGEST, ParallelScopeCatalog()
-    raw = path.read_bytes()
-    catalog = parse_parallel_scope_catalog_bytes(raw)
-    return path, raw, _sha256_bytes(raw), catalog
+) -> tuple[Path, bytes | None, str, ExecutionScopeCatalog]:
+    assert_no_pending_scope_migration(root)
+    snapshot = resolve_execution_scope_catalog(root)
+    if snapshot.source == "legacy":
+        raise ConfigurationError(
+            "Legacy-only scope authority requires 'projectctl scope migrate --apply' "
+            "and a committed policy change before canonical review/adoption."
+        )
+    path = snapshot.path or resolve_inside_repo(root, EXECUTION_SCOPE_PATH, must_exist=False)
+    if snapshot.catalog is None:
+        return path, None, _ABSENT_DIGEST, ExecutionScopeCatalog()
+    raw = snapshot.raw_bytes
+    assert raw is not None
+    return path, raw, _sha256_bytes(raw), snapshot.catalog
 
 
-def _render_catalog(catalog: ParallelScopeCatalog) -> str:
+def _render_catalog(catalog: ExecutionScopeCatalog) -> str:
     payload = catalog.model_dump(mode="json")
     return yaml.safe_dump(
         payload,
@@ -130,7 +130,7 @@ def _scope_key(scope) -> tuple[str, str]:
     return scope.path, scope.kind
 
 
-def _scope_covers(existing: ParallelPathScope, candidate: ParallelPathScope) -> bool:
+def _scope_covers(existing: ExecutionPathScope, candidate: ExecutionPathScope) -> bool:
     if existing.kind == "exact":
         return candidate.kind == "exact" and existing.path == candidate.path
     base = PurePosixPath(existing.path)
@@ -142,12 +142,12 @@ def _scope_covers(existing: ParallelPathScope, candidate: ParallelPathScope) -> 
         return False
 
 
-def _merge_scopes(existing, selected) -> list[ParallelPathScope]:
-    merged: list[ParallelPathScope] = [
-        ParallelPathScope(path=item.path, kind=item.kind) for item in existing
+def _merge_scopes(existing, selected) -> list[ExecutionPathScope]:
+    merged: list[ExecutionPathScope] = [
+        ExecutionPathScope(path=item.path, kind=item.kind) for item in existing
     ]
     for item in selected:
-        candidate = ParallelPathScope(path=item.path, kind=item.kind)
+        candidate = ExecutionPathScope(path=item.path, kind=item.kind)
         if any(_scope_covers(current, candidate) for current in merged):
             continue
         merged.append(candidate)
@@ -177,7 +177,7 @@ def _suggestion_path(root: Path, task_id: str, suggestion_id: str) -> Path:
 
 def _load_review(path: Path) -> ContextScopeReview:
     try:
-        return ContextScopeReview.model_validate(
+        return parse_context_scope_review(
             json.loads(path.read_text(encoding="utf-8"))
         )
     except Exception as exc:
@@ -322,7 +322,7 @@ def create_scope_review(
             "M5.1 will not invent a write authority."
         )
 
-    proposed_scope = ParallelTaskScope(
+    proposed_scope = ExecutionTaskScope(
         task_id=task_id,
         inputs=proposed_inputs,
         writes=proposed_writes,
@@ -330,7 +330,7 @@ def create_scope_review(
     )
     tasks = dict(catalog.tasks)
     tasks[task_id] = proposed_scope
-    proposed_catalog = ParallelScopeCatalog(tasks=tasks)
+    proposed_catalog = ExecutionScopeCatalog(tasks=tasks)
     proposed_yaml = _render_catalog(proposed_catalog)
     proposed_digest = _sha256_bytes(proposed_yaml.encode("utf-8"))
 
@@ -358,7 +358,7 @@ def create_scope_review(
         if canonical_before.encode("utf-8") != raw:
             warnings.append(
                 "Applying this review will normalize YAML formatting/comments in "
-                "projectctl.parallel.yaml; inspect the rendered diff before approval."
+                "projectctl.scope.yaml; inspect the rendered diff before approval."
             )
 
     review = ContextScopeReview(
@@ -408,13 +408,13 @@ def _adoption_root(root: Path, task_id: str) -> Path:
 
 
 def _load_request(path: Path) -> ContextScopeAdoptionRequest:
-    return ContextScopeAdoptionRequest.model_validate(
+    return parse_context_scope_adoption_request(
         json.loads(path.read_text(encoding="utf-8"))
     )
 
 
 def _load_receipt(path: Path) -> ContextScopeAdoptionReceipt:
-    return ContextScopeAdoptionReceipt.model_validate(
+    return parse_context_scope_adoption_receipt(
         json.loads(path.read_text(encoding="utf-8"))
     )
 
@@ -488,7 +488,9 @@ def _assert_no_active_runs(root: Path) -> None:
 def _validate_review_before_apply(
     root: Path,
     review: ContextScopeReview,
-) -> tuple[Path, bytes | None, str, ParallelScopeCatalog]:
+) -> tuple[Path, bytes | None, str, ExecutionScopeCatalog]:
+    if review.schema_version != 2 or review.catalog_path != EXECUTION_SCOPE_PATH:
+        raise ConfigurationError("Non-canonical scope review cannot be applied.")
     config = load_project_config(root)
     if config.project.id != review.project_id:
         raise StaleSnapshotError("Review project identity changed.")
@@ -522,7 +524,7 @@ def _validate_review_before_apply(
     current_catalog = state[3]
     tasks = dict(current_catalog.tasks)
     tasks[review.task_id] = review.proposed_scope
-    recomputed_yaml = _render_catalog(ParallelScopeCatalog(tasks=tasks))
+    recomputed_yaml = _render_catalog(ExecutionScopeCatalog(tasks=tasks))
     if recomputed_yaml != review.proposed_catalog_yaml:
         raise StaleSnapshotError(
             "Reviewed proposed catalog no longer reconstructs from the current before-state."
@@ -538,6 +540,10 @@ def _validate_request_against_review(
     review_digest: str,
     approval_digest: str,
 ) -> None:
+    if request.schema_version != 2 or request.catalog_path != EXECUTION_SCOPE_PATH:
+        raise ConfigurationError(
+            "Historical adoption requests are audit-only and cannot mutate canonical authority."
+        )
     expected = {
         "project_id": review.project_id,
         "task_id": review.task_id,
@@ -601,6 +607,11 @@ def adopt_scope_review(
     review = _load_review(review_path)
     if review.task_id != task_id:
         raise ConfigurationError("Review task identity does not match adoption task.")
+    if review.schema_version != 2 or review.catalog_path != EXECUTION_SCOPE_PATH:
+        raise ConfigurationError(
+            "Historical scope reviews are audit-only. Regenerate a canonical "
+            "review for projectctl.scope.yaml; old approval digests are not transferable."
+        )
     review_digest = digest(review)
     if approval_digest != review_digest:
         raise ConfigurationError(
@@ -614,6 +625,10 @@ def adopt_scope_review(
             review_digest,
         )
         if receipt is not None:
+            if receipt.schema_version != 2 or receipt.catalog_path != EXECUTION_SCOPE_PATH:
+                raise ConfigurationError(
+                    "Historical adoption receipt cannot satisfy canonical review."
+                )
             _validate_request_against_review(
                 request,
                 review,
@@ -641,8 +656,8 @@ def adopt_scope_review(
                 approval_digest,
             )
             if current_digest == request.proposed_catalog_digest:
-                adopted = load_parallel_scope_catalog(root)
-                scope = adopted.tasks.get(task_id)
+                adopted = load_execution_scope_catalog(root)
+                scope = adopted.tasks.get(task_id) if adopted is not None else None
                 if scope is None or digest(scope) != request.proposed_scope_digest:
                     raise ConfigurationError(
                         "Catalog matches adoption bytes but reviewed scope is missing; "
@@ -689,8 +704,8 @@ def adopt_scope_review(
             )
         try:
             _atomic_bytes(path, review.proposed_catalog_yaml.encode("utf-8"))
-            adopted = load_parallel_scope_catalog(root)
-            adopted_scope = adopted.tasks.get(task_id)
+            adopted = load_execution_scope_catalog(root)
+            adopted_scope = adopted.tasks.get(task_id) if adopted is not None else None
             if adopted_scope is None or digest(adopted_scope) != digest(review.proposed_scope):
                 raise ConfigurationError(
                     "Post-write scope validation does not match the reviewed proposal."

@@ -147,7 +147,7 @@ def register_m50(app: typer.Typer) -> None:
                 "# REVIEW ONLY: derived suggestion; this output is not authority."
             )
             typer.echo(
-                "# ProjectCTL did not modify projectctl.parallel.yaml."
+                "# ProjectCTL did not modify projectctl.scope.yaml."
             )
             typer.echo(yaml.safe_dump(snippet, sort_keys=False).rstrip())
             return
@@ -355,5 +355,5 @@ def register_m50(app: typer.Typer) -> None:
         typer.echo("Applied: true")
         typer.echo(
             "Human-managed scope policy changed. Inspect git diff and commit "
-            "projectctl.parallel.yaml before autonomous execution."
+            "projectctl.scope.yaml before autonomous execution."
         )

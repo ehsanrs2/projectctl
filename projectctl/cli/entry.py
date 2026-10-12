@@ -7,6 +7,7 @@ from projectctl.cli.m13 import register_m13
 from projectctl.cli.m40b import register_m40b
 from projectctl.cli.m41a import register_m41a
 from projectctl.cli.m50 import register_m50
+from projectctl.cli.m52b import register_m52b
 
 register_m04(app)
 register_m05(app)
@@ -16,6 +17,7 @@ register_m13(app)
 register_m40b(app)
 register_m41a(app)
 register_m50(app)
+register_m52b(app)
 
 
 def main() -> None:

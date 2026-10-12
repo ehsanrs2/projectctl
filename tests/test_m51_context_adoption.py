@@ -22,6 +22,9 @@ from projectctl.schemas.context_adoption import (
     ContextScopeAdoptionReceipt,
     ContextScopeAdoptionRequest,
     ContextScopeReview,
+    ContextScopeReviewV1,
+    ContextScopeAdoptionRequestV1,
+    ContextScopeAdoptionReceiptV1,
 )
 from projectctl.schemas.context_discovery import (
     ContextDiscoveryReport,
@@ -179,9 +182,9 @@ def test_review_is_additive_and_preserves_existing_scope(
     monkeypatch,
 ):
     root = _repo(tmp_path)
-    catalog = root / "projectctl.parallel.yaml"
+    catalog = root / "projectctl.scope.yaml"
     catalog.write_text(
-        "schema_kind: projectctl.parallel_scope_catalog\n"
+        "schema_kind: projectctl.execution_scope_catalog\n"
         "schema_version: 1\n"
         "tasks:\n"
         "  TASK-1:\n"
@@ -225,7 +228,7 @@ def test_review_is_additive_and_preserves_existing_scope(
     assert review.added_writes == ["tests/test_service.py"]
     assert "src/service.py" in adoption.render_review_diff(review)
     assert catalog.read_text(encoding="utf-8").startswith(
-        "schema_kind: projectctl.parallel_scope_catalog"
+        "schema_kind: projectctl.execution_scope_catalog"
     )
 
 
@@ -235,7 +238,7 @@ def test_adoption_requires_exact_review_digest_and_does_not_mutate_on_mismatch(
 ):
     root = _repo(tmp_path)
     review = _review(root, monkeypatch)
-    catalog = root / "projectctl.parallel.yaml"
+    catalog = root / "projectctl.scope.yaml"
     assert not catalog.exists()
 
     with pytest.raises(ConfigurationError, match="Approval digest"):
@@ -255,9 +258,9 @@ def test_catalog_drift_after_review_fails_closed(
 ):
     root = _repo(tmp_path)
     review = _review(root, monkeypatch)
-    catalog = root / "projectctl.parallel.yaml"
+    catalog = root / "projectctl.scope.yaml"
     catalog.write_text(
-        "schema_kind: projectctl.parallel_scope_catalog\n"
+        "schema_kind: projectctl.execution_scope_catalog\n"
         "schema_version: 1\n"
         "tasks: {}\n",
         encoding="utf-8",
@@ -328,7 +331,7 @@ def test_adoption_writes_exact_review_and_persists_request_receipt(
         approval_digest=digest(review),
     )
 
-    catalog = root / "projectctl.parallel.yaml"
+    catalog = root / "projectctl.scope.yaml"
     assert catalog.read_text(encoding="utf-8") == review.proposed_catalog_yaml
     assert isinstance(receipt, ContextScopeAdoptionReceipt)
     assert receipt.review_digest == digest(review)
@@ -376,7 +379,7 @@ def test_retry_recovers_receipt_after_crash_post_policy_write(
             approval_digest=digest(review),
         )
 
-    catalog = root / "projectctl.parallel.yaml"
+    catalog = root / "projectctl.scope.yaml"
     assert catalog.read_text(encoding="utf-8") == review.proposed_catalog_yaml
 
     monkeypatch.setattr(adoption, "_atomic_json", real_atomic_json)
@@ -409,14 +412,23 @@ def test_review_selection_must_be_subset_of_suggestion(
 
 
 def test_m51_public_schema_and_cli_surface():
-    assert PUBLIC_SCHEMAS["context-scope-review.v1.schema.json"] is ContextScopeReview
+    assert PUBLIC_SCHEMAS["context-scope-review.v1.schema.json"] is ContextScopeReviewV1
+    assert PUBLIC_SCHEMAS["context-scope-review.v2.schema.json"] is ContextScopeReview
     assert (
-        PUBLIC_SCHEMAS["context-scope-adoption-request.v1.schema.json"]
+        PUBLIC_SCHEMAS["context-scope-adoption-request.v2.schema.json"]
         is ContextScopeAdoptionRequest
     )
     assert (
-        PUBLIC_SCHEMAS["context-scope-adoption-receipt.v1.schema.json"]
+        PUBLIC_SCHEMAS["context-scope-adoption-receipt.v2.schema.json"]
         is ContextScopeAdoptionReceipt
+    )
+    assert (
+        PUBLIC_SCHEMAS["context-scope-adoption-request.v1.schema.json"]
+        is ContextScopeAdoptionRequestV1
+    )
+    assert (
+        PUBLIC_SCHEMAS["context-scope-adoption-receipt.v1.schema.json"]
+        is ContextScopeAdoptionReceiptV1
     )
 
     result = runner.invoke(app, ["context", "--help"])
@@ -430,8 +442,8 @@ def test_existing_tree_scope_covers_exact_suggestion_without_redundant_addition(
     monkeypatch,
 ):
     root = _repo(tmp_path)
-    (root / "projectctl.parallel.yaml").write_text(
-        "schema_kind: projectctl.parallel_scope_catalog\n"
+    (root / "projectctl.scope.yaml").write_text(
+        "schema_kind: projectctl.execution_scope_catalog\n"
         "schema_version: 1\n"
         "tasks:\n"
         "  TASK-1:\n"
@@ -469,8 +481,8 @@ def test_review_rejects_noop_selection(
     monkeypatch,
 ):
     root = _repo(tmp_path)
-    (root / "projectctl.parallel.yaml").write_text(
-        "schema_kind: projectctl.parallel_scope_catalog\n"
+    (root / "projectctl.scope.yaml").write_text(
+        "schema_kind: projectctl.execution_scope_catalog\n"
         "schema_version: 1\n"
         "tasks:\n"
         "  TASK-1:\n"
@@ -506,12 +518,12 @@ def test_adoption_refuses_scope_authority_symlink(
     root = _repo(tmp_path)
     target = root / "actual-scope.yaml"
     target.write_text(
-        "schema_kind: projectctl.parallel_scope_catalog\n"
+        "schema_kind: projectctl.execution_scope_catalog\n"
         "schema_version: 1\n"
         "tasks: {}\n",
         encoding="utf-8",
     )
-    (root / "projectctl.parallel.yaml").symlink_to(target.name)
+    (root / "projectctl.scope.yaml").symlink_to(target.name)
     _patch_project(monkeypatch)
     _, suggestion = _seed_suggestion(root)
 
@@ -528,9 +540,9 @@ def test_catalog_state_parses_the_exact_bytes_it_digests(
     monkeypatch,
 ):
     root = _repo(tmp_path)
-    catalog_path = root / "projectctl.parallel.yaml"
+    catalog_path = root / "projectctl.scope.yaml"
     raw = (
-        "schema_kind: projectctl.parallel_scope_catalog\n"
+        "schema_kind: projectctl.execution_scope_catalog\n"
         "schema_version: 1\n"
         "tasks: {}\n"
     ).encode("utf-8")
@@ -607,13 +619,13 @@ def test_scope_adoption_gate_excludes_new_run_admission(
     with pytest.raises(ProjectLockError, match="execution-authority"):
         execution.prepare_next_run(root)
     assert preflight_calls == []
-    assert not (root / "projectctl.parallel.yaml").exists()
+    assert not (root / "projectctl.scope.yaml").exists()
 
     continue_validation.set()
     worker.join(timeout=5)
     assert not worker.is_alive()
     assert adoption_errors == []
-    assert (root / "projectctl.parallel.yaml").read_text(encoding="utf-8") == (
+    assert (root / "projectctl.scope.yaml").read_text(encoding="utf-8") == (
         review.proposed_catalog_yaml
     )
 
@@ -670,7 +682,7 @@ def test_run_admission_gate_wins_and_adoption_rechecks_active_runs(
             review_id=review.review_id,
             approval_digest=digest(review),
         )
-    assert not (root / "projectctl.parallel.yaml").exists()
+    assert not (root / "projectctl.scope.yaml").exists()
 
     release_gate.set()
     worker.join(timeout=5)
@@ -684,4 +696,4 @@ def test_run_admission_gate_wins_and_adoption_rechecks_active_runs(
             review_id=review.review_id,
             approval_digest=digest(review),
         )
-    assert not (root / "projectctl.parallel.yaml").exists()
+    assert not (root / "projectctl.scope.yaml").exists()
