@@ -778,8 +778,12 @@ def _load_admitted_execution_contract(
 ):
     expected = getattr(plan, "execution_input_digest", None)
     if not expected:
-        # Legacy pre-M4.2a run. Existing durable plan/claim checks remain
-        # audit/recovery compatible, but new runs never use this path.
+        # Historical manifests cannot prove a newly required scope policy.
+        # Keep older runs resumable only while the project remains optional.
+        if load_project_config(project_root).scope_governance.mode == "required":
+            raise StaleSnapshotError(
+                "Legacy run has no ExecutionInputManifest to prove required scope."
+            )
         return None, None
 
     input_path = run_dir / "execution-input-manifest.json"
