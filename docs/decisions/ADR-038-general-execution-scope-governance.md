@@ -1,16 +1,21 @@
 # ADR-038: General Execution Scope Authority and Explicit Governance
 
-Status: Proposed — M5.2b design; **not yet accepted or implemented**
-Base reviewed: `main@8dd6a53d8f71bac353c48803587ee9fa690d7e4c`
+Status: Proposed — **implementation merged and locally regression-tested; formal architectural acceptance pending**
+Original design base: `main@8dd6a53d8f71bac353c48803587ee9fa690d7e4c`
+Implementation evidence: `main@f6aa8b5cdcf5a6ab552045b54e403ff24a16667a`;
+see `docs/architecture/M5_2B_CLOSURE_AUDIT.md`.
 Supersedes: none. Extends ADR-031, ADR-033, ADR-035, ADR-036, and ADR-037.
 
 ## Context
 
 Post-M5 review accepted the human-review and execution-input authority boundaries, subject to M5.2a and M5.2b closure. M5.2a is merged. Currently `projectctl.parallel.yaml` / `ParallelScopeCatalog v1` is also consumed by ordinary serial execution (`projectctl/application/execution_inputs.py`), M5 discovery and adoption (`projectctl/context/{discovery,adoption}.py`), and independent verification (`projectctl/application/verification.py`). The serial path silently allows a missing task scope; the parallel path rejects it. The distinction must become explicit project policy without breaking existing projects.
 
-This ADR proposes a design for implementation review. This file does not itself authorize a scope mutation, version migration, or worker execution.
+The decisions below originated as an implementation proposal and the corresponding
+implementation has now landed. This ADR is **not accepted** until the
+architecture-review and release gates recorded in the M5.2b closure audit
+are resolved. It does not authorize ad hoc scope mutation or worker execution.
 
-## Proposed decisions
+## Design decisions (implemented; acceptance pending)
 
 ### 1. Exactly one human-managed scope authority
 
