@@ -60,7 +60,16 @@ def _fsync_dir(path: Path) -> None:
 
 
 def _atomic_write(path: Path, payload: bytes) -> None:
+    missing = []
+    folder = path.parent
+    while not folder.exists():
+        missing.append(folder)
+        folder = folder.parent
     path.parent.mkdir(parents=True, exist_ok=True)
+    for created in reversed(missing):
+        # The parent entry of every newly-created journal directory must be
+        # durable before a policy file may be mutated.
+        _fsync_dir(created.parent)
     fd, name = tempfile.mkstemp(prefix=".projectctl-scope-", dir=path.parent)
     try:
         with os.fdopen(fd, "wb") as stream:
@@ -129,17 +138,36 @@ def _journal_root(root: Path) -> Path:
 
 def _pending_journals(root: Path) -> list[tuple[Path, dict]]:
     folder = _journal_root(root)
+    if folder.is_symlink():
+        raise ConfigurationError("Symlinked scope migration journal is unsafe.")
     if not folder.exists():
         return []
     pending = []
     for child in sorted(folder.iterdir()):
-        if not child.is_dir():
-            raise ConfigurationError("Unexpected non-directory entry in scope migration journal.")
+        if child.is_symlink() or not child.is_dir():
+            raise ConfigurationError("Unexpected non-directory/symlink in scope migration journal.")
         request = child / "request.json"
-        if not request.is_file():
-            raise ConfigurationError(f"Incomplete scope migration journal: {child}")
+        receipt = child / "receipt.json"
+        if request.is_symlink() or receipt.is_symlink() or not request.is_file():
+            raise ConfigurationError(f"Incomplete or unsafe scope migration journal: {child}")
         data = _read_json(request)
-        if not (child / "receipt.json").exists():
+        _validate_request(data)
+        if child.name != data["migration_id"]:
+            raise ConfigurationError("Scope migration journal directory identity mismatch.")
+        if receipt.exists():
+            value = _read_json(receipt)
+            expected = {
+                "schema_kind": "projectctl.scope_migration_receipt",
+                "schema_version": 1,
+                "migration_id": data["migration_id"],
+                "source_sha256": data["source_sha256"],
+                "target_sha256": data["target_sha256"],
+                "canonical_path": EXECUTION_SCOPE_PATH,
+                "applied": True,
+            }
+            if value != expected:
+                raise ConfigurationError("Completed scope migration receipt is invalid.")
+        else:
             pending.append((child, data))
     return pending
 
@@ -220,6 +248,8 @@ def preview_scope_migration(project_root: Path) -> ScopeMigrationPreview:
 
 def _resume_request(root: Path, child: Path, request: dict) -> dict:
     new_bytes = _validate_request(request)
+    if child.name != request["migration_id"]:
+        raise ConfigurationError("Scope migration journal directory identity mismatch.")
     old = _safe_policy_path(root, LEGACY_PARALLEL_SCOPE_PATH)
     new = _safe_policy_path(root, EXECUTION_SCOPE_PATH)
 
