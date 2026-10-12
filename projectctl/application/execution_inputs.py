@@ -339,7 +339,12 @@ def validate_execution_scope_authority(
     config = load_project_config(root)
     if config.project.id != manifest.project_id:
         raise StaleSnapshotError("Execution input project identity changed.")
-    resolved, scope = _resolved_scope(root, manifest.task_id)
+    try:
+        resolved, scope = _resolved_scope(root, manifest.task_id)
+    except ConfigurationError as exc:
+        raise StaleSnapshotError(
+            f"Execution scope authority is invalid or ambiguous: {exc}"
+        ) from exc
     if manifest.schema_version == 1:
         if config.scope_governance.mode == "required":
             raise StaleSnapshotError(
@@ -350,8 +355,16 @@ def validate_execution_scope_authority(
             raise StaleSnapshotError("Execution scope governance mode changed.")
         if resolved.source != manifest.scope_catalog_source:
             raise StaleSnapshotError("Execution scope catalog authority changed.")
-        if config.scope_governance.mode == "required" and scope is None:
-            raise StaleSnapshotError("Required task execution scope is missing.")
+        if config.scope_governance.mode == "required":
+            if (
+                scope is None
+                or not manifest.code_inputs
+                or not manifest.write_scopes
+                or manifest.scope_policy_digest is None
+            ):
+                raise StaleSnapshotError(
+                    "Required task execution scope or durable input/write evidence is missing."
+                )
 
     if manifest.scope_policy_digest is None:
         if scope is not None:
