@@ -289,7 +289,8 @@ def test_project_config_v5_github_preserves_historical_direct_delivery(tmp_path:
 
     config = load_project_config(tmp_path)
 
-    assert config.schema_version == 8
+    assert config.schema_version == 10
+    assert config.scope_governance.mode == "optional"
     assert config.code_delivery.mode == "direct_git"
     assert yaml.safe_load(path.read_text(encoding="utf-8"))["schema_version"] == 5
 
