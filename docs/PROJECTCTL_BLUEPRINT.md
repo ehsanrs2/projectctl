@@ -1666,7 +1666,7 @@ See ADR-037.
 
 ### M5.2b — General Execution Scope Policy & Enforcement Mode
 
-**Active milestone — Slices A–D and regression fixes merged; operator-reported local full-suite and pinned SDK tests passed. The repository owner attributes unavailable GitHub Actions CI to an exhausted usage quota. Formal architecture acceptance remains outstanding.**
+**Completed — Slices A–D and regressions merged, operator-reported local full-suite/SDK gates passed, and ADR-038 accepted in the M5.2 closure PR. GitHub-hosted CI remains unavailable due to owner-confirmed Actions quota exhaustion and must be rerun when restored.**
 
 Implemented foundation and enforcement contracts:
 
@@ -1677,18 +1677,15 @@ Implemented foundation and enforcement contracts:
 - Context Discovery resolves effective scope using the same authority resolver. New `ContextScopeReview/AdoptionRequest/AdoptionReceipt v2` targets only the canonical file; v1 approval records remain audit-only.
 - `projectctl.scope.yaml` and `projectctl.parallel.yaml` are human-managed worker-protected paths.
 
-**Open gate:** The hardening and regression code is merged, and user-reported local full-suite/closure checks pass on a Git tree identical to the current main commit. The pinned Codex SDK import/contract gate passed locally (7 tests). GitHub Actions failures are recorded as an operator-confirmed quota/billing blocker; hosted CI has not passed and should be rerun once quota is restored. Formal ADR-038 acceptance and next roadmap selection remain open. Do not promote `docs/PROJECT_STATE.yaml` or mark ADR-038 accepted before these gates are evidenced.
+**Closure decision:** The validated human-managed authority boundary remains intact. Local full-suite and pinned SDK evidence is recorded, and the owner's Actions quota exception remains a non-green CI status requiring later rerun. The owner selected M6.0 Read-only Trace & Evaluation Export; the milestone closure PR accepts ADR-038 and advances the single `docs/PROJECT_STATE.yaml` authority. No package version bump or release is implied.
 
-See `docs/architecture/M5_2B_CLOSURE_AUDIT.md`, `docs/architecture/M5_2B_SCOPE_MIGRATION.md` and ADR-038 (proposed).
+See `docs/architecture/M5_2B_CLOSURE_AUDIT.md`, `docs/architecture/POST_M5_2_ARCHITECTURE_REVIEW.md`, `docs/architecture/M5_2B_SCOPE_MIGRATION.md` and accepted ADR-038.
 
 ### Later product directions
 
-A non-binding closure review and comparison of next product directions is recorded in
-`docs/architecture/POST_M5_2_ARCHITECTURE_REVIEW.md`. It proposes read-only
-trace/evaluation export as a candidate; no next milestone has been selected,
-and `docs/PROJECT_STATE.yaml` remains authoritative.
+The owner selected **M6.0 — Read-only Trace & Evaluation Export**, as recorded in the accepted Post-M5.2 architecture review. The active goal is defined only by `docs/PROJECT_STATE.yaml`; an M6-specific design ADR remains Proposed until accepted.
 
-Retained after M5.2 closure:
+Deferred product directions (not current M6.0 scope):
 
 - broader language-aware context discovery
 - additional worker providers
