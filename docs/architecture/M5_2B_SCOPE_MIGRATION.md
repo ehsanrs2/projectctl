@@ -1,6 +1,6 @@
 # M5.2b Slice C — Scope migration and canonical reviewed adoption
 
-**Status:** Implementation PR; this is not final milestone closure.
+**Status:** Slice C merged in PR #47; Slice D receipt-integrity hardening and final test evidence still pending. This is not milestone closure.
 
 ## Operator workflow
 
