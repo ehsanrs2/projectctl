@@ -459,6 +459,9 @@ def test_non_worker_maintenance_respects_live_run_lease(
         lease_owner="other-worker",
         lease_expires_at=NOW + timedelta(minutes=2),
     )
+    # Freeze the clock used by maintenance. A fixed 2026 lease must not
+    # expire just because this regression suite is run on a later date.
+    monkeypatch.setattr(turns, "utc_now", lambda: NOW)
     monkeypatch.setattr(
         turns,
         "load_project_config",
