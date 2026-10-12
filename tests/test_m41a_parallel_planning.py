@@ -258,6 +258,36 @@ def test_build_plan_hashes_recorded_git_base_not_dirty_workspace(
     git(repo, "commit", "-q", "-m", "base")
     base = git(repo, "rev-parse", "HEAD")
 
+    # The generic execution-input builder now demands human-managed policy
+    # authority even when a parallel planner supplies an explicit scope.
+    from projectctl.schemas.config import ProjectConfig, ProjectIdentity
+    import yaml
+
+    ctl = repo / ".projectctl"
+    ctl.mkdir()
+    config = ProjectConfig(project=ProjectIdentity(id="repo"))
+    (ctl / "config.yaml").write_text(
+        yaml.safe_dump(config.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+    (repo / "projectctl.parallel.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_kind": "projectctl.parallel_scope_catalog",
+                "schema_version": 1,
+                "tasks": {
+                    "a": {
+                        "task_id": "a",
+                        "inputs": [{"path": "src/a.py", "kind": "exact"}],
+                        "writes": [{"path": "src/a.py", "kind": "exact"}],
+                        "resources": [],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
     current_snapshot = snapshot(task("a"))
     scope = ParallelTaskScope(
         task_id="a",

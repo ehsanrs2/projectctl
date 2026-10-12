@@ -19,7 +19,7 @@ from projectctl.core.enums import TaskStatus
 from projectctl.core.errors import ConfigurationError, StaleSnapshotError
 from projectctl.core.time import utc_now
 from projectctl.git.worktrees import current_branch, resolve_commit
-from projectctl.parallel.catalog import task_parallel_scope
+from projectctl.execution_scope.catalog import task_execution_scope as task_parallel_scope
 from projectctl.project.loader import load_project_config
 from projectctl.project.state import (
     load_project_state,

@@ -45,7 +45,7 @@ from projectctl.core.errors import (
 )
 from projectctl.core.time import utc_now
 from projectctl.git import WorktreeManager, current_branch, resolve_commit
-from projectctl.parallel.catalog import task_parallel_scope
+from projectctl.execution_scope.catalog import task_execution_scope as task_parallel_scope
 from projectctl.parallel.service import (
     _atomic_json,
     _input_scope_digest,

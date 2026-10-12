@@ -438,13 +438,13 @@ def test_beads_claim_transition_accepts_only_expected_lifecycle_mutation():
 def test_verification_write_scope_rejects_outside_paths():
     from projectctl.application.verification import _write_scope_violations
     from projectctl.schemas.execution_input import (
-        ExecutionInputManifest,
+        ExecutionInputManifestV1,
         ExecutionPathScope,
         ExecutionTaskInput,
     )
 
     selected = task("task-a", status=TaskStatus.RUNNING)
-    manifest = ExecutionInputManifest(
+    manifest = ExecutionInputManifestV1(
         input_id="input",
         project_id="repo",
         task_id="task-a",

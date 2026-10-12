@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import AwareDatetime, Field
+from pydantic import AwareDatetime, Field, model_validator
 
 from projectctl.schemas.base import ProjectCtlModel
 from projectctl.schemas.config import RepoRelativePath
@@ -34,7 +34,7 @@ class ExecutionInputLineage(ProjectCtlModel):
     reapplication_id: str = Field(min_length=1)
 
 
-class ExecutionInputManifest(ProjectCtlModel):
+class ExecutionInputManifestV1(ProjectCtlModel):
     schema_kind: Literal["projectctl.execution_input_manifest"] = (
         "projectctl.execution_input_manifest"
     )
@@ -56,6 +56,42 @@ class ExecutionInputManifest(ProjectCtlModel):
     scope_policy_digest: str | None = None
     lineage: ExecutionInputLineage | None = None
     created_at: AwareDatetime
+
+
+class ExecutionInputManifest(ExecutionInputManifestV1):
+    """Runtime authority for new runs; legacy v1 stays audit-readable."""
+
+    schema_version: Literal[2] = 2
+    scope_governance_mode: Literal["optional", "required"]
+    scope_catalog_source: Literal["canonical", "legacy", "absent"]
+
+    @model_validator(mode="after")
+    def validate_governed_scope(self):
+        if self.scope_governance_mode == "required":
+            if self.scope_catalog_source == "absent":
+                raise ValueError("Required execution scope cannot have an absent catalog.")
+            if (
+                self.scope_policy_digest is None
+                or not self.code_inputs
+                or not self.write_scopes
+            ):
+                raise ValueError(
+                    "Required execution scope must bind declared inputs and writes."
+                )
+        return self
+
+
+def parse_execution_input_manifest(
+    raw: object,
+) -> ExecutionInputManifest | ExecutionInputManifestV1:
+    if not isinstance(raw, dict):
+        raise ValueError("Execution input manifest must be an object.")
+    version = raw.get("schema_version", 1)
+    if version == 2:
+        return ExecutionInputManifest.model_validate(raw)
+    if version == 1:
+        return ExecutionInputManifestV1.model_validate(raw)
+    raise ValueError(f"Unsupported execution input manifest version: {version!r}")
 
 
 class ClaimTransitionEvidence(ProjectCtlModel):

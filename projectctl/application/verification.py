@@ -13,6 +13,7 @@ from projectctl.application.execution import _actor
 from projectctl.application.execution_inputs import (
     execution_input_semantic_digest,
     load_execution_input,
+    validate_execution_scope_authority,
 )
 from projectctl.application.task_lifecycle import reconcile_terminal_task
 from projectctl.core.digest import digest
@@ -22,9 +23,10 @@ from projectctl.core.enums import (
     VerificationCheckStatus,
     WorkerStrategyKind,
 )
-from projectctl.core.errors import RunStoreError, VerificationError, WorktreeError
+from projectctl.core.errors import ConfigurationError, RunStoreError, StaleSnapshotError, VerificationError, WorktreeError
 from projectctl.core.time import utc_now
 from projectctl.git import WorktreeManager, resolve_commit
+from projectctl.project.loader import load_project_config
 from projectctl.schemas.evidence import EvidenceManifest
 from projectctl.schemas.execution import ExecutionPlan, WorkerResult, parse_execution_plan
 from projectctl.schemas.run_store import RunRecord
@@ -89,6 +91,20 @@ def _scope_contains(scope, path: str) -> bool:
         return scope.path == path
     prefix = scope.path.rstrip("/") + "/"
     return path == scope.path or path.startswith(prefix)
+
+
+def _scope_authority_violations(root: Path, execution_input) -> list[str]:
+    """Independently validate scope at verification; never trust only plan digest."""
+    try:
+        config = load_project_config(root)
+        if execution_input is None:
+            if config.scope_governance.mode == "required":
+                return ["execution_scope_policy:required_scope_evidence_missing"]
+            return []
+        validate_execution_scope_authority(root, execution_input)
+    except (ConfigurationError, StaleSnapshotError) as exc:
+        return [f"execution_scope_policy:{type(exc).__name__}:{exc}"]
+    return []
 
 
 def _write_scope_violations(execution_input, changed_paths: list[str]) -> list[str]:
@@ -297,10 +313,10 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
             strategy=plan.strategy,
         )
         policy_ms = max(0, int((time.monotonic() - policy_start) * 1000))
-        scope_violations = _write_scope_violations(
-            execution_input,
-            before.changed_paths,
-        )
+        scope_violations = [
+            *_scope_authority_violations(root, execution_input),
+            *_write_scope_violations(execution_input, before.changed_paths),
+        ]
         policy_violations = [*before.violations, *scope_violations]
         checks: list[VerificationCheckResult] = [
             _synthetic_check(
@@ -387,10 +403,10 @@ def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
         )
         checks.append(_synthetic_check("workspace-stability", passed=stable))
 
-        final_scope_violations = _write_scope_violations(
-            execution_input,
-            after.changed_paths,
-        )
+        final_scope_violations = [
+            *_scope_authority_violations(root, execution_input),
+            *_write_scope_violations(execution_input, after.changed_paths),
+        ]
         final_policy_violations = [*after.violations, *final_scope_violations]
         if final_scope_violations:
             # The pre-command check already covered the worker diff. This second

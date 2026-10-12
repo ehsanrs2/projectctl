@@ -778,8 +778,12 @@ def _load_admitted_execution_contract(
 ):
     expected = getattr(plan, "execution_input_digest", None)
     if not expected:
-        # Legacy pre-M4.2a run. Existing durable plan/claim checks remain
-        # audit/recovery compatible, but new runs never use this path.
+        # Historical manifests cannot prove a newly required scope policy.
+        # Keep older runs resumable only while the project remains optional.
+        if load_project_config(project_root).scope_governance.mode == "required":
+            raise StaleSnapshotError(
+                "Legacy run has no ExecutionInputManifest to prove required scope."
+            )
         return None, None
 
     input_path = run_dir / "execution-input-manifest.json"
@@ -788,8 +792,13 @@ def _load_admitted_execution_contract(
         raise RunStoreError(
             "M4.2a run is missing execution input or claim-transition evidence."
         )
-    execution_input = load_execution_input(input_path)
-    transition = load_claim_transition(transition_path)
+    try:
+        execution_input = load_execution_input(input_path)
+        transition = load_claim_transition(transition_path)
+    except ConfigurationError as exc:
+        raise RunStoreError(
+            "Malformed execution scope or claim evidence prevents worker admission."
+        ) from exc
     if execution_input_semantic_digest(execution_input) != expected:
         raise RunStoreError(
             "ExecutionInputManifest semantic digest no longer matches ExecutionPlan."

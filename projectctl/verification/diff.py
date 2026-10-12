@@ -28,6 +28,8 @@ SYSTEM_PROTECTED_PATHS = (
     "specs/**",
     "docs/decisions/**",
     "projectctl.verification.yaml",
+    "projectctl.scope.yaml",
+    "projectctl.parallel.yaml",
 )
 
 

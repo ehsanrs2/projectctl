@@ -57,6 +57,8 @@ from projectctl.schemas.execution_input import (
     ClaimTransitionEvidence,
     ExecutionCodeInput,
     ExecutionInputManifest,
+    ExecutionInputManifestV1,
+    parse_execution_input_manifest,
     ExecutionPathScope,
     ExecutionTaskInput,
 )
@@ -146,6 +148,8 @@ __all__ = [
     "GitHubCacheRequest",
     "ExecutionCodeInput",
     "ExecutionInputManifest",
+    "ExecutionInputManifestV1",
+    "parse_execution_input_manifest",
     "ExecutionPathScope",
     "ExecutionScopeCatalog",
     "ExecutionTaskScope",
