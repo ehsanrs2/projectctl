@@ -540,6 +540,10 @@ def _validate_request_against_review(
     review_digest: str,
     approval_digest: str,
 ) -> None:
+    if request.schema_version != 2 or request.catalog_path != EXECUTION_SCOPE_PATH:
+        raise ConfigurationError(
+            "Historical adoption requests are audit-only and cannot mutate canonical authority."
+        )
     expected = {
         "project_id": review.project_id,
         "task_id": review.task_id,
@@ -621,6 +625,10 @@ def adopt_scope_review(
             review_digest,
         )
         if receipt is not None:
+            if receipt.schema_version != 2 or receipt.catalog_path != EXECUTION_SCOPE_PATH:
+                raise ConfigurationError(
+                    "Historical adoption receipt cannot satisfy canonical review."
+                )
             _validate_request_against_review(
                 request,
                 review,
