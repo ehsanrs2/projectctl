@@ -42,13 +42,15 @@ are not serialized in the public trace schema.
 
 These functions are deliberately not wired into an enabled CLI/Collector:
 
-1. **WAL sidecars:** SQLite read-only mode can interact with `-wal`
-   and `-shm`. The helper refuses incomplete pairs and compares
-   file identity/size/mtime/ctime before and after a read. Such checks
-   may *detect* a side effect but cannot retroactively undo one.
-   A test specifically snapshots all three file bytes around a live-WAL
-   reader. A failure **blocks** an operational release; do not suppress
-   it or call it expected.
+1. **WAL sidecars:** SQLite read-only mode can interact with `-wal` and
+   `-shm`. B1a now reads the SQLite header through an already pinned
+   no-follow file descriptor and **refuses any WAL-mode database before
+   calling `sqlite3.connect`**. A test confirms a live WAL writer causes
+   a typed refusal and **zero changed bytes** in the DB/WAL/SHM set.
+   This is a temporary *fail-closed* capability limit, **not** working WAL
+   support. ProjectCTL's normal connection enables WAL, so B1a alone
+   cannot read normal live RunStore databases. B1b must prove an alternative
+   side-effect-free strategy before enabling a Collector/CLI.
 2. **Database/file atomicity:** one SQLite read transaction is internally
    consistent, but it does not atomically bind separately persisted JSON
    files. `read_run_artifact` checks FD/path identity; a full Collector
@@ -83,14 +85,14 @@ These functions are deliberately not wired into an enabled CLI/Collector:
 - strictly allowlisted evidence leaf path and no-follow ancestor handling;
 - oversized file, malformed IDs and more than 512 events;
 - no event-payload leakage and no private raw bytes in object repr;
-- a live-WAL database with an open writer, asserting that the read
-  causes **zero** DB/WAL/SHM byte changes or safely refuses without
-  changing anything;
+- a live-WAL database with an open writer that **must be rejected before
+  SQLite connects**, with zero changes to DB/WAL/SHM bytes;
 - refusal when WAL and SHM file presence is inconsistent.
 
 Actual test results are **not yet known**. Failure of the live-WAL
-non-mutation test is a blocker requiring an alternative supported
-read strategy, not permission to weaken the requirement.
+non-mutation test is a blocker. A passing test only proves safe refusal,
+**not** support for reading a live WAL database. That must be designed and
+validated separately, not bypassed with `immutable=1` on live WAL.
 
 ## 4. Local operator acceptance procedure
 
