@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Mapping
 
 from pydantic import BaseModel, ValidationError
@@ -76,6 +77,18 @@ class _InvalidJson(ValueError):
     pass
 
 
+def _finite_json_float(value: str) -> float:
+    """Reject JSON numbers that overflow Python floats into Infinity.
+
+    json.loads rejects bare Infinity via parse_constant, but a valid JSON
+    numeric token such as 1e309 otherwise becomes float('inf').
+    """
+    number = float(value)
+    if not math.isfinite(number):
+        raise _InvalidJson("non-finite numeric token")
+    return number
+
+
 def _object_no_duplicates(pairs: list[tuple[str, object]]) -> dict[str, object]:
     result: dict[str, object] = {}
     for name, value in pairs:
@@ -136,6 +149,7 @@ def inspect_artifact_snapshot(
         payload = json.loads(
             raw,
             object_pairs_hook=_object_no_duplicates,
+            parse_float=_finite_json_float,
             parse_constant=lambda _value: (_ for _ in ()).throw(_InvalidJson()),
         )
     except (ValueError, UnicodeError, TypeError, RecursionError):
