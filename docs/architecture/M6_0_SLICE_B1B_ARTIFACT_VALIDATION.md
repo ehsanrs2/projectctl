@@ -18,7 +18,8 @@ The new `inspect_artifact_snapshot` operation:
 - rejects unknown schema versions as `unsupported`, rather than coercing
   them to current schemas;
 - validates source SHA-256 against the **same captured raw bytes**;
-- parses JSON with duplicate-field rejection and no NaN/Infinity literals;
+- parses JSON with duplicate-field rejection at every nesting level, no
+  NaN/Infinity literals **and no exponent-overflow Infinity** (e.g. `1e309`);
 - rejects malformed data and unrecognized schema kinds with typed, safe
   error codes rather than raw parser/Pydantic messages;
 - compares original unnormalized task/run/project identity fields against
@@ -67,11 +68,14 @@ The new `conservative_trace_from_snapshots` operation:
 
 ## Local acceptance tests
 
-`tests/test_m60b1b_artifact_validation.py` exercises real v1/v2
-historical ContextManifest models, source byte SHA, duplicate/invalid JSON,
-unknown versions, identity mismatch and normalization, cross-project input,
-missing evidence, unsafe source-kind bindings, deterministic conservative
-bundle JSON, and no `supported` claims.
+`tests/test_m60b1b_artifact_validation.py` exercises historical v1/v2
+ContextManifest models, **all nine artifact kinds' registered parser-version
+alignment**, source-byte SHA, duplicate/escaped/nested JSON keys,
+malformed/non-finite numeric JSON, oversized raw buffers, unknown versions,
+identity mismatch including raw task/run/project whitespace, cross-project
+input, WorkerResult secret-summary redaction, missing evidence, unsafe
+source-kind bindings, input-order-independent deterministic trace JSON, and
+no `supported` or `complete` claims.
 
 Run from an `uv`-managed checkout:
 
@@ -93,11 +97,16 @@ git rev-parse HEAD
 python --version
 ```
 
-**Evidence status:** test code committed but no live checkout test
-results for this PR have been supplied. GitHub Actions remains quota-blocked
-per the repository owner's statement.
+**Evidence status:** code-review hardening was added to this PR after its
+initial opening. The additional regression tests have **not** been run on
+the owner's checkout; neither focused nor full-suite results for the current
+head have been supplied. GitHub Actions remains quota-blocked per the
+repository owner's statement. Do not reuse PR #57's passing suite to
+represent PR #58's tests as passing.
 
-**Merge gate:** keep Draft until local tests and the conservative
-privacy/identity semantics are independently reviewed. Safe live WAL,
-atomic cross-source revalidation and Collector + CLI remain separate
-work to be accepted before any operational exporter.
+**Merge gate:** keep Draft until the full updated targeted and regression
+tests, patch hygiene and conservative privacy/identity semantics are
+independently reviewed. Safe live WAL, atomic cross-source revalidation and
+Collector + CLI remain separate work to be accepted before any operational
+exporter. This PR does not authorize promoting `source.validation_state =
+'present'` into proof of semantic digest or independently verified lineage.
