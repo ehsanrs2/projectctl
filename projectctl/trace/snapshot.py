@@ -116,14 +116,31 @@ def read_run_artifact(
     _assert_supported_platform()
     try:
         with _directory_chain(project_root, ".projectctl", "runs", run_id) as dirfd:
+            run_dir_identity = os.fstat(dirfd)
             try:
                 fd = os.open(_FILE_BY_KIND[source_kind], _FILE_FLAGS, dir_fd=dirfd)
             except FileNotFoundError:
                 return None
             try:
                 data = _read_fd(fd, limit=MAX_ARTIFACT_BYTES)
+                opened_leaf = os.fstat(fd)
+                current_leaf = os.stat(
+                    _FILE_BY_KIND[source_kind], dir_fd=dirfd, follow_symlinks=False
+                )
+                if (opened_leaf.st_dev, opened_leaf.st_ino) != (
+                    current_leaf.st_dev, current_leaf.st_ino
+                ):
+                    raise TraceSnapshotError("source_changed")
             finally:
                 os.close(fd)
+        # Reject a run directory unlinked/replaced during an otherwise
+        # descriptor-safe read, rather than presenting a stale coherent path.
+        with _directory_chain(project_root, ".projectctl", "runs", run_id) as checkfd:
+            current_dir = os.fstat(checkfd)
+            if (current_dir.st_dev, current_dir.st_ino) != (
+                run_dir_identity.st_dev, run_dir_identity.st_ino
+            ):
+                raise TraceSnapshotError("source_changed")
     except TraceSnapshotError:
         raise
     except OSError:
