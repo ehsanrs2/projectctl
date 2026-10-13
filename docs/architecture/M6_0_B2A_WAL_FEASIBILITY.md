@@ -1,8 +1,8 @@
 # M6.0 B2a — Detached WAL Feasibility and Cross-source Consistency Gate
 
-**Status: Experimental candidate, NOT an operational WAL reader or accepted trace collector**  
-**Baseline:** `main@76d62a50575a8c76ea47c5f7ee5761f222af4f0d` (PR #58 merged)  
-**Architecture:** ADR-039 (Accepted bounded local-only design)  
+**Status: Experimental candidate, NOT an operational WAL reader or accepted trace collector**
+**Baseline:** `main@76d62a50575a8c76ea47c5f7ee5761f222af4f0d` (PR #58 merged)
+**Architecture:** ADR-039 (Accepted bounded local-only design)
 **Implementation:** `projectctl/trace/wal_probe.py`; `tests/test_m60b2a_detached_wal_probe.py`
 
 ## Why the existing reader cannot support real ProjectCTL runs
