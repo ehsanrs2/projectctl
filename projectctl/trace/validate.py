@@ -138,7 +138,7 @@ def inspect_artifact_snapshot(
             object_pairs_hook=_object_no_duplicates,
             parse_constant=lambda _value: (_ for _ in ()).throw(_InvalidJson()),
         )
-    except (ValueError, UnicodeError, TypeError):
+    except (ValueError, UnicodeError, TypeError, RecursionError):
         return _safe_problem(source_kind, "invalid_content", sha256=calculated)
     if not isinstance(payload, dict) or payload.get("schema_kind") != (
         "projectctl." + source_kind
@@ -158,7 +158,7 @@ def inspect_artifact_snapshot(
         )
     try:
         model = klass.model_validate(payload)
-    except (ValidationError, ValueError, TypeError):
+    except (ValidationError, ValueError, TypeError, RecursionError):
         return _safe_problem(
             source_kind, "invalid_content", version=version, sha256=calculated
         )
