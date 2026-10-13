@@ -184,9 +184,11 @@ class TraceDbSnapshot:
 def read_run_db_snapshot(project_root: Path, run_id: str) -> TraceDbSnapshot:
     """Capture one existing SQLite run and event stream in one RO transaction.
 
-    Existing WAL sidecars are fingerprinted before and after. An absent WAL
-    companion is not manufactured intentionally; if the SQLite VFS creates or
-    modifies one, this read is rejected and the platform must be investigated.
+    This B1a prototype only opens rollback-journal SQLite databases. A
+    live WAL-header database is rejected *before* SQLite connects, preventing
+    a possible WAL/SHM side effect. B1b needs a separately proven nonmutating
+    WAL strategy; current ProjectCTL runs typically use WAL. Sidecars are
+    additionally fingerprinted before and after for fail-closed checks.
     No output/collector calls this primitive until its acceptance tests pass.
     """
     _valid_run_id(run_id)
@@ -200,6 +202,19 @@ def read_run_db_snapshot(project_root: Path, run_id: str) -> TraceDbSnapshot:
                 info = os.fstat(fd)
                 if not stat.S_ISREG(info.st_mode):
                     raise TraceSnapshotError("unsafe_source_path")
+                # Prevent the SQLite VFS from opening an *active live WAL*
+                # until a side-effect-free WAL strategy has been tested.
+                # The SQLite file header at offsets 18/19 encodes the
+                # journal read/write versions: 1=rollback, 2=WAL.
+                # This guarded B1a prototype can read quiescent rollback
+                # mode only; it must not mutate WAL/SHM even transiently.
+                if not hasattr(os, "pread"):
+                    raise TraceSnapshotError("source_unreadable")
+                header = os.pread(fd, 100, 0)
+                if (len(header) != 100
+                        or not header.startswith(b"SQLite format 3")
+                        or header[18] != 1 or header[19] != 1):
+                    raise TraceSnapshotError("source_unreadable")
                 before = _file_identity(db)
                 if before is None or before[:2] != (info.st_dev, info.st_ino):
                     raise TraceSnapshotError("source_changed")
