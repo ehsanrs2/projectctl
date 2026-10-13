@@ -11,7 +11,7 @@
 | --- | --- |
 | `projectctl/application/execution.py::_atomic_json`, `prepare` | Source JSON files (plan, execution input, strategy, etc.) are published via temporary-file fsync then `os.replace`; `RunStore.create` and later preparation/claim transitions happen in different database commits. A partial run can expose files before the corresponding run row/status exists. |
 | `projectctl/application/verification.py` | `verification-manifest.json` is written; failure or success evidence is written subsequently; `store.append_event` then `store.transition` are separate SQLite commits. Readers can see new files with a stale run row, or a run row/status before all phase-specific files are validated. |
-| `projectctl/application/integration.py` | Integration/review/publication artifacts use separate atomic JSON writes; event and status updates follow through SQLite in separately committed operations. An in-flight external review can update evidence and state independently. |
+| `projectctl/application/integration.py` | Integration/review/publication artifacts use separate JSON replacements and SQLite transactions. External task completion may be performed **before** the durable integration manifest/event/final status. The integration manifest can be **replaced after PASSED** for worktree cleanup. The remote Task or review authority is not transacted with local RunStore. |
 | `projectctl/application/publication.py` and `review_delivery.py` | Request/receipt JSON writes precede or surround later durable transitions; raw remote receipt can change without an atomic all-store version. |
 | `projectctl/storage/runs.py::transition` | A single transaction binds **its own** `runs` row/serialized `RunManifest` update and a `run.transition` event. It does **not** atomically commit files written by other modules. |
 | `projectctl/storage/sqlite.py::connect_db` | Creates state parent when absent and issues `PRAGMA journal_mode=WAL`; exporter cannot reuse this mutable setup path. |
@@ -31,6 +31,8 @@ read transactions do not make external file changes transactional.
 | Verification writer just replaced verification JSON | New verification file; old/missing evidence; DB row still `verifying` | Not `verified`, not `complete`; snapshot in progress/indeterminate |
 | Writer persisted evidence but has not committed transition | Verification/evidence JSON may parse and hash, yet status/event still pre-transition | No inferred durable verification or task completion |
 | SQLite transition committed, later delivery artifacts or receipts pending | New status/events with mismatched/missing future-phase files | Must evaluate exact phase; cannot invent completed publication |
+| External Task provider completes, local process crashes before integration proof | Remote task changed; no matching local manifest/event or final status | No invented provider-proof or retroactive completion from a local seal |
+| Integration manifest replaced after PASSED for worktree cleanup | Earlier sealed digest differs from currently named file | Earlier epoch unavailable unless original bytes retained; never substitute latest content |
 | Detached WAL sampled while checkpoint resets/recycles frames | Individually valid copied DB/WAL bytes can encode a stale or non-atomic candidate | No `snapshot_proven`, no "latest" claim, refuse if proof required |
 
 These scenarios must be represented in targeted tests, not only described
@@ -53,8 +55,8 @@ Do not promote an L0/L1 observation to L2-L4. A model-valid
 
 | Option | Cross-store proof potential | No exporter mutation | Changes to trusted writer | Portable/default viable? | Disposition |
 | --- | --- | --- | --- | --- | --- |
-| Writer-published immutable as-of seal | Potentially strong if the status/event/seal binding is atomic and files are verified/durable | Yes | **Yes; requires new approval and proof** | Maybe; evaluate | **Preferred investigation, not accepted** |
-| OS/filesystem atomic snapshot | Strong only where DB/WAL/artifacts share guaranteed atomic snapshot boundary | Yes if safely external | No | Unknown; cannot assume | Conditional fallback |
+| Writer-published immutable as-of seal | Potentially strong if the status/event/seal binding is atomic and files are verified/durable; **still needs non-mutating WAL extraction** | Yes | **Yes; requires new approval and proof** | Maybe; evaluate | **Preferred investigation, not accepted** |
+| OS/filesystem atomic snapshot | Captures a single filesystem instant, but might capture **an in-progress workflow**, not a published committed business/evidence epoch | Yes if safely external | No | Unknown; cannot assume | Conditional fallback |
 | Direct `mode=ro` / SQLite backup | SQLite-only consistency; does not include JSON files | Source WAL sidecar concerns unresolved | No | Not enough by itself | Insufficient as standalone |
 | Double-copy B2a | No coherent epoch guarantee | Avoids invoking source SQLite | No | Feasibility-only | Cannot prove L2 |
 | Fail-closed | Safely refuses unknown proof | Yes | No | Always available | Required default |
@@ -91,7 +93,11 @@ seal cannot assert missing files exist or substitute Worker claims.
 The producer must finish and fsync artifact bytes, atomically replace
 the published leaves, ensure directory durability, then commit an
 authoritative DB observation binding the exact digest map with a status
-and event-prefix revision **in one appropriate transaction**. Crash at
+and event-prefix revision **in one appropriate transaction**.
+**Existing JSON writers currently fsync their temporary file but do not
+fsync the containing directory after `os.replace`.** A crash-durable
+publication design must add a separately approved, platform-tested
+directory durability step; it cannot rely on the present helper unchanged. Crash at
 any boundary means either the previous complete seal remains usable or
 the newest seal is absent/invalid. Recovery does not infer a seal from
 stale files or call a Worker to repair state.
@@ -119,6 +125,27 @@ higher L3/L4 checks remain separate. The exporter needs a safe way to
 read the **sealed DB epoch** under WAL without creating original
 sidecars; staging may help decode proof but not create it.
 
+### 5.6 Non-local authority and proof boundaries
+
+The integration path can invoke external task completion *before* its
+local integration audit is durably published. A subsequent crash may
+leave a changed provider state but no final local Run status/receipt.
+A local seal attests only to a bounded **locally observed epoch**,
+not an independent proof that the external provider still has a given
+Task status, that a remote review was merged, or that publication
+succeeded. Verified remote delivery remains a separate source and
+trust-domain decision.
+
+### 5.7 Two independent mandatory technical gates
+
+**Writer gate:** Show a crash-safe, monotonic, append-only seal/status/
+event-prefix binding with a clear retained-byte policy and no privilege
+escalation. **Reader gate:** Separately prove a coherent view of that seal
+in a normal live-WAL DB with *zero source* DB/WAL/SHM writes, plus
+safe no-follow access to the corresponding files. Passing the Writer gate
+does **not** lift B1a's WAL refusal. Passing B2a's detached-copy tests
+does **not** lift either gate. Until both pass, fail closed.
+
 ## 6. Red-team and fault-injection matrix for next implementation gate
 
 | Injected fault/concurrency | Expected safe result |
@@ -130,6 +157,9 @@ sidecars; staging may help decode proof but not create it.
 | Seal refers to another run, project or task | Refusal with identity_mismatch/cross_project_reference |
 | Event prefix out of order, duplicate epoch, roll-back to older seal | Refusal or correctly labeled historical as-of |
 | Run reverify/rebind or delivery review updates after earlier status | New epoch or declared stale-as-of, never false latest |
+| Live-WAL seal present but safe side-effect-free reader unavailable | Refuse to export a proven trace, do not use `immutable=1` or B2a as a bypass |
+| External task completion succeeds before local event/status commit, then crash | Never infer provider state or completed task from local-only evidence |
+| Post-PASSED worktree cleanup rewrites integration manifest | Preserve exact old bytes if explicitly retained; otherwise prior epoch unavailable |
 | Artifact leaf overwritten after seal N | Exact immutable retained N bytes or typed unavailable; never silently use N+1 bytes |
 | Worker says pass without independently checked evidence | `assessments=[]` for Slice B and no completed-delivery inference |
 | Source removed while exporter reads | Safe abort, no write to project or hidden fallback search |
