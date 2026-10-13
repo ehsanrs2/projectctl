@@ -1,9 +1,9 @@
 # M6.0 Slice B1 — Private Source Snapshot Reader Acceptance
 
-**Status: Draft experimental implementation; untested on the owner's checkout.**
+**Status: Draft experimental implementation; operator-reported focused and full-suite tests passed locally, with architecture/merge review still pending.**
 
-Base: `main@34510b411b3544a8923d75b2d6551cf4ee8ff8a1`  
-Governing architecture: ADR-039 (**Accepted design**).  
+Base: `main@34510b411b3544a8923d75b2d6551cf4ee8ff8a1`
+Governing architecture: ADR-039 (**Accepted design**).
 This slice creates **private source-read primitives**, not a completed
 `ExecutionTraceBundle`, public Collector, CLI, evaluation score or new
 execution authority.
@@ -89,10 +89,18 @@ These functions are deliberately not wired into an enabled CLI/Collector:
   SQLite connects**, with zero changes to DB/WAL/SHM bytes;
 - refusal when WAL and SHM file presence is inconsistent.
 
-Actual test results are **not yet known**. Failure of the live-WAL
-non-mutation test is a blocker. A passing test only proves safe refusal,
-**not** support for reading a live WAL database. That must be designed and
-validated separately, not bypassed with `immutable=1` on live WAL.
+**Local test evidence (operator report, 2026-10-13):** the focused Slice B1a,
+B0 and A suites and the full `python -m pytest -q` suite displayed 100%
+completion without reported failures. Tested Git HEAD:
+`7d276a53f590abf5c83306a8e6134b4311c1b17f`;
+Python `3.12.15`. The initial patch-hygiene check flagged trailing spaces
+on this file's former lines 5–6; the subsequent documentation-only revision
+removes them. Hygiene needs a fresh `git diff --check` on that revision.
+These are operator-reported local checks, not independently run CI results.
+
+The passing live-WAL test proves **safe refusal before SQLite connects**,
+**not** support for reading a live WAL database. Live-WAL support must be
+designed and validated separately, not bypassed with `immutable=1`.
 
 ## 4. Local operator acceptance procedure
 
