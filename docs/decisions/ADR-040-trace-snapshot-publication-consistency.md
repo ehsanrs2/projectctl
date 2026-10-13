@@ -19,9 +19,14 @@ ProjectCTL's current writers call `_atomic_json` using temporary files,
 `RunStore.transition` operations commit through *separate* SQLite
 transactions. For example, Verification writes the VerificationManifest
 and EvidenceManifest before emitting the corresponding durable event and
-transition. Integration similarly persists delivery receipts/manifest
-around separate RunStore updates. No current cross-store transaction or
-durable all-artifact snapshot publication boundary was found.
+transition. Integration similarly persists delivery receipts/manifest around separate
+RunStore updates. In particular, the task completion provider can be called
+**before** the integration manifest and final RunStore transition; the
+integration manifest can also be **replaced again after PASSED** when
+worktree cleanup succeeds. Neither the external task provider nor remote
+review/publication state participates in the local SQLite transaction.
+No current cross-store transaction or durable all-artifact snapshot
+publication boundary was found.
 
 SQLite's WAL read transaction provides one consistent **SQLite**
 snapshot, but does not automatically include file-system artifacts.
@@ -70,14 +75,27 @@ The writer publication protocol, if explicitly authorized, must:
    cannot be labeled the latest state unless separately proven. Do not
    claim the seal cryptographically authenticates the producer.
    **Crucially, a digest is not retention**: existing named JSON artifacts
-   may be overwritten. Decide whether sealed epochs retain immutable
-   versioned/content-addressed bytes under a new trusted-writer policy,
-   or whether older seals legitimately become unavailable when their
-   original bytes change. Do not promise historical replay without
-   an approved storage and cleanup lifecycle.
+   may be overwritten **even after a Run reaches PASSED** (e.g. the final
+   integration manifest is replaced to record worktree cleanup).
+   Decide whether sealed epochs retain immutable versioned/content-addressed
+   bytes under a new trusted-writer policy, or whether older seals
+   legitimately become unavailable when their original bytes change.
+   Do not promise historical replay without an approved storage and
+   cleanup lifecycle.
 7. Keep the exporter fully read-only. It can validate the existing seal
    against safely snapshotted source bytes; no CLI or collector may
    generate/repair seals, trigger Worker operations, or write authority.
+8. **Keep trust domains separate:** even a valid local seal does not prove
+   an external task was completed, a pull request was merged or a
+   remote publication succeeded. Those statements need independent
+   trusted receipts and semantic validation (later L3/L4), and must not
+   be inferred from local `run_status=passed`.
+9. **Independent WAL read gate:** a trusted seal committed into the same
+   live WAL database does not by itself solve safe, non-mutating extraction
+   of its bytes. A separate reviewed reader must prove coherent sealed
+   epoch visibility and **zero source DB/WAL/SHM mutations**, or refuse.
+   B2a raw-copy `snapshot_proven=False` cannot be upgraded just because
+   a seal schema exists.
 
 **Important change-control rule:** this proposal would add behavior to
 trusted ProjectCTL writers. It is a *scope extension* beyond the currently
@@ -96,12 +114,17 @@ on existing local filesystems without privileged snapshot operations.
 Costs: touches trusted write paths and possibly SQLite schema; adds
 durable publication/recovery mechanics. Requires proof that seal bytes
 are complete and were bound to the recorded transaction. A seal is not
-independent proof of successful Verification.
+independent proof of successful Verification, remote Task completion or
+GitHub review state. It also needs a **separate** demonstrably
+non-mutating reader for the live-WAL seal and its event prefix.
 
 ### B. Atomic filesystem snapshot of DB, WAL and run artifacts
 
 Pros: unmodified existing writers, single filesystem instant if the
-underlying mechanism truly offers it. Costs: portability,
+underlying mechanism truly offers it. **A filesystem-consistent instant
+can still capture a legitimately in-progress multi-step ProjectCTL
+workflow; it is not automatically a committed verification boundary.**
+Costs: portability,
 permissions/privileges, mount-topology constraints, lifecycle cleanup and
 non-atomic multi-volume layouts. Btrfs/LVM/reflink/copied files are not
 interchangeable; ordinary sequential copies are **not** snapshots. Do
@@ -141,6 +164,15 @@ fully reviewed proof-bearing strategy works.
 - Is the initial use case a **sealed historical as-of trace** instead of
   "most recent live state", and may local identity/digest correlation be
   disclosed under ADR-039's non-anonymous privacy policy?
+- Can a seal publish an observation **after** a Run reaches PASSED and
+  its integration manifest is replaced by worktree cleanup, without
+  falsely presenting an earlier version as complete? Does any phase
+  require a later explicit epoch to make its artifact membership final?
+- How will a sealed WAL epoch be read **without source sidecar writes**?
+  Trusted publication does not answer the read-path problem by itself.
+- Which external task/remote delivery receipts can be independently
+  checked later, versus merely recorded as non-authoritative observed
+  evidence? The seal itself must not expand provider authority.
 - Does the requirement prohibit **any** writer code/schema change?
   If so, select explicit fail-closed D or a separately validated
   filesystem snapshot facility; do not pretend B2a solved this.
@@ -150,8 +182,15 @@ fully reviewed proof-bearing strategy works.
 - Fault injection at **every** file replacement / fsync / SQLite commit
   cut point: no falsely complete or passing trace after a crash.
 - Concurrent append, WAL checkpoint, writer restart, event mutation,
-  run rebind/reverify and delivery review updates; no self-inconsistent
-  or stale-as-latest assertions.
+  run rebind/reverify, **post-PASSED integration-manifest overwrite**
+  and delivery review updates; no self-inconsistent or stale-as-latest
+  assertions.
+- A provider-side Task completion succeeds but the local integration
+  event/manifest/RunStore commit crashes: no false local/remote
+  completion proof, and no automatic task-provider repair by the
+  exporter.
+- A WAL seal is structurally valid but its source cannot be read without
+  sidecar mutation: no exporter call may bypass the refusal.
 - An untrusted modified file, symlink swap, source replaced-and-restored,
   missing/unknown historical artifact and wrong-project seal cannot be
   promoted to present verified lineage.
