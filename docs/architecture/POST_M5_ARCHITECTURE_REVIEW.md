@@ -820,6 +820,4 @@ But ProjectCTL should not treat the M5 scope architecture as complete until:
 - M5.2a closes the policy-mutation/run-admission race; and
 - M5.2b makes generic execution-scope governance explicit.
 
-The next implementation milestone is:
-
-> **M5.2a — Execution Authority Mutation Serialization**
+The originally recommended next milestone was M5.2a, followed by M5.2b. Both are now completed under ADR-037 and ADR-038, respectively. The owner selected M6.0 Read-only Trace & Evaluation Export in the subsequent `docs/architecture/POST_M5_2_ARCHITECTURE_REVIEW.md`.

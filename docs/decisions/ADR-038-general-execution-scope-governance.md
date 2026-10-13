@@ -1,21 +1,30 @@
 # ADR-038: General Execution Scope Authority and Explicit Governance
 
-Status: Proposed — **implementation merged and locally regression-tested; formal architectural acceptance pending**
+Status: **Accepted — 2026-10-12**, as the completed M5.2b execution-scope architecture. This acceptance becomes the repository decision upon merging the closure PR.
 Original design base: `main@8dd6a53d8f71bac353c48803587ee9fa690d7e4c`
-Implementation evidence: `main@f6aa8b5cdcf5a6ab552045b54e403ff24a16667a`;
+Implementation evidence: merged PRs #45–#51, with closure review based on `main@10212d810a2bd631a9f7343a26216f08a94c7a73`;
 see `docs/architecture/M5_2B_CLOSURE_AUDIT.md`.
 Supersedes: none. Extends ADR-031, ADR-033, ADR-035, ADR-036, and ADR-037.
 
 ## Context
 
-Post-M5 review accepted the human-review and execution-input authority boundaries, subject to M5.2a and M5.2b closure. M5.2a is merged. Currently `projectctl.parallel.yaml` / `ParallelScopeCatalog v1` is also consumed by ordinary serial execution (`projectctl/application/execution_inputs.py`), M5 discovery and adoption (`projectctl/context/{discovery,adoption}.py`), and independent verification (`projectctl/application/verification.py`). The serial path silently allows a missing task scope; the parallel path rejects it. The distinction must become explicit project policy without breaking existing projects.
+At the time of the Post-M5 review, `projectctl.parallel.yaml` /
+`ParallelScopeCatalog v1` had become the effective authority for serial
+execution, M5 discovery/adoption and independent verification in addition to
+parallel planning. Unscoped serial admission was implicit whereas parallel
+admission already required a declared scope. M5.2b resolved this by introducing
+a generic authority and a durable `optional|required` project policy without
+silently tightening historical projects.
 
-The decisions below originated as an implementation proposal and the corresponding
-implementation has now landed. This ADR is **not accepted** until the
-architecture-review and release gates recorded in the M5.2b closure audit
-are resolved. It does not authorize ad hoc scope mutation or worker execution.
+The design was proposed before Slices A–D and the follow-up integrity and
+regression fixes. The operator explicitly selected M6.0 as the next direction
+after the Post-M5.2 review, and the closure PR records acceptance of the
+implementation-backed M5.2b invariants. Acceptance **does not** imply
+green hosted CI, a tagged release, cryptographic human approval, or universal
+cross-filesystem power-loss guarantees. All future policy mutations and
+worker admissions remain governed by the implemented checks.
 
-## Design decisions (implemented; acceptance pending)
+## Accepted design decisions (implemented)
 
 ### 1. Exactly one human-managed scope authority
 
@@ -37,7 +46,7 @@ are resolved. It does not authorize ad hoc scope mutation or worker execution.
 
 ### 3. Bind policy to execution authority and enforce at every boundary
 
-- Retain `ExecutionInputManifest` as the runtime execution-input authority. Propose **v2** to bind `scope_governance.mode` and its semantic policy identity to planned task scope; keep a v1 reader and v1 audit/digest semantics. Do not overwrite historical manifests.
+- Retain `ExecutionInputManifest` as the runtime execution-input authority. Version **v2** binds `scope_governance.mode` and its semantic policy identity to planned task scope; keep a v1 reader and v1 audit/digest semantics. Do not overwrite historical manifests.
 - A change of governance policy or selected authoritative task scope between planning and worker admission invalidates stale work instead of silently weakening enforcement.
 - Check effective policy at run preparation, before/after claiming as appropriate, at worker start/resume, and when independently verifying. The verification layer must fail closed for a required-mode run with a missing/unprovable scope, not merely report an empty `execution-write-scope` violation list.
 - Provide an explicit write boundary in ContextManifest/WorkerRequest for every required-mode worker turn. Existing `ExecutionInputManifest.write_scopes` and code-input digests remain the runtime reference; neither Graphify nor a worker suggestion grants authority.
@@ -45,7 +54,7 @@ are resolved. It does not authorize ad hoc scope mutation or worker execution.
 
 ### 4. Explicit, crash-safe legacy catalog migration
 
-Proposed operator command: `projectctl scope migrate --project PATH`.
+Implemented operator command: `projectctl scope migrate --project PATH` (read-only preview by default; explicit `--apply` and `--recover`).
 
 Preconditions: exactly one valid **legacy** catalog, no canonical catalog, clean primary repository, no active runs, no unresolved competing scope migration/adoption, safe non-symlink paths. Hold `execution-authority -> scope-migration` locks throughout the operation. Dry-run shows exact resulting YAML, schema conversion, source/target digests, and tracked Git diff intent.
 
@@ -68,16 +77,44 @@ A legacy-only project can continue ordinary execution according to its governanc
 4. Adding generic scope semantics only to ParallelPlan: recreates the M4.2 split in runtime authority.
 5. Quietly upgrading existing projects to `required`: changes execution behavior without human choice.
 
-## Review-sensitive details
+## Acceptance evidence and residual constraints
 
-- Validate the precise `ExecutionInputManifest v2` compatibility surface and semantic digest before implementation; every caller that persists, loads, hashes, or revalidates execution inputs must agree.
-- Ensure policy changes cannot race durable run admission and have explicit handling for active, checkpointed, and recovery-needed runs.
-- Check schema/model compatibility for `ContextScopeReview` and its approval/request/receipt replay before picking the new version numbers.
-- Keep config version upgrades in-memory on reads. A separate SQLite migration is not implied by a YAML ProjectConfig version change.
-- Confirm platform-safe durable migration and failure-path cleanup; a multi-file migration is not claimed to be one atomic filesystem operation.
+The acceptance decision is grounded in the merged implementation and the
+Post-M5.2 Architecture Review:
 
-## Completion conditions
+- PR #45: generic schema/resolver and ProjectConfig v10.
+- PR #46: ExecutionInputManifest v2, required-mode admission and independent
+  scope revalidation.
+- PR #47: canonical reviewed adoption and journaled explicit migration.
+- PR #48: migration receipt integrity and closure-script requirements.
+- PR #49: exact approved YAML byte-preservation in v2 review.
+- PR #50: successful operator-reported local full suite and targeted regression
+  tests, with Git tree identity verified against merged main.
+- PR #51: operator-reported non-skippable pinned `openai-codex==0.160.0` SDK
+  contract/adapter gate (7 tests passed), and the GitHub Actions quota
+  exhaustion recorded as an infrastructure exception.
 
-M5.2b is complete only when canonical/legacy/dual/missing combinations, governance modes, serial/parallel admission, start/resume, verification, M5 adoption, stale policy digests, crash recovery, schema export, and historical artifact readers have deterministic tests. Update `docs/PROJECTCTL_BLUEPRINT.md`, user README, public schema export, Project State, and the version in the implementation PR. Run the relevant test suite locally; unavailable GitHub Actions runners are **not** evidence of passing CI.
+The owner confirms the GitHub Actions quota is exhausted. Failed hosted
+runs have **not** been relabeled as passing CI and must be rerun when the
+quota is restored. Local acceptance tests do not demonstrate an end-to-end
+live provider run, platform-independent multi-file transaction, portable
+cryptographic audit receipts or authenticated operator identity.
 
-This proposed ADR is the architecture decision candidate; `docs/PROJECT_STATE.yaml` remains the only authority for the active milestone.
+Human-managed catalog changes, migration and review-digest approvals remain
+content-bound and fail closed on ambiguous or stale states. Old schema
+versions and run evidence retain their historical parsing/digest semantics.
+
+See `docs/architecture/M5_2B_CLOSURE_AUDIT.md` and
+`docs/architecture/POST_M5_2_ARCHITECTURE_REVIEW.md`.
+
+## Decision outcome
+
+**M5.2b execution-scope architecture accepted.** This closes the generic
+scope-governance part of the Post-M5 required architecture work. The subsequent
+`M6.0` read-only trace/evaluation goal is a separate milestone and **does not
+grant** new authority over any M5 run, review, quota or worker decision.
+
+`docs/PROJECT_STATE.yaml` remains the sole active-milestone authority.
+The package version and release tag remain independently governed by the
+release process: no automatic publication or version bump is entailed.
+

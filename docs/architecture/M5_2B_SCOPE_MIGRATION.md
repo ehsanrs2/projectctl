@@ -1,6 +1,6 @@
 # M5.2b Slice C — Scope migration and canonical reviewed adoption
 
-**Status:** Slice C, Slice D receipt-integrity hardening and follow-up regression fixes are merged. Operator-reported local full-suite and closure checks pass on PR #50's main-equivalent tree. SDK/CI and formal milestone acceptance remain outstanding.
+**Status:** M5.2b completed by the architecture closure PR. Slice C migration, Slice D integrity hardening and regressions are merged; operator-reported local full-suite and pinned SDK checks passed. Hosted CI remains quota-blocked and must be rerun once available.
 
 ## Operator workflow
 

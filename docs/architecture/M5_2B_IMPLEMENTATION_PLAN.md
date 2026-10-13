@@ -1,6 +1,6 @@
 # M5.2b — Implementation and Acceptance Plan
 
-Status: **Slices A–D and regression fixes merged; local validation passed; SDK/CI and formal architecture sign-off pending.**
+Status: **Completed — Slices A–D and regressions merged; operator-reported local regression and pinned SDK contract tests passed; ADR-038 accepted in the M5.2 closure PR. GitHub Actions quota exception persists.**
 Baseline: `main@8dd6a53d8f71bac353c48803587ee9fa690d7e4c`
 Required review: proposed `docs/decisions/ADR-038-general-execution-scope-governance.md`
 Authority: `docs/PROJECT_STATE.yaml` is the *only* active-milestone authority; this document is a bounded design/acceptance plan, not a second roadmap.

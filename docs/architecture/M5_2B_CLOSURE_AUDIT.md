@@ -1,11 +1,8 @@
 # M5.2b — Slice D closure and architecture acceptance audit
 
-**Status: LOCAL REGRESSION AND PINNED CODEX SDK CONTRACT GATES PASSED; GITHUB ACTIONS QUOTA BLOCK DOCUMENTED; FORMAL ARCHITECTURE ACCEPTANCE OPEN.**
+**Status: ARCHITECTURE CLOSED BY ACCEPTED ADR-038; LOCAL REGRESSION AND PINNED CODEX SDK CONTRACT GATES PASSED; GITHUB ACTIONS QUOTA EXCEPTION DOCUMENTED.**
 
-This document is a recorded evidence review, not a second source of
-milestone authority. `docs/PROJECT_STATE.yaml` continues to name M5.2b
-until outstanding acceptance requirements and the next-goal decision are
-explicitly resolved.
+This document is an evidence review, not a second source of milestone authority. The owner selected M6.0 after approving the Post-M5.2 direction; the closure PR records ADR-038 acceptance and advances `docs/PROJECT_STATE.yaml` to M6.0. The historical test and CI observations below remain unchanged.
 
 ## Implementation and source revisions
 
@@ -54,7 +51,7 @@ and is not a substitute for green GitHub CI or formal architecture acceptance.
 | Historical schemas, config in-memory upgrades and v2 review YAML byte integrity | Complete suite including fixed v8–v10 fixtures | **Local pass reported** |
 | Public SDK contract with real pinned `openai-codex` | Operator installed the exact pinned SDK in uv and ran the non-skippable contract script | **7 local tests passed; reported** |
 | GitHub Actions test and SDK jobs | The repository owner confirms the GitHub Actions usage limit has been exhausted. Hosted CI is unavailable; local full-suite and pinned SDK tests passed separately. | **Infrastructure quota blocker (operator-confirmed); no green hosted CI run** |
-| ADR-038 architecture acceptance, docs/version release policy, next milestone | Architecture owner must approve final design and explicitly select next step | **Pending human acceptance** |
+| ADR-038 architecture acceptance, docs/version release policy, next milestone | Owner approved the Post-M5.2 review and chose M6.0; the closure PR accepts ADR-038 and updates the single active milestone; separate release policy retained | **Accepted on closure PR merge; no new release** |
 
 ### GitHub Actions observation
 
@@ -116,12 +113,11 @@ The SDK gate is therefore **operator-reported locally passed**, not independentl
 - A successful suite verifies coded contracts, not all operational
   environments, live Codex worker behavior or GitHub Actions availability.
 
-## Milestone promotion rule
+## Final milestone disposition
 
-Do **not** change `docs/PROJECT_STATE.yaml`, tag a release, or claim
-ADR-038 accepted solely because this report has a local pass.
-The pinned SDK evidence and the operator's GitHub Actions quota-exhaustion explanation are now recorded. Hosted CI remains unavailable rather than green; future rerun is required once quota is restored. The remaining formal closure decisions are ADR-038 architecture acceptance, release/version policy, and a human-selected next roadmap direction. The implementation can be described accurately as
-**merged and locally regression-tested**, while the milestone remains active.
+The operator reported passing local full-suite and pinned SDK tests, confirmed the GitHub Actions quota-exhaustion exception, and approved M6.0 Read-only Trace & Evaluation Export as the next direction. The closure PR formalizes acceptance of ADR-038 and completion of M5.2b. `docs/PROJECT_STATE.yaml` is advanced to M6.0 only in that closure PR. These are separate from any package release: project version remains `0.41.0`; no tag or publication was made.
+
+Historical failed GitHub-hosted runs are **not green CI**. Re-run hosted checks when quota is restored. The Post-M5.2 architecture review and ADR-038 document remaining durability, human identity, local-provenance and end-to-end provider limitations.
 
 See `docs/architecture/M5_2B_IMPLEMENTATION_PLAN.md`,
 `docs/architecture/M5_2B_SCOPE_MIGRATION.md`,

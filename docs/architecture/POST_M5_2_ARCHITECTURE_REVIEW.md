@@ -1,12 +1,11 @@
 # Post-M5.2 Architecture Closure Review
 
-**Status: Proposed review / human architecture decision pending**  
+**Status: Architecture review accepted for M5.2b closure and M6.0 direction selection — 2026-10-12**  
 Reviewed baseline: `main@8e148aff9560ee9cc2e2b8d9bbb260504502f285` (merged PR #51, 2026-10-12)  
-Current structured milestone authority: `docs/PROJECT_STATE.yaml` — **M5.2b**  
-Decision candidate: `docs/decisions/ADR-038-general-execution-scope-governance.md` — **Proposed**
+Milestone transition: `docs/PROJECT_STATE.yaml` selects **M6.0** in the closure PR; the merged pre-transition state was M5.2b  
+Decision: `docs/decisions/ADR-038-general-execution-scope-governance.md` — **Accepted in the milestone closure PR**
 
-> This review is a decision proposal and evidence synthesis, not an authorization
-> to mark ADR-038 Accepted, to change the active milestone, or to deploy a release.
+> This review was originally proposed in PR #52 and accepted by the owner together with the M6.0 direction. The milestone closure PR makes the ADR and Project State changes effective on merge. This does not authorize a release, new worker authority or relaxed scope policy.
 
 ## 1. Scope and evidence of closure
 
@@ -106,26 +105,19 @@ Evidence details and the exact SHA provenance are recorded in
 These are explicit scope limits, not grounds to bypass any of the run
 admission, evidence, migration, or approval checks.
 
-## 4. Proposed architecture decision
+## 4. Architecture closure decision
 
-**Recommendation: Accept ADR-038 as the documented M5.2b execution-scope
-architecture**, subject to operator review of this report and release
-policy. Accepting it should not promise platform-independent durability,
-cryptographic identity or green hosted CI.
+**Decision: Accept ADR-038 as the documented M5.2b execution-scope architecture** with the recorded operator-confirmed GitHub Actions quota exception and local suite / pinned SDK evidence. This acceptance does not promise platform-independent durability, cryptographic identity, live worker acceptance or green hosted CI.
 
-On acceptance:
+The closure PR records this accepted direction by updating ADR-038 to
+`Accepted`, marking M5.2b `Completed` in Blueprint/README and advancing the
+single `docs/PROJECT_STATE.yaml` authority to the owner-selected M6.0. The
+recorded GitHub Actions quota exception remains non-green CI. The release
+version remains `0.41.0`; any future bump, tag or publication requires a
+separate release decision. The specific M6.0 evidence and privacy contracts
+are still **proposed** under ADR-039 and must be approved before implementation.
 
-1. Change ADR-038 status to `Accepted` and replace outdated
-   pre-implementation tense with an as-built summary and evidence refs.
-2. Mark M5.2b **Completed** in the Blueprint/README, while preserving the
-   hosted-CI quota exception and residual limitations.
-3. Preserve `docs/PROJECT_STATE.yaml` as the **sole active-state authority**.
-   Advance it only when the next goal/milestone is explicitly selected.
-4. Review the release version separately (potential next minor pre-1.0
-   release candidate: `0.42.0`, **not yet chosen**). Do not tag or publish
-   automatically.
-
-**No status is changed by this proposal alone.**
+**The closure PR makes these recorded architecture decisions effective on merge.**
 
 ## 5. Next major product-direction decision
 
@@ -142,11 +134,11 @@ until M5.2a/b closure. Its candidate areas remain:
 | Human cockpit / Obsidian integration | Improves oversight and operator experience | Medium: UI is non-authoritative, consent and state synchronization | After read-only views are stable |
 | Multi-agent orchestration | Potentially higher throughput | Very high: conflicts, quota, independent verification | Not next; retain safety prerequisite |
 
-The order above is a **recommendation, not an accepted roadmap**.
+The operator has selected **M6.0 Read-only Trace & Evaluation Export** from these candidates. Other candidates remain deferred; their ordering remains non-binding.
 
 ### Recommended first product slice, if selected
 
-**Candidate M6.0 — Read-only Trace & Evaluation Export**.
+**Selected M6.0 — Read-only Trace & Evaluation Export**.
 
 - Begin with an explicit versioned `ExecutionTraceBundle` that references
   existing run, input, claim, worker, verification and delivery evidence
@@ -164,21 +156,8 @@ The order above is a **recommendation, not an accepted roadmap**.
 
 Why this candidate first: it makes the existing deterministic execution and
 evidence architecture easier to audit before introducing additional worker,
-skill or automation authorities. This is a sequencing judgment, not a
-claim of an established product priority.
+skill or automation authorities. This sequencing is now the owner-selected product priority; it remains subject to its own design/acceptance gates.
 
 ## 6. Review and transition gate
 
-The final closure PR should be a **separate, explicitly approved** change
-after the operator chooses the next product direction. That PR can accept
-ADR-038, advance the single `PROJECT_STATE.yaml` authority to the selected
-milestone, update the Blueprint/README and select the release/version policy
-without confusing a review proposal with a completed decision.
-
-Before the final PR is merged, obtain:
-- acceptance of the ADR-038 invariants and recorded CI exception;
-- an explicit next-milestone goal and ID;
-- a decision on whether a release/version bump is in scope.
-
-Until then, **M5.2b remains the formal active milestone** despite its
-merged and locally regression-tested implementation.
+The milestone closure PR accepts ADR-038 and advances the sole active state to M6.0 without tagging a release. The owner-confirmed GitHub Actions quota exception remains documented rather than treated as a passing hosted run. ADR-039 and the M6.0 implementation plan define the next **proposed** privacy, provenance and read-only acceptance gates; no new worker authority is granted merely by selecting M6.0.
