@@ -1,6 +1,6 @@
 # M6.0 — Read-only Trace & Evaluation Export: Bounded Implementation Plan
 
-**Status: Slices A and B0 merged and locally regression-tested; ADR-039 design acceptance proposed in a separate PR. Bounded Collector/CLI not implemented.**
+**Status: Slices A, B0 and B1a merged with operator-reported local regression passes; ADR-039 accepted. B1b pure artifact validation is in Draft; no Collector/CLI or safe live-WAL reader exists.**
 **Active goal:** `docs/PROJECT_STATE.yaml` — M6.0
 **Architecture decision:** ADR-039 (Accepted as bounded design on acceptance PR merge; implementation still gated)
 **Inherited safety decisions:** ADR-037, ADR-038 (Accepted)
@@ -37,14 +37,15 @@
 
 ### B1 — Experimental read-only source snapshot primitives (Draft)
 
-A separate Slice B1 review proposes a POSIX descriptor-anchored artifact
-reader and one-transaction SQLite `mode=ro` run snapshot for **quiescent
-rollback-journal databases only**. Live WAL is intentionally refused before
-SQLite connects to prevent touching sidecars. This is not yet a Collector or
-CLI and is **not accepted** until the tests pass and safe live-WAL strategy
-is separately designed. See
-`docs/architecture/M6_0_SLICE_B1_READER_AUDIT.md`. A detected SQLite
-sidecar change blocks operational use; it is not silently ignored.
+PR #57 merged B1a: a POSIX descriptor-anchored artifact reader and a
+single-transaction SQLite `mode=ro` run snapshot for **quiescent
+rollback-journal databases only**. Operator-reported local tests and patch
+hygiene passed. Live WAL remains deliberately refused before SQLite
+connects. The proposed B1b follow-up adds **pure versioned evidence parsing
+and an always-incomplete, no-assessments Trace builder**, without a Collector
+or CLI. See `docs/architecture/M6_0_SLICE_B1_READER_AUDIT.md` and
+`docs/architecture/M6_0_SLICE_B1B_ARTIFACT_VALIDATION.md`. Safe live-WAL
+reads and cross-source snapshot consistency remain separate blockers.
 
 ### B. Bounded local trace collection and export
 
