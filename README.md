@@ -2270,11 +2270,17 @@ or missing evidence must be labeled explicitly, never interpreted as success.
 Slice A's `ExecutionTraceBundle v1` model/schema and Slice B0's pure formatter and security proposal merged in PRs #54–#55, with operator-reported local tests successful. **ADR-039 is accepted as a bounded design (PR #56).** This preserves strict read-only SQLite/WAL and symlink checks, an explicitly **non-anonymous** local project/run ID + digest disclosure policy, and `assessments=[]` in initial Slice B. **No collector or `projectctl trace export` CLI exists yet.** See `docs/architecture/M6_0_SLICE_B_SNAPSHOT_SECURITY_SPEC.md` and `docs/architecture/M6_0_IMPLEMENTATION_PLAN.md`. `docs/PROJECT_STATE.yaml` remains the active milestone
 authority. Release version stays at `0.41.0` until a separate release decision.
 
-Slice B1a's private source readers merged in PR #57 after local tests; they
-still **refuse live WAL** before connecting to SQLite. A separate Draft B1b
-proposal adds pure historical artifact parsing, raw identity validation and
-an always-incomplete Trace builder with `assessments=[]` (merged as PR #58 after local tests). See
-`docs/architecture/M6_0_SLICE_B1_READER_AUDIT.md` and
-`docs/architecture/M6_0_SLICE_B1B_ARTIFACT_VALIDATION.md`. This is **not** an
-enabled Collector or public CLI; safe live-WAL reading and cross-artifact
-consistency remain unimplemented.
+Slice B1a's private source readers merged in PR #57 and intentionally
+**refuse live WAL**. B1b's pure historical artifact parsing, raw identity
+checks and always-incomplete Trace builder with `assessments=[]` merged in
+PR #58 after reported local regression passes. Neither is an operational
+Collector/CLI. See `docs/architecture/M6_0_SLICE_B1_READER_AUDIT.md`
+and `docs/architecture/M6_0_SLICE_B1B_ARTIFACT_VALIDATION.md`.
+
+B2a is a **Draft feasibility-only experiment** for reading a detached WAL
+copy without SQLite touching the project authority. Its result expressly
+sets `snapshot_proven=False`: stable repeated reads and detached integrity
+checks do not prove latest-commit or cross-artifact atomicity. See
+`docs/architecture/M6_0_B2A_WAL_FEASIBILITY.md`. Until a proven coherent,
+non-mutating snapshot strategy is accepted, `projectctl trace export`
+remains disabled.
