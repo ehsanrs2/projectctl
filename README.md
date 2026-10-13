@@ -2269,3 +2269,8 @@ or missing evidence must be labeled explicitly, never interpreted as success.
 
 Slice A's `ExecutionTraceBundle v1` model/schema and Slice B0's pure formatter and security proposal merged in PRs #54–#55, with operator-reported local tests successful. **ADR-039 is accepted as a bounded design only upon merging its separate acceptance PR.** This preserves strict read-only SQLite/WAL and symlink checks, an explicitly **non-anonymous** local project/run ID + digest disclosure policy, and `assessments=[]` in initial Slice B. **No collector or `projectctl trace export` CLI exists yet.** See `docs/architecture/M6_0_SLICE_B_SNAPSHOT_SECURITY_SPEC.md` and `docs/architecture/M6_0_IMPLEMENTATION_PLAN.md`. `docs/PROJECT_STATE.yaml` remains the active milestone
 authority. Release version stays at `0.41.0` until a separate release decision.
+
+Slice B1's experimental private source readers are under review in
+`docs/architecture/M6_0_SLICE_B1_READER_AUDIT.md`. They are **not**
+an enabled trace collector or public CLI; WAL/SHM no-mutation, safe
+descriptor reads and cross-artifact consistency remain explicit gates.
