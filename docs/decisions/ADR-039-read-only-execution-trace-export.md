@@ -1,6 +1,6 @@
 # ADR-039: Read-only Execution Trace & Evaluation Export
 
-**Status: Proposed — Slice A model/schema/tests authored for review; no collector, export CLI or authority change implemented**  
+**Status: Proposed — Slice A model/schema merged and locally tested; Slice B snapshot/security design awaiting explicit acceptance; no collector or CLI implemented**
 **Milestone:** M6.0 — Read-only Trace & Evaluation Export  
 **Precondition:** Accepted M5.2b execution-scope architecture (ADR-038)  
 **Decision scope:** A derived local observability/export contract, **not** run authority
@@ -144,3 +144,28 @@ rejection; cross-project isolation; schema-export compatibility; JSON CLI
 roundtrip; and no false `verified` state from Worker-only claims.
 
 **The selected M6.0 goal is accepted as a roadmap choice. This ADR remains Proposed.** Slice A's model and privacy test matrix are published for review in `projectctl/schemas/trace.py` and `docs/architecture/M6_0_TRACE_CONTRACT_V1.md`. Fields carry an explicit structural/non-authoritative semantics; real source validity and lineage cannot be established by the Pydantic schema alone. The collector/CLI stays blocked until the snapshot consistency, path allowlist, pseudonymization and metric support decisions are accepted.
+
+## M6.0 Slice B read-only boundary proposal (awaiting acceptance)
+
+The concrete, repository-grounded decisions are in
+`docs/architecture/M6_0_SLICE_B_SNAPSHOT_SECURITY_SPEC.md`.
+
+- A dedicated SQLite `mode=ro` connection, single read transaction and
+  bounded consistency check. Do not use existing `connect_db`, which
+  creates directories and sets journal mode; test WAL sidecar effects.
+- Only verified fixed leaf filenames under the run directory; a safe
+  no-follow path traversal, bounded file lengths, exact schema-version
+  readers and cross-run identity checks.
+- Local-only default exposes bounded project/run IDs and SHA digests for
+  operator reconciliation. **This is not anonymization.** No automatic
+  network sharing. Pseudonymization requires an explicit future decision.
+- Fixed event categories, no payloads, worker messages or exception strings;
+  canonical JSON formatting without wall-clock export metadata.
+- `assessments=[]` throughout initial Slice B: no unsupported
+  `verified` or `supported` claim before Slice C cross-artifact lineage.
+- Inability to establish a safe consistent DB/file read must fail closed or
+  be declared `inconsistent`, not silently treated as success.
+
+`projectctl/trace/format.py` is a pure helper, not a collector; no trace CLI
+or source-read API has been introduced. The above privacy/snapshot tradeoffs
+must be explicitly accepted before implementing an operational exporter.
