@@ -1683,7 +1683,7 @@ See `docs/architecture/M5_2B_CLOSURE_AUDIT.md`, `docs/architecture/POST_M5_2_ARC
 
 ### M6.0 — Read-only Trace & Evaluation Export
 
-**Active design milestone — roadmap selected, implementation not started.**
+**Active milestone — Slice A contract and Slice B0 pure formatter merged; ADR-039 read-only design acceptance recorded in a separate PR. Collector/CLI not yet implemented.**
 
 M6.0 produces a reproducible, local-only, redacted view derived from the
 existing authoritative RunStore, ExecutionInputManifest, VerificationManifest,
@@ -1693,9 +1693,7 @@ verification, task completion or worker permissions. Historical schemas must
 be interpreted using their own versioned contracts; unsupported or missing
 evidence is explicit, never inferred as success.
 
-Design proposal: `docs/decisions/ADR-039-read-only-execution-trace-export.md`
-(**Proposed**). Bounded milestone gates:
-`docs/architecture/M6_0_IMPLEMENTATION_PLAN.md`.
+Bounded architecture decision: `docs/decisions/ADR-039-read-only-execution-trace-export.md` (**Accepted as design upon merger of its acceptance PR**). Initial Slice B must remain local-only, fail closed on SQLite/WAL and filesystem safety uncertainties, reveal only allowlisted information and make **no supported assessments**. See `docs/architecture/M6_0_SLICE_B_SNAPSHOT_SECURITY_SPEC.md` and `docs/architecture/M6_0_IMPLEMENTATION_PLAN.md`. Actual Collector/CLI verification remains pending.
 
 The active goal is set only in `docs/PROJECT_STATE.yaml`; the current package
 version remains `0.41.0` pending a separate release decision.
