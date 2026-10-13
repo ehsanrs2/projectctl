@@ -1,6 +1,6 @@
 # M6.0 — Read-only Trace & Evaluation Export: Bounded Implementation Plan
 
-**Status: Slice A proposed trace model, v1 public schema and privacy tests authored; ADR-039 remains Proposed and no exporter/CLI exists.**  
+**Status: Slice A merged and locally tested (PR #54); Slice B snapshot/security gate proposed. ADR-039 remains Proposed; no collector/CLI exists.**  
 **Active goal:** `docs/PROJECT_STATE.yaml` — M6.0  
 **Architecture proposal:** ADR-039 (Proposed)  
 **Inherited safety decisions:** ADR-037, ADR-038 (Accepted)
