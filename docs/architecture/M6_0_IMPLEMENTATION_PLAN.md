@@ -1,6 +1,6 @@
 # M6.0 — Read-only Trace & Evaluation Export: Bounded Implementation Plan
 
-**Status: Slices A, B0, B1a and B1b merged with operator-reported local regression passes; ADR-039 accepted. B2a detached-WAL feasibility is experimental and not yet validated; no Collector/CLI or proven coherent live-WAL snapshot exists.**
+**Status: Slices A, B0, B1a, B1b and feasibility-only B2a merged after operator-reported local regression passes; ADR-039 Accepted. ADR-040 cross-store consistency design is Proposed, not implemented; no Collector/CLI or proven coherent live-WAL snapshot exists.**
 **Active goal:** `docs/PROJECT_STATE.yaml` — M6.0
 **Architecture decision:** ADR-039 (Accepted as bounded design on acceptance PR merge; implementation still gated)
 **Inherited safety decisions:** ADR-037, ADR-038 (Accepted)
@@ -62,6 +62,23 @@ JSON files or even a latest-commit DB/WAL pair during checkpoints. Do not
 wire the probe into an operational exporter. Choose and test an explicit
 atomic/cooperative snapshot strategy or fail closed.
 
+### B2b — Cross-store consistency architecture review (Proposed)
+
+PR #59 merged the feasibility-only B2a probe with reported local passing
+focused/full-suite regression evidence. Its result still declares
+`snapshot_proven=False` and cannot be a trustworthy Collector input.
+`docs/architecture/M6_0_B2B_SNAPSHOT_CONSISTENCY_REVIEW.md` audits the
+production writer order: JSON file replacements and SQLite lifecycle/event
+commits occur in **distinct transactions**.
+
+ADR-040 is **Proposed**. It compares a trusted writer-published,
+monotonic **as-of seal** (preferred to investigate, but requires explicit
+authorization to modify trusted writer paths) against a supported atomic
+filesystem snapshot or continued safe refusal. Neither B2a nor SQLite
+`integrity_check` proves a combined DB/WAL/file instant. **No chosen
+implementation, reader authority promotion or CLI** is authorized until
+the operator accepts an architecture with crash/replay/concurrency tests.
+
 ### B. Bounded local trace collection and export
 
 1. Implement a read-only collector over one explicitly selected project/run.
@@ -105,9 +122,16 @@ symlink/cross-project rejection and no-action proofs.
 **Gate D:** reviewed local/hosted evidence, explicit architecture acceptance,
 and no widening of worker authority.
 
-## Immediate next development task after closure PR
+## Immediate next architecture decision
 
-Slice A (PR #54) and Slice B0 (PR #55) merged after operator-reported successful local tests. The ADR-039 acceptance PR now fixes the non-anonymous local identity policy, path/source allowlist, bounded SQLite snapshot/WAL failure behavior and `assessments=[]` rule for initial Slice B. Once this separate acceptance PR is merged, the *next* implementation branch may add a bounded Collector/JSON stdout exporter **subject to real fail-closed tests**. No live export command, evaluation scoring, provider permission or package-version change is authorized by this documentation PR.
+B2b presents ADR-040 as **Proposed** only. The owner must decide whether
+modifying trusted ProjectCTL writer paths to publish a derived, immutable,
+versioned as-of seal is within M6.0's authority contract. If yes, the
+next approved PR designs one bounded writer seal, exact DB commit/event
+anchor, recovery and adversarial fixtures; if no, use only a demonstrably
+atomic filesystem snapshot or continue fail-closed. No public exporter
+until its cross-store proof and no-source-mutation tests pass. No new
+Worker permission, provider, release or version change is implied.
 
 ## Non-goals
 
