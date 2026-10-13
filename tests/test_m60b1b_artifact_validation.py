@@ -128,6 +128,16 @@ def test_task_and_source_kind_mismatch_cannot_claim_validity():
     assert swapped.reason_code == "identity_mismatch"
 
 
+def test_raw_task_identity_cannot_be_normalized_into_a_valid_match():
+    original = ContextManifestV1(
+        task_id="task-1", git_commit="deadbeef"
+    ).model_dump(mode="json")
+    original["task_id"] = " task-1 "
+    result = _inspect(_file("context_manifest", json.dumps(original).encode()))
+    assert result.validation_state == "invalid"
+    assert result.reason_code == "identity_mismatch"
+
+
 def test_tampered_snapshotted_bytes_are_stale_and_not_reused():
     original = _context()
     forged = TraceFileSnapshot(
