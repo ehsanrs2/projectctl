@@ -1,6 +1,6 @@
 # ADR-039: Read-only Execution Trace & Evaluation Export
 
-**Status: Proposed — Slice A model/schema merged and locally tested; Slice B snapshot/security design awaiting explicit acceptance; no collector or CLI implemented**
+**Status: Accepted — 2026-10-13 (effective upon merge of the ADR-039 acceptance PR). This accepts a bounded design, not an implemented collector, passing CI or a release.**
 **Milestone:** M6.0 — Read-only Trace & Evaluation Export  
 **Precondition:** Accepted M5.2b execution-scope architecture (ADR-038)  
 **Decision scope:** A derived local observability/export contract, **not** run authority
@@ -19,11 +19,11 @@ observer the ability to alter its execution or invent missing evidence.
 M6.0 must not create a new source of truth that overrides any of those
 artifacts or treat worker-provided claims as independent verification.
 
-## Proposed decisions for review
+## Accepted design decisions (implementation remains gated)
 
 ### 1. An explicitly non-authoritative derived artifact
 
-Propose `ExecutionTraceBundle v1` with schema kind
+`ExecutionTraceBundle v1` has been introduced in Slice A with schema kind
 `projectctl.execution_trace_bundle`. It is a **deterministic local export**
 derived from a bounded set of existing run artifacts. It is never an input to
 run admission, human scope approval, scheduler eligibility, worker permission,
@@ -32,9 +32,9 @@ quota calculation, verification, integration or delivery.
 The bundle should include, subject to redaction:
 
 - export contract version and *source* project/run identity;
-- ordered source descriptors: artifact kind, historical schema version where
-  known, relative reference (only if safe to disclose), content digest and
-  validation state;
+- ordered source descriptors: allowlisted artifact kind, historical schema
+  version where known, content SHA-256 and validation state. Raw source
+  filename/path is **not** a v1 output field;
 - run life-cycle status and structured, timestamped event categories;
 - independent verification outcome **only if its artifact and identity
   lineage can be proven**;
@@ -51,8 +51,11 @@ granted authority.
 
 ### 2. Read-only source handling and provenance
 
-- Read from existing `RunStore` read APIs and whitelisted, validated local
-  artifacts. Do not duplicate a writable run store or mutate old manifests.
+- Read authoritative SQLite run data through a **dedicated**, tested,
+  read-only connection rather than existing `RunStore.get/manifest/events`
+  convenience readers, which use a potentially side-effecting connection.
+  Read only fixed whitelisted artifacts; do not create a writable run store
+  or mutate any historical manifest.
 - Versioned historical readers must remain version-specific. Unknown schema
   versions become explicit `unsupported` evidence, not coerced into current
   models.
@@ -83,9 +86,9 @@ granted authority.
 - Any future opt-in sensitive/raw export mode is a **separate security
   decision**, not implied by this ADR.
 
-### 4. Proposed CLI, not yet public
+### 4. Accepted initial CLI shape (not implemented)
 
-Tentative bounded form:
+Planned bounded form, executable only after Slice B test acceptance:
 
 ```text
 projectctl trace export --run RUN_ID --project PATH --format json
@@ -120,19 +123,90 @@ statements.
 5. Adding new scoring to the scheduler or verifier as part of export:
    would grant the observer authority beyond the selected M6.0 scope.
 
-## Open questions requiring acceptance before implementation
+## Accepted detailed boundaries for Slice B
 
-- Exact artifact locator/whitelist and secure root-relative path resolution.
-- Consistent SQLite read snapshot plus file-snapshot strategy under
-  concurrent writes; how to mark an export as `incomplete`.
-- Exact `ExecutionTraceBundle v1` public field set, stable ordering and
-  hash/version semantics.
-- Per-field redaction allowlist and adversarial tests against accidental
-  absolute-path, environment, provider payload and secret disclosure.
-- Handling run histories with older missing/unsupported artifact versions.
-- Output destination policy and explicit creation/overwrite semantics.
-- What minimum independent evidence is sufficient for each proposed
-  evaluation metric.
+These constraints were reviewed as the initial read-only execution trace
+design in `docs/architecture/M6_0_SLICE_B_SNAPSHOT_SECURITY_SPEC.md`. They
+do not imply that the SQLite/filesystem safety properties have already been
+demonstrated by an operational collector.
+
+### Snapshot and no-mutation invariant
+
+- Use a separate, pre-existing SQLite `.projectctl/state.sqlite`
+  connection in `mode=ro` with `query_only=ON`, validated application ID and
+  DB version, and a bounded **single read transaction** for the run record,
+  stored run manifest and ordered event metadata. Select by bound run ID.
+- **Do not call** ProjectCTL's existing `connect_db` for export: it creates
+  directories and sets WAL journal mode. Do not initialize, migrate, repair
+  or attach databases, or acquire an execution/claim/verification lock.
+- Reading SQLite WAL can create or interact with sidecar files. Before
+  enabling a collector, test cold DB, active WAL, absent sidecars and
+  concurrent writers, and establish that no ProjectCTL operation state or
+  database/sidecar content is modified. Do **not** apply `immutable=1` to
+  live WAL state to bypass the safety check. On unsupported environments,
+  **fail closed**.
+- A read transaction protects DB consistency, **not** an atomic snapshot
+  across the DB and separately persisted files. A bounded pre/post source
+  identity check and at most one retry are allowed; changed or unverifiable
+  observations must become typed `inconsistent_snapshot` or a safe refusal.
+  `PRAGMA data_version` alone is insufficient proof.
+
+### Source allowlist and historical identity
+
+- Database source kinds are exclusively the selected `runs` row,
+  `runs.manifest_json` and ordered `run_events` for that same run ID.
+  Never read/export the `run_events.payload_json` field.
+- File source kinds use **only** the explicitly listed leaf names under
+  `.projectctl/runs/<validated_run_id>/`; no recursive search, absolute
+  payload-derived references or symlink traversal. For POSIX, use
+  directory-relative no-follow descriptor reads and `fstat` checks;
+  platforms without comparable guarantees fail closed.
+- Initial hard limits: **2 MiB per artifact** and **512 events**. Exceeding
+  bounds must fail safely or show explicit incompleteness; no silent
+  truncation and no leakage of raw error messages.
+- Deserialize each known historical schema with its **matching versioned
+  model**. Unknown versions must be marked `unsupported`, never coerced to
+  `present`. Do not trust the presence of a file as proof that its
+  `run_id`/`task_id` or parent-digest lineage matches the database.
+- Missing future-phase artifacts are expected for partial runs; their
+  absence is not automatically an inconsistency or a failed verification.
+
+### Local privacy decision and deliberate limits
+
+- The initial **local-only** output may expose bounded `project_id`,
+  `run_id` and artifact SHA-256 identities so an operator can reconcile
+  it with the local run. This is an explicit **non-anonymous** design choice:
+  identities and content digests can facilitate correlation and should not
+  be redistributed casually.
+- Omit raw prompts, stdout/stderr, worker/provider messages, event payloads,
+  task IDs, review URLs, paths, lease ownership, environment variables and
+  arbitrary free-form failure strings. Event categories come only from the
+  exact allowlist in `projectctl/trace/format.py`.
+- Default output goes to stdout only. Any file destination must be an
+  explicit safe no-clobber operator choice **outside protected authority
+  paths**. No network transfer, cloud API or automatic telemetry.
+- Optional pseudonymization, remote sharing or raw/sensitive export needs
+  a **new explicit security decision**, not a silent extension of this ADR.
+
+### Evidence support boundary
+
+- Slice B **always emits `assessments=[]`**. `observed_run_status`
+  remains an observation, even if it equals `passed`.
+- A `present` source or structurally valid v1 `ExecutionTraceBundle`
+  does **not** by itself prove raw-byte identity, semantic digest,
+  verification independence or delivery. Collectors must downgrade
+  unverifiable evidence, never manufacture a `supported` assessment.
+- Deterministic UTF-8 JSON uses sorted keys, UTC timestamps, stable
+  source/event order and one trailing newline. No generated export-time
+  timestamp or host-specific paths.
+
+### Implementation gate and scope of acceptance
+
+Acceptance of this **architecture decision** allows a separate Slice B
+implementation PR to be developed and tested. It does not approve its
+merge or claim a complete, side-effect-free collector until the safety
+tests below pass on supported systems. Unsupported filesystems or SQLite
+WAL modes must fail closed instead of weakening the non-mutation contract.
 
 ## Acceptance criteria
 
@@ -143,29 +217,24 @@ behavior; redaction of secret-bearing fixtures; symlink/path traversal
 rejection; cross-project isolation; schema-export compatibility; JSON CLI
 roundtrip; and no false `verified` state from Worker-only claims.
 
-**The selected M6.0 goal is accepted as a roadmap choice. This ADR remains Proposed.** Slice A's model and privacy test matrix are published for review in `projectctl/schemas/trace.py` and `docs/architecture/M6_0_TRACE_CONTRACT_V1.md`. Fields carry an explicit structural/non-authoritative semantics; real source validity and lineage cannot be established by the Pydantic schema alone. The collector/CLI stays blocked until the snapshot consistency, path allowlist, pseudonymization and metric support decisions are accepted.
+## Decision outcome and provenance
 
-## M6.0 Slice B read-only boundary proposal (awaiting acceptance)
+**ADR-039 accepted as the bounded design** on merge of the acceptance PR,
+following merged Slice A PR #54, Slice B0 PR #55 and operator-reported
+passing local targeted/full-suite tests. The PR #55 whitespace issue was
+corrected before its merge.
 
-The concrete, repository-grounded decisions are in
-`docs/architecture/M6_0_SLICE_B_SNAPSHOT_SECURITY_SPEC.md`.
+This decision selects the initial local, non-anonymous identity disclosure
+and read-only snapshot contract **subject to the explicit fail-closed
+implementation tests**. A collector, CLI command and live-source lineage
+evaluation have **not** been implemented or accepted. The package remains
+at version `0.41.0`; no tag or release is implied.
 
-- A dedicated SQLite `mode=ro` connection, single read transaction and
-  bounded consistency check. Do not use existing `connect_db`, which
-  creates directories and sets journal mode; test WAL sidecar effects.
-- Only verified fixed leaf filenames under the run directory; a safe
-  no-follow path traversal, bounded file lengths, exact schema-version
-  readers and cross-run identity checks.
-- Local-only default exposes bounded project/run IDs and SHA digests for
-  operator reconciliation. **This is not anonymization.** No automatic
-  network sharing. Pseudonymization requires an explicit future decision.
-- Fixed event categories, no payloads, worker messages or exception strings;
-  canonical JSON formatting without wall-clock export metadata.
-- `assessments=[]` throughout initial Slice B: no unsupported
-  `verified` or `supported` claim before Slice C cross-artifact lineage.
-- Inability to establish a safe consistent DB/file read must fail closed or
-  be declared `inconsistent`, not silently treated as success.
+GitHub Actions hosted CI remains unavailable following the owner's
+exhausted-quota report. Its failure records must not be relabeled as green;
+rerun tests when quota returns. `docs/PROJECT_STATE.yaml` continues to
+identify M6.0 as the active milestone.
 
-`projectctl/trace/format.py` is a pure helper, not a collector; no trace CLI
-or source-read API has been introduced. The above privacy/snapshot tradeoffs
-must be explicitly accepted before implementing an operational exporter.
+See `docs/architecture/M6_0_TRACE_CONTRACT_V1.md`,
+`docs/architecture/M6_0_SLICE_B_SNAPSHOT_SECURITY_SPEC.md` and
+`docs/architecture/M6_0_IMPLEMENTATION_PLAN.md`.
