@@ -67,6 +67,21 @@ _DIGEST = r"^[0-9a-f]{64}$"
 
 # Only these kinds have a versioned persisted Pydantic public schema.
 _UNVERSIONED = frozenset({"run_record", "run_event_stream"})
+# Source model versions already shipped in ProjectCTL. A future collector may
+# interpret a historical schema only via its matching reader, not by casting it
+# to the current model or declaring an unknown version "present".
+_SUPPORTED_VERSIONS: dict[str, frozenset[int]] = {
+    "claim_transition_evidence": frozenset({1}),
+    "context_manifest": frozenset({1, 2, 3}),
+    "evidence_manifest": frozenset({1, 2}),
+    "execution_input_manifest": frozenset({1, 2}),
+    "integration_manifest": frozenset({1, 2, 3}),
+    "publication_manifest": frozenset({1}),
+    "review_receipt": frozenset({1}),
+    "run_manifest": frozenset({1, 2}),
+    "verification_manifest": frozenset({1, 2}),
+    "worker_result": frozenset({1}),
+}
 _VERIFICATION_ANCHORS = frozenset({"verification_manifest", "evidence_manifest"})
 _DELIVERY_ANCHORS = frozenset({
     "integration_manifest", "publication_manifest", "review_receipt",
@@ -89,8 +104,14 @@ class TraceSourceDescriptor(ProjectCtlModel):
         if self.validation_state == "present":
             if self.content_sha256 is None or self.reason_code is not None:
                 raise ValueError("Present trace source requires SHA-256 and no error reason.")
-            if self.source_kind not in _UNVERSIONED and self.schema_version is None:
-                raise ValueError("Present versioned trace source requires schema_version.")
+            if self.source_kind not in _UNVERSIONED:
+                if self.schema_version is None:
+                    raise ValueError("Present versioned trace source requires schema_version.")
+                if self.schema_version not in _SUPPORTED_VERSIONS[self.source_kind]:
+                    raise ValueError(
+                        "Unknown source schema version cannot be marked present; "
+                        "record it as unsupported instead."
+                    )
         else:
             if self.reason_code is None:
                 raise ValueError("Unavailable trace source requires a typed reason_code.")
