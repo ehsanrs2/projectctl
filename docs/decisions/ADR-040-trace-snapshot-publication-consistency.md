@@ -93,9 +93,13 @@ The writer publication protocol, if explicitly authorized, must:
 9. **Independent WAL read gate:** a trusted seal committed into the same
    live WAL database does not by itself solve safe, non-mutating extraction
    of its bytes. A separate reviewed reader must prove coherent sealed
-   epoch visibility and **zero source DB/WAL/SHM mutations**, or refuse.
-   B2a raw-copy `snapshot_proven=False` cannot be upgraded just because
-   a seal schema exists.
+   epoch visibility and **zero source DB/WAL/SHM content or authority-state
+   mutations**, or refuse. B2a raw-copy `snapshot_proven=False` cannot
+   be upgraded just because a seal schema exists. Address filesystem
+   access-time (`atime`) effects explicitly; earlier B2a tests compared
+   bytes/inode/size/mtime/ctime, **not atime**. If the approved contract
+   forbids any source metadata changes, enforce that in a supported
+   platform test or fail closed rather than overstating "zero mutation".
 
 **Important change-control rule:** this proposal would add behavior to
 trusted ProjectCTL writers. It is a *scope extension* beyond the currently
@@ -200,7 +204,11 @@ fully reviewed proof-bearing strategy works.
   bytes are still available and validated, or N becomes unavailable;
   never incorrectly bind N's digest to N+1's contents.
 - Exact proof of no `.projectctl` / DB / WAL / SHM / Git/worktree/task
-  mutation by **the exporter** under success and failures.
+  **authority-state or content** mutation by the exporter under success
+  and failures. Audit source file **atime** separately; decide whether
+  access-time updates are forbidden, tolerated as filesystem metadata,
+  or prevented through demonstrably supported read flags. Never silently
+  reinterpret no-write as no-metadata-change.
 - Repeated serialization is byte-identical for the same accepted
   **immutable seal**, using only source-allowlisted fields and
   `assessments=[]` until independently proven lineage is approved.
