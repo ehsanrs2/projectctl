@@ -2267,10 +2267,5 @@ RunStore, execution-input, verification, evidence, integration and delivery
 artifacts. It cannot claim, execute, verify, approve or modify a run. Unknown
 or missing evidence must be labeled explicitly, never interpreted as success.
 
-The first development gate is the proposed `ExecutionTraceBundle v1` model
-and schema, with tests and the privacy/source inventory documented in
-`docs/architecture/M6_0_TRACE_CONTRACT_V1.md`. ADR-039 remains Proposed:
-source snapshot consistency, privacy/pseudonymization and support semantics
-must be reviewed before any read-only collector or CLI exporter is enabled.
-See `docs/architecture/M6_0_IMPLEMENTATION_PLAN.md`. `docs/PROJECT_STATE.yaml` remains the active milestone
+Slice A's `ExecutionTraceBundle v1` model, schema and privacy tests were merged in PR #54 and passed operator-reported focused and full-suite tests. ADR-039 remains Proposed; `docs/architecture/M6_0_SLICE_B_SNAPSHOT_SECURITY_SPEC.md` now contains the next SQLite snapshot, fixed-locator, identity-disclosure and support-semantics approval gate. A pure formatter/classifier is proposed, but no `projectctl trace export` CLI or source collector is enabled. See `docs/architecture/M6_0_IMPLEMENTATION_PLAN.md`. `docs/PROJECT_STATE.yaml` remains the active milestone
 authority. Release version stays at `0.41.0` until a separate release decision.
