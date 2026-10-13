@@ -162,17 +162,28 @@ def inspect_artifact_snapshot(
         return _safe_problem(
             source_kind, "invalid_content", version=version, sha256=calculated
         )
-    if getattr(model, "task_id", None) != task_id:
+    # Pydantic's historical base schema strips surrounding whitespace from
+    # strings. Compare the ORIGINAL decoded identity bytes too, so a file
+    # containing " task-1 " cannot silently impersonate "task-1".
+    if (
+        getattr(model, "task_id", None) != task_id
+        or payload.get("task_id") != task_id
+    ):
         return _safe_problem(
             source_kind, "identity_mismatch", version=version, sha256=calculated
         )
     model_run_id = getattr(model, "run_id", None)
-    if model_run_id is not None and model_run_id != run_id:
+    if model_run_id is not None and (
+        model_run_id != run_id or payload.get("run_id") != run_id
+    ):
         return _safe_problem(
             source_kind, "identity_mismatch", version=version, sha256=calculated
         )
     model_project_id = getattr(model, "project_id", None)
-    if model_project_id is not None and model_project_id != project_id:
+    if model_project_id is not None and (
+        model_project_id != project_id
+        or payload.get("project_id") != project_id
+    ):
         return _safe_problem(
             source_kind, "cross_project_reference",
             version=version, sha256=calculated,
