@@ -71,8 +71,11 @@ reject symlinks and escaped paths, and implement a consistent read snapshot.
   same thing as content or semantic digest.
 - **Provider assertion:** externally reported status, never automatically
   elevated to verified code outcome.
-- **Unsupported historical schema:** keep source kind/version and typed
-  `unsupported_schema` reason; do not coerce it into current objects.
+- **Unsupported historical schema:** a source with an unknown schema version
+  cannot be marked `present`. Keep kind/version and typed `unsupported_schema`
+  reason; never coerce an unknown version into a current Pydantic model. The
+  known-version table in `projectctl/schemas/trace.py` is an *inventory*, not
+  an implicit migration or guarantee that each old reader has been wired.
 
 ## 3. Snapshot and determinism proposal (not yet implemented)
 
