@@ -2271,6 +2271,7 @@ Slice A's `ExecutionTraceBundle v1` model/schema and Slice B0's pure formatter a
 authority. Release version stays at `0.41.0` until a separate release decision.
 
 Slice B1's experimental private source readers are under review in
-`docs/architecture/M6_0_SLICE_B1_READER_AUDIT.md`. They are **not**
-an enabled trace collector or public CLI; WAL/SHM no-mutation, safe
-descriptor reads and cross-artifact consistency remain explicit gates.
+`docs/architecture/M6_0_SLICE_B1_READER_AUDIT.md`. They are **not** an enabled trace collector or public CLI; B1a deliberately
+refuses live WAL before SQLite connection to avoid touching shared-memory
+sidecars. A safe live-WAL read strategy, descriptor safety and cross-artifact
+consistency remain explicit gates.
