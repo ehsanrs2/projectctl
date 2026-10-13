@@ -49,6 +49,19 @@ keys. The updated tests still require an operator-run acceptance report. See `do
 `docs/architecture/M6_0_SLICE_B1B_ARTIFACT_VALIDATION.md`. Safe live-WAL
 reads and cross-source snapshot consistency remain separate blockers.
 
+### B2a — Experimental detached WAL feasibility, not a source of authority
+
+PR #58's versioned B1b validator and conservative derived bundle merged.
+`docs/architecture/M6_0_B2A_WAL_FEASIBILITY.md` now proposes a bounded
+test-only candidate that copies DB/WAL bytes by no-follow reads to an
+owner-private staging directory, opens **only the detached copy** with
+SQLite, rejects observed source changes and always declares
+`snapshot_proven=False`. Two matching samples and a passing detached
+`integrity_check` **cannot establish one atomic instant** with the run
+JSON files or even a latest-commit DB/WAL pair during checkpoints. Do not
+wire the probe into an operational exporter. Choose and test an explicit
+atomic/cooperative snapshot strategy or fail closed.
+
 ### B. Bounded local trace collection and export
 
 1. Implement a read-only collector over one explicitly selected project/run.
