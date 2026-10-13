@@ -1,8 +1,8 @@
 # M6.0 Slice B — Collector Snapshot, Privacy and Locator Decision Gate
 
-**Status: Proposed for architecture approval; Collector/CLI deliberately BLOCKED**  
-**Base:** `main@1b9672af619e7ff4e0fe151b8983c5ca3ec405f6` (PR #54 merged and locally tested)  
-**Governing ADR:** ADR-039, still `Proposed`  
+**Status: Proposed for architecture approval; Collector/CLI deliberately BLOCKED**
+**Base:** `main@1b9672af619e7ff4e0fe151b8983c5ca3ec405f6` (PR #54 merged and locally tested)
+**Governing ADR:** ADR-039, still `Proposed`
 **Work in this PR:** concrete source/SQLite/security decisions and *pure* trace-format helper tests; no operational read APIs.
 
 ## 1. Existing data-store behavior (verified from code)
