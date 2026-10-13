@@ -2267,11 +2267,14 @@ RunStore, execution-input, verification, evidence, integration and delivery
 artifacts. It cannot claim, execute, verify, approve or modify a run. Unknown
 or missing evidence must be labeled explicitly, never interpreted as success.
 
-Slice A's `ExecutionTraceBundle v1` model/schema and Slice B0's pure formatter and security proposal merged in PRs #54–#55, with operator-reported local tests successful. **ADR-039 is accepted as a bounded design only upon merging its separate acceptance PR.** This preserves strict read-only SQLite/WAL and symlink checks, an explicitly **non-anonymous** local project/run ID + digest disclosure policy, and `assessments=[]` in initial Slice B. **No collector or `projectctl trace export` CLI exists yet.** See `docs/architecture/M6_0_SLICE_B_SNAPSHOT_SECURITY_SPEC.md` and `docs/architecture/M6_0_IMPLEMENTATION_PLAN.md`. `docs/PROJECT_STATE.yaml` remains the active milestone
+Slice A's `ExecutionTraceBundle v1` model/schema and Slice B0's pure formatter and security proposal merged in PRs #54–#55, with operator-reported local tests successful. **ADR-039 is accepted as a bounded design (PR #56).** This preserves strict read-only SQLite/WAL and symlink checks, an explicitly **non-anonymous** local project/run ID + digest disclosure policy, and `assessments=[]` in initial Slice B. **No collector or `projectctl trace export` CLI exists yet.** See `docs/architecture/M6_0_SLICE_B_SNAPSHOT_SECURITY_SPEC.md` and `docs/architecture/M6_0_IMPLEMENTATION_PLAN.md`. `docs/PROJECT_STATE.yaml` remains the active milestone
 authority. Release version stays at `0.41.0` until a separate release decision.
 
-Slice B1's experimental private source readers are under review in
-`docs/architecture/M6_0_SLICE_B1_READER_AUDIT.md`. They are **not** an enabled trace collector or public CLI; B1a deliberately
-refuses live WAL before SQLite connection to avoid touching shared-memory
-sidecars. A safe live-WAL read strategy, descriptor safety and cross-artifact
-consistency remain explicit gates.
+Slice B1a's private source readers merged in PR #57 after local tests; they
+still **refuse live WAL** before connecting to SQLite. A separate Draft B1b
+proposal adds pure historical artifact parsing, raw identity validation and
+an always-incomplete Trace builder with `assessments=[]`. See
+`docs/architecture/M6_0_SLICE_B1_READER_AUDIT.md` and
+`docs/architecture/M6_0_SLICE_B1B_ARTIFACT_VALIDATION.md`. This is **not** an
+enabled Collector or public CLI; safe live-WAL reading and cross-artifact
+consistency remain unimplemented.
