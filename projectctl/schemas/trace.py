@@ -210,6 +210,14 @@ class ExecutionTraceBundle(ProjectCtlModel):
                 raise ValueError("Complete trace cannot contain findings or unavailable sources.")
             if not {"run_record", "run_manifest"} <= present:
                 raise ValueError("Complete trace requires run record and run manifest.")
+            if self.observed_run_status is None:
+                raise ValueError("Complete trace requires an observed run status.")
+            if self.observed_run_status == RunStatus.PASSED:
+                if not _VERIFICATION_ANCHORS <= present:
+                    raise ValueError(
+                        "Passed run cannot claim complete trace without independent "
+                        "verification and evidence sources."
+                    )
         if self.completeness == "inconsistent" and not self.findings:
             raise ValueError("Inconsistent trace must expose a typed finding.")
         return self
