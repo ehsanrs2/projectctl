@@ -179,3 +179,43 @@ def test_probe_does_not_leave_staging_directory(tmp_path, monkeypatch):
         assert created and all(not x.exists() for x in created)
     finally:
         writer.close()
+
+
+def test_detached_staging_applies_committed_uncheckpointed_wal_frames(
+    tmp_path, monkeypatch
+):
+    db, writer = _wal_fixture(tmp_path)
+    import projectctl.trace.wal_probe as probe
+    native_connect = sqlite3.connect
+    observed_values = []
+
+    def inspect_stage(value, *args, **kwargs):
+        connection = native_connect(value, *args, **kwargs)
+        assert str(db) not in str(value)
+        observed_values.append(connection.execute("SELECT value FROM proof").fetchone()[0])
+        return connection
+
+    monkeypatch.setattr(probe.sqlite3, "connect", inspect_stage)
+    try:
+        before = _bytes_and_metadata(db)
+        assert probe_detached_live_wal(tmp_path).snapshot_proven is False
+        assert observed_values == ["secret-live-WAL-payload"]
+        assert _bytes_and_metadata(db) == before
+    finally:
+        writer.close()
+
+
+def test_staging_with_tmpdir_inside_project_is_blocked_before_io(
+    tmp_path, monkeypatch
+):
+    db, writer = _wal_fixture(tmp_path)
+    import projectctl.trace.wal_probe as probe
+    before = _bytes_and_metadata(db)
+    monkeypatch.setattr(probe.tempfile, "gettempdir", lambda: str(tmp_path))
+    try:
+        with pytest.raises(TraceSnapshotError) as exc:
+            probe_detached_live_wal(tmp_path)
+        assert exc.value.reason_code == "unsafe_source_path"
+        assert _bytes_and_metadata(db) == before
+    finally:
+        writer.close()
