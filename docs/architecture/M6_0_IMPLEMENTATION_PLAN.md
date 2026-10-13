@@ -38,9 +38,11 @@
 ### B1 — Experimental read-only source snapshot primitives (Draft)
 
 A separate Slice B1 review proposes a POSIX descriptor-anchored artifact
-reader and one-transaction SQLite `mode=ro` run snapshot. This is not
-yet a Collector or CLI and is **not accepted** until the cold/active WAL,
-file no-follow, race and exact no-mutation tests pass locally. See
+reader and one-transaction SQLite `mode=ro` run snapshot for **quiescent
+rollback-journal databases only**. Live WAL is intentionally refused before
+SQLite connects to prevent touching sidecars. This is not yet a Collector or
+CLI and is **not accepted** until the tests pass and safe live-WAL strategy
+is separately designed. See
 `docs/architecture/M6_0_SLICE_B1_READER_AUDIT.md`. A detected SQLite
 sidecar change blocks operational use; it is not silently ignored.
 
