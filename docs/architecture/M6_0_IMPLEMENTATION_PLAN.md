@@ -35,6 +35,17 @@
 
 **Gate A:** the proposed `projectctl/schemas/trace.py` and `execution-trace-bundle.v1.schema.json` must be reviewed against `docs/architecture/M6_0_TRACE_CONTRACT_V1.md`; local tests, schema export, privacy and source-snapshot design decisions must pass before ADR-039 acceptance. No export CLI until this gate is accepted.
 
+### B1 — Experimental read-only source snapshot primitives (Draft)
+
+A separate Slice B1 review proposes a POSIX descriptor-anchored artifact
+reader and one-transaction SQLite `mode=ro` run snapshot for **quiescent
+rollback-journal databases only**. Live WAL is intentionally refused before
+SQLite connects to prevent touching sidecars. This is not yet a Collector or
+CLI and is **not accepted** until the tests pass and safe live-WAL strategy
+is separately designed. See
+`docs/architecture/M6_0_SLICE_B1_READER_AUDIT.md`. A detected SQLite
+sidecar change blocks operational use; it is not silently ignored.
+
 ### B. Bounded local trace collection and export
 
 1. Implement a read-only collector over one explicitly selected project/run.
