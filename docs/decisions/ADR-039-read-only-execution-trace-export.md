@@ -1,6 +1,6 @@
 # ADR-039: Read-only Execution Trace & Evaluation Export
 
-**Status: Proposed — Slice A model/schema merged and locally tested; Slice B snapshot/security design awaiting explicit acceptance; no collector or CLI implemented**  
+**Status: Proposed — Slice A model/schema merged and locally tested; Slice B snapshot/security design awaiting explicit acceptance; no collector or CLI implemented**
 **Milestone:** M6.0 — Read-only Trace & Evaluation Export  
 **Precondition:** Accepted M5.2b execution-scope architecture (ADR-038)  
 **Decision scope:** A derived local observability/export contract, **not** run authority
