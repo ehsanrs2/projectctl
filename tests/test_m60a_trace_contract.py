@@ -31,7 +31,7 @@ def bundle():
     return ExecutionTraceBundle(
         project_id="demo",
         run_id="run-001",
-        observed_run_status=RunStatus.PASSED,
+        observed_run_status=RunStatus.PLANNED,
         completeness="complete",
         sources=[
             source("run_manifest", 2),
@@ -282,6 +282,21 @@ def test_event_timestamps_normalize_to_utc_for_stable_json():
     assert json.dumps(before, sort_keys=True, separators=(",", ":")) == (
         json.dumps(after, sort_keys=True, separators=(",", ":"))
     )
+
+
+def test_passed_run_requires_independent_artifact_sources_to_claim_complete():
+    candidate = bundle().model_dump()
+    candidate["observed_run_status"] = RunStatus.PASSED
+    with pytest.raises(ValidationError, match="Passed run cannot claim complete"):
+        ExecutionTraceBundle.model_validate(candidate)
+
+    candidate["sources"] = [
+        source("evidence_manifest", 2),
+        source("run_manifest", 2),
+        source("run_record"),
+        source("verification_manifest", 2),
+    ]
+    assert ExecutionTraceBundle.model_validate(candidate).completeness == "complete"
 
 
 def test_run_status_alone_cannot_create_verified_assessment():
