@@ -141,8 +141,11 @@ trust-domain decision.
 **Writer gate:** Show a crash-safe, monotonic, append-only seal/status/
 event-prefix binding with a clear retained-byte policy and no privilege
 escalation. **Reader gate:** Separately prove a coherent view of that seal
-in a normal live-WAL DB with *zero source* DB/WAL/SHM writes, plus
-safe no-follow access to the corresponding files. Passing the Writer gate
+in a normal live-WAL DB with *zero source authority-data/sidecar writes*,
+plus safe no-follow access to the corresponding files. The original B2a
+fixture compares byte contents, inode, size, mtime and ctime but **not
+atime**; strict metadata non-mutation is an additional explicit
+OS/filesystem policy and test gate, not something already proven. Passing the Writer gate
 does **not** lift B1a's WAL refusal. Passing B2a's detached-copy tests
 does **not** lift either gate. Until both pass, fail closed.
 
@@ -158,6 +161,7 @@ does **not** lift either gate. Until both pass, fail closed.
 | Event prefix out of order, duplicate epoch, roll-back to older seal | Refusal or correctly labeled historical as-of |
 | Run reverify/rebind or delivery review updates after earlier status | New epoch or declared stale-as-of, never false latest |
 | Live-WAL seal present but safe side-effect-free reader unavailable | Refuse to export a proven trace, do not use `immutable=1` or B2a as a bypass |
+| Read-only source descriptor updates atime on its filesystem | Explicitly classify access-time metadata under policy, test it, and never claim zero metadata writes without evidence |
 | External task completion succeeds before local event/status commit, then crash | Never infer provider state or completed task from local-only evidence |
 | Post-PASSED worktree cleanup rewrites integration manifest | Preserve exact old bytes if explicitly retained; otherwise prior epoch unavailable |
 | Artifact leaf overwritten after seal N | Exact immutable retained N bytes or typed unavailable; never silently use N+1 bytes |
