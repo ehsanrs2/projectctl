@@ -156,12 +156,12 @@ def _db_sidecars(path: Path) -> tuple[tuple[int, int, int, int, int] | None, ...
 class TraceDbSnapshot:
     run_id: str
     task_id: str = field(repr=False)
-    observed_status: RunStatus = RunStatus.PLANNED
-    run_record_sha256: str = ""
-    run_manifest_sha256: str = ""
-    run_manifest_version: int = 2
-    event_stream_sha256: str = ""
-    events: tuple[TraceEventSummary, ...] = ()
+    observed_status: RunStatus
+    run_record_sha256: str
+    run_manifest_sha256: str
+    run_manifest_version: int
+    event_stream_sha256: str
+    events: tuple[TraceEventSummary, ...]
 
 
 def read_run_db_snapshot(project_root: Path, run_id: str) -> TraceDbSnapshot:
@@ -189,7 +189,7 @@ def read_run_db_snapshot(project_root: Path, run_id: str) -> TraceDbSnapshot:
                 sidecars = _db_sidecars(db)
                 # A WAL file without pre-existing shared memory may lead
                 # SQLite to create one in the project authority directory.
-                if sidecars[0] is not None and sidecars[1] is None:
+                if (sidecars[0] is None) != (sidecars[1] is None):
                     raise TraceSnapshotError("source_unreadable")
                 uri = "file:" + quote(str(db.absolute()), safe="/") + "?mode=ro"
                 conn = sqlite3.connect(uri, uri=True, isolation_level=None, timeout=0.2)
