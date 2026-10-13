@@ -1,8 +1,8 @@
 # ADR-039: Read-only Execution Trace & Evaluation Export
 
 **Status: Accepted — 2026-10-13 (effective upon merge of the ADR-039 acceptance PR). This accepts a bounded design, not an implemented collector, passing CI or a release.**
-**Milestone:** M6.0 — Read-only Trace & Evaluation Export  
-**Precondition:** Accepted M5.2b execution-scope architecture (ADR-038)  
+**Milestone:** M6.0 — Read-only Trace & Evaluation Export
+**Precondition:** Accepted M5.2b execution-scope architecture (ADR-038)
 **Decision scope:** A derived local observability/export contract, **not** run authority
 
 ## Context
