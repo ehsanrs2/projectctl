@@ -115,18 +115,20 @@ def test_missing_authority_is_not_created(tmp_path):
 
 def test_symlinked_wal_refuses_to_read_external_file(tmp_path):
     db, writer = _wal_fixture(tmp_path)
-    try:
-        wal = Path(str(db) + "-wal")
-        external = tmp_path / "outside-secret"
-        external.write_bytes(wal.read_bytes())
+    # Capture the WAL before closing the fixture writer; do not unlink an
+    # active live WAL underneath SQLite, even in adversarial tests.
+    wal = Path(str(db) + "-wal")
+    original_wal = wal.read_bytes()
+    writer.close()
+    external = tmp_path / "outside-secret"
+    external.write_bytes(original_wal)
+    if wal.exists():
         wal.unlink()
-        wal.symlink_to(external)
-        before = external.read_bytes()
-        with pytest.raises(TraceSnapshotError):
-            probe_detached_live_wal(tmp_path)
-        assert external.read_bytes() == before
-    finally:
-        writer.close()
+    wal.symlink_to(external)
+    before = external.read_bytes()
+    with pytest.raises(TraceSnapshotError):
+        probe_detached_live_wal(tmp_path)
+    assert external.read_bytes() == before
 
 
 def test_oversized_database_refused_before_staging(tmp_path):
