@@ -1,15 +1,15 @@
 # M6.0 — Read-only Trace & Evaluation Export: Bounded Implementation Plan
 
-**Status: Slice A merged and locally tested (PR #54); Slice B snapshot/security gate proposed. ADR-039 remains Proposed; no collector/CLI exists.**
-**Active goal:** `docs/PROJECT_STATE.yaml` — M6.0  
-**Architecture proposal:** ADR-039 (Proposed)  
+**Status: Slices A and B0 merged and locally regression-tested; ADR-039 design acceptance proposed in a separate PR. Bounded Collector/CLI not implemented.**
+**Active goal:** `docs/PROJECT_STATE.yaml` — M6.0
+**Architecture decision:** ADR-039 (Accepted as bounded design on acceptance PR merge; implementation still gated)
 **Inherited safety decisions:** ADR-037, ADR-038 (Accepted)
 
 ## Source inventory (verified in repository)
 
 | Existing evidence | Read-only access point | M6.0 concern |
 | --- | --- | --- |
-| Run/event database | `projectctl/storage/runs.py`: `RunStore.get/manifest/events` | SQLite consistency, durable event ordering |
+| Run/event database | `.projectctl/state.sqlite` through a **new read-only** single-snapshot connection; do not reuse `RunStore.get/manifest/events` | No DB/sidecar mutations, WAL/concurrency, durable ordering |
 | Current/historical run manifests | `projectctl/schemas/run.py` | Version-aware parsing and run identity |
 | Execution/claim evidence | `projectctl/schemas/execution_input.py` | Original digest, policy source, claim lineage |
 | Context manifest | `projectctl/schemas/run.py` | Resource/file references must be redacted |
@@ -38,8 +38,10 @@
 ### B. Bounded local trace collection and export
 
 1. Implement a read-only collector over one explicitly selected project/run.
-2. Read only whitelisted current/historical artifacts and `RunStore`;
-   never call claim, resume, worker, verification or integration services.
+2. Read only whitelisted current/historical artifacts and the pre-existing
+   SQLite run data through the dedicated side-effect-free snapshot reader;
+   **never** call the existing potentially mutating `connect_db` or any claim,
+   resume, worker, verification or integration operation.
 3. Record `present|missing|invalid|unsupported|stale` evidence with typed
    reasons and never infer absent evidence as pass.
 4. Implement a deterministic JSON encoder, stdout by default. Optional
@@ -78,7 +80,7 @@ and no widening of worker authority.
 
 ## Immediate next development task after closure PR
 
-Slice A is proposed in `feature/m6.0-slice-a-trace-contract`: it contains only the output model, additive schema registry, tests and the source/privacy review. The first subsequent implementation branch should resolve the remaining source/snapshot/privacy questions and then implement **Slice B** only after explicit ADR-039 acceptance. No export CLI or new evaluation scoring is yet authorized.
+Slice A (PR #54) and Slice B0 (PR #55) merged after operator-reported successful local tests. The ADR-039 acceptance PR now fixes the non-anonymous local identity policy, path/source allowlist, bounded SQLite snapshot/WAL failure behavior and `assessments=[]` rule for initial Slice B. Once this separate acceptance PR is merged, the *next* implementation branch may add a bounded Collector/JSON stdout exporter **subject to real fail-closed tests**. No live export command, evaluation scoring, provider permission or package-version change is authorized by this documentation PR.
 
 ## Non-goals
 
