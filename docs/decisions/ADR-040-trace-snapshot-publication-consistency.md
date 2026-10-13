@@ -69,6 +69,12 @@ The writer publication protocol, if explicitly authorized, must:
    runs/receipts advance, the exported trace is historical as-of N; it
    cannot be labeled the latest state unless separately proven. Do not
    claim the seal cryptographically authenticates the producer.
+   **Crucially, a digest is not retention**: existing named JSON artifacts
+   may be overwritten. Decide whether sealed epochs retain immutable
+   versioned/content-addressed bytes under a new trusted-writer policy,
+   or whether older seals legitimately become unavailable when their
+   original bytes change. Do not promise historical replay without
+   an approved storage and cleanup lifecycle.
 7. Keep the exporter fully read-only. It can validate the existing seal
    against safely snapshotted source bytes; no CLI or collector may
    generate/repair seals, trigger Worker operations, or write authority.
@@ -128,6 +134,10 @@ fully reviewed proof-bearing strategy works.
   necessary? A seal must not hash its own containing event recursively.
 - What schema and digest/lineage versions must be supported initially?
   How will missing/historical evidence be classified without guessing?
+  Are earlier sealed artifacts retained as immutable copies, or does
+  the first implementation explicitly reject historical replay when
+  the fixed leaf has been replaced? What disk/retention/privacy budget
+  applies to any archived raw bytes?
 - Is the initial use case a **sealed historical as-of trace** instead of
   "most recent live state", and may local identity/digest correlation be
   disclosed under ADR-039's non-anonymous privacy policy?
@@ -147,6 +157,9 @@ fully reviewed proof-bearing strategy works.
   promoted to present verified lineage.
 - Corrupt, reordered, duplicated, replayed, cross-run and unsupported
   seal versions fail closed, with only typed safe findings.
+- Seal N's referenced file replaced by N+1: either exact trusted immutable
+  bytes are still available and validated, or N becomes unavailable;
+  never incorrectly bind N's digest to N+1's contents.
 - Exact proof of no `.projectctl` / DB / WAL / SHM / Git/worktree/task
   mutation by **the exporter** under success and failures.
 - Repeated serialization is byte-identical for the same accepted
