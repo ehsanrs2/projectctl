@@ -6,19 +6,23 @@ from datetime import datetime, timezone
 
 import pytest
 
-from projectctl.core.enums import RunStatus, TaskStatus
+from projectctl.core.enums import RunStatus, TaskStatus, WorkerResultStatus
+from projectctl.schemas.execution import WorkerResult
 from projectctl.schemas.execution_input import (
     ExecutionInputManifestV1,
     ExecutionTaskInput,
 )
 from projectctl.schemas.run import ContextManifestV1, ContextManifestV2
 from projectctl.schemas.task import NormalizedTask, TaskSource
-from projectctl.schemas.trace import TraceSourceDescriptor
+from projectctl.schemas.trace import TraceSourceDescriptor, _SUPPORTED_VERSIONS
 from projectctl.trace.format import canonical_trace_json_bytes
 from projectctl.trace.snapshot import TraceDbSnapshot, TraceFileSnapshot
 from projectctl.trace.validate import (
     conservative_trace_from_snapshots,
     inspect_artifact_snapshot,
+    _PARSERS,
+    _finite_json_float,
+    _InvalidJson,
 )
 
 NOW = datetime(2026, 10, 13, 8, tzinfo=timezone.utc)
@@ -250,3 +254,111 @@ def test_malformed_project_identity_rejected_by_public_contract():
         conservative_trace_from_snapshots(
             project_id="../private", db_snapshot=_db(), file_sources={},
         )
+
+
+def test_all_nine_artifact_parsers_match_the_public_known_version_contract():
+    assert set(_PARSERS) == set(_SUPPORTED_VERSIONS) - {
+        "run_record", "run_event_stream", "run_manifest"
+    }
+    for source_kind, versions in _PARSERS.items():
+        assert set(versions) == _SUPPORTED_VERSIONS[source_kind]
+        for version, parser in versions.items():
+            fields = parser.model_fields
+            assert "task_id" in fields
+            assert fields["schema_version"].default == version
+            assert fields["schema_kind"].default == "projectctl." + source_kind
+
+
+@pytest.mark.parametrize("number", ["1e309", "-1e309", "4.5e9999"])
+def test_json_exponent_overflow_is_rejected_before_model_coercion(number):
+    with pytest.raises(_InvalidJson):
+        _finite_json_float(number)
+    doc = (
+        '{"schema_kind":"projectctl.context_manifest",'
+        '"schema_version":1,"task_id":"task-1","git_commit":"deadbeef",'
+        '"untrusted_metric":' + number + "}"
+    ).encode()
+    invalid = _inspect(_file("context_manifest", doc))
+    assert invalid.validation_state == "invalid"
+    assert invalid.reason_code == "invalid_content"
+
+
+def test_finite_numeric_json_does_not_trigger_false_overflow_alarm():
+    assert _finite_json_float("0.5") == 0.5
+    assert _finite_json_float("1e3") == 1000.0
+
+
+def test_worker_result_secret_summary_never_appears_in_public_descriptor():
+    model = WorkerResult(
+        run_id="run-1", task_id="task-1",
+        status=WorkerResultStatus.IMPLEMENTED,
+        summary="CREDENTIAL_CANARY_123_IN_WORKER_SUMMARY",
+        completed_at=NOW,
+    )
+    raw = json.dumps(model.model_dump(mode="json")).encode()
+    result = _inspect(_file("worker_result", raw), "worker_result")
+    assert result.validation_state == "present"
+    dumped = json.dumps(result.model_dump(mode="json"))
+    assert "CREDENTIAL_CANARY" not in dumped
+    assert "CREDENTIAL_CANARY" not in repr(result)
+
+
+def test_worker_result_raw_run_identity_not_authorized_by_pydantic_trimming():
+    model = WorkerResult(
+        run_id="run-1", task_id="task-1",
+        status=WorkerResultStatus.IMPLEMENTED,
+        summary="ok", completed_at=NOW,
+    )
+    doc = model.model_dump(mode="json")
+    doc["run_id"] = " run-1 "
+    result = _inspect(_file("worker_result", json.dumps(doc).encode()), "worker_result")
+    assert result.validation_state == "invalid"
+    assert result.reason_code == "identity_mismatch"
+
+
+def test_raw_execution_input_project_identity_not_authorized_by_trimming():
+    doc = _execution_input().model_dump(mode="json")
+    doc["project_id"] = " project-1 "
+    result = _inspect(
+        _file("execution_input_manifest", json.dumps(doc).encode()),
+        "execution_input_manifest",
+    )
+    assert result.validation_state == "invalid"
+    assert result.reason_code == "cross_project_reference"
+
+
+def test_implicit_historical_v1_is_parsed_only_by_historical_model():
+    doc = ContextManifestV1(
+        task_id="task-1", git_commit="deadbeef"
+    ).model_dump(mode="json")
+    doc.pop("schema_version")
+    result = _inspect(_file("context_manifest", json.dumps(doc).encode()))
+    assert result.validation_state == "present"
+    assert result.schema_version == 1
+
+
+def test_pure_trace_keeps_mixed_error_reasons_without_verified_assessments():
+    present = _inspect(_context())
+    missing = inspect_artifact_snapshot(
+        None, source_kind="verification_manifest",
+        run_id="run-1", task_id="task-1", project_id="project-1",
+    )
+    invalid = _inspect(_context(task_id="wrong-task"))
+    result = conservative_trace_from_snapshots(
+        project_id="project-1", db_snapshot=_db(RunStatus.PASSED),
+        file_sources={
+            "context_manifest": present,
+            "verification_manifest": missing,
+            "worker_result": TraceSourceDescriptor(
+                source_kind="worker_result", validation_state="invalid",
+                reason_code="invalid_content",
+            ),
+        },
+    )
+    assert result.completeness == "inconsistent"
+    assert result.assessments == []
+    assert [(x.reason_code, x.source_kind) for x in result.findings] == [
+        ("invalid_content", "worker_result"),
+        ("missing_source", "verification_manifest"),
+    ]
+    assert b"supported" not in canonical_trace_json_bytes(result)
