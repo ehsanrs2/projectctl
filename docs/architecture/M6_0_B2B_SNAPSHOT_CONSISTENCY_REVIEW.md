@@ -72,6 +72,11 @@ Define exact `project_id`, `run_id`, `task_id`, `epoch_sequence`,
 anchor and ordered event boundary. The seal is append-only and immutable.
 Never reuse an epoch ID after crash recovery or restart. A later run
 transition may publish another epoch without rewriting the earlier seal.
+**An immutable seal is not an immutable artifact:** if the named evidence
+leaf is later replaced, the previous seal is no longer replayable from
+that filename. Either explicitly adopt writer-managed immutable versioned
+bytes with privacy/retention and cleanup rules, or treat old epochs as
+unavailable when the referenced bytes are gone.
 
 ### 5.2 Artifact membership
 
@@ -125,6 +130,7 @@ sidecars; staging may help decode proof but not create it.
 | Seal refers to another run, project or task | Refusal with identity_mismatch/cross_project_reference |
 | Event prefix out of order, duplicate epoch, roll-back to older seal | Refusal or correctly labeled historical as-of |
 | Run reverify/rebind or delivery review updates after earlier status | New epoch or declared stale-as-of, never false latest |
+| Artifact leaf overwritten after seal N | Exact immutable retained N bytes or typed unavailable; never silently use N+1 bytes |
 | Worker says pass without independently checked evidence | `assessments=[]` for Slice B and no completed-delivery inference |
 | Source removed while exporter reads | Safe abort, no write to project or hidden fallback search |
 | Serializer repeated with same accepted epoch | Byte-identical redacted JSON and no export-time timestamp |
