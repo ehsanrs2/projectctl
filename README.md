@@ -2277,10 +2277,17 @@ PR #58 after reported local regression passes. Neither is an operational
 Collector/CLI. See `docs/architecture/M6_0_SLICE_B1_READER_AUDIT.md`
 and `docs/architecture/M6_0_SLICE_B1B_ARTIFACT_VALIDATION.md`.
 
-B2a is a **Draft feasibility-only experiment** for reading a detached WAL
-copy without SQLite touching the project authority. Its result expressly
-sets `snapshot_proven=False`: stable repeated reads and detached integrity
-checks do not prove latest-commit or cross-artifact atomicity. See
-`docs/architecture/M6_0_B2A_WAL_FEASIBILITY.md`. Until a proven coherent,
-non-mutating snapshot strategy is accepted, `projectctl trace export`
-remains disabled.
+B2a merged as PR #59 after operator-reported local tests but is **still
+only a feasibility probe**, not a trusted WAL source. Its result stays
+`snapshot_proven=False`: repeated detached reads and integrity checks do
+not establish an atomic, latest-commit DB/WAL/file snapshot. See
+`docs/architecture/M6_0_B2A_WAL_FEASIBILITY.md`.
+
+**The next decision, ADR-040, is Proposed only:** production writers
+commit JSON files and RunStore event/status updates separately, so B2b
+reviews a trusted writer-published as-of seal, a supported atomic
+filesystem snapshot or continued fail-closed refusal. Any writer
+publication change requires explicit architectural authorization and
+regression evidence. See
+`docs/architecture/M6_0_B2B_SNAPSHOT_CONSISTENCY_REVIEW.md`.
+`projectctl trace export` remains disabled.
