@@ -2267,9 +2267,10 @@ RunStore, execution-input, verification, evidence, integration and delivery
 artifacts. It cannot claim, execute, verify, approve or modify a run. Unknown
 or missing evidence must be labeled explicitly, never interpreted as success.
 
-The first development gate is the proposed
-`docs/decisions/ADR-039-read-only-execution-trace-export.md` and
-`docs/architecture/M6_0_IMPLEMENTATION_PLAN.md`. The source contracts,
-privacy allowlist and snapshot consistency must be accepted before CLI
-implementation. `docs/PROJECT_STATE.yaml` remains the active milestone
+The first development gate is the proposed `ExecutionTraceBundle v1` model
+and schema, with tests and the privacy/source inventory documented in
+`docs/architecture/M6_0_TRACE_CONTRACT_V1.md`. ADR-039 remains Proposed:
+source snapshot consistency, privacy/pseudonymization and support semantics
+must be reviewed before any read-only collector or CLI exporter is enabled.
+See `docs/architecture/M6_0_IMPLEMENTATION_PLAN.md`. `docs/PROJECT_STATE.yaml` remains the active milestone
 authority. Release version stays at `0.41.0` until a separate release decision.

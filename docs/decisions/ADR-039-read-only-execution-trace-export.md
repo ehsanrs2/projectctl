@@ -1,6 +1,6 @@
 # ADR-039: Read-only Execution Trace & Evaluation Export
 
-**Status: Proposed — M6.0 architecture candidate; not accepted or implemented**  
+**Status: Proposed — Slice A model/schema/tests authored for review; no collector, export CLI or authority change implemented**  
 **Milestone:** M6.0 — Read-only Trace & Evaluation Export  
 **Precondition:** Accepted M5.2b execution-scope architecture (ADR-038)  
 **Decision scope:** A derived local observability/export contract, **not** run authority
@@ -143,6 +143,4 @@ behavior; redaction of secret-bearing fixtures; symlink/path traversal
 rejection; cross-project isolation; schema-export compatibility; JSON CLI
 roundtrip; and no false `verified` state from Worker-only claims.
 
-**The selected M6.0 goal is accepted as a roadmap choice. This ADR remains
-Proposed until its specific data, privacy and concurrency contracts are
-reviewed.**
+**The selected M6.0 goal is accepted as a roadmap choice. This ADR remains Proposed.** Slice A's model and privacy test matrix are published for review in `projectctl/schemas/trace.py` and `docs/architecture/M6_0_TRACE_CONTRACT_V1.md`. Fields carry an explicit structural/non-authoritative semantics; real source validity and lineage cannot be established by the Pydantic schema alone. The collector/CLI stays blocked until the snapshot consistency, path allowlist, pseudonymization and metric support decisions are accepted.

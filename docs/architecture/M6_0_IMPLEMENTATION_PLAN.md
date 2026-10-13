@@ -1,6 +1,6 @@
 # M6.0 — Read-only Trace & Evaluation Export: Bounded Implementation Plan
 
-**Status: Design kickoff; no exporter implementation or public schema has been added**  
+**Status: Slice A proposed trace model, v1 public schema and privacy tests authored; ADR-039 remains Proposed and no exporter/CLI exists.**  
 **Active goal:** `docs/PROJECT_STATE.yaml` — M6.0  
 **Architecture proposal:** ADR-039 (Proposed)  
 **Inherited safety decisions:** ADR-037, ADR-038 (Accepted)
@@ -33,8 +33,7 @@
 5. Tests first: schema validation, historical samples, unknown versions,
    redaction, invalid source paths and stable serialization.
 
-**Gate A:** approved schema/provenance/privacy contract and public JSON schema
-export compatibility.
+**Gate A:** the proposed `projectctl/schemas/trace.py` and `execution-trace-bundle.v1.schema.json` must be reviewed against `docs/architecture/M6_0_TRACE_CONTRACT_V1.md`; local tests, schema export, privacy and source-snapshot design decisions must pass before ADR-039 acceptance. No export CLI until this gate is accepted.
 
 ### B. Bounded local trace collection and export
 
@@ -79,10 +78,7 @@ and no widening of worker authority.
 
 ## Immediate next development task after closure PR
 
-The first implementation PR should contain **only Slice A**: proposed
-versioned model, source inventory and a privacy/redaction test matrix.
-It should not expose a CLI exporter or add new evaluation scores until ADR-039
-is accepted.
+Slice A is proposed in `feature/m6.0-slice-a-trace-contract`: it contains only the output model, additive schema registry, tests and the source/privacy review. The first subsequent implementation branch should resolve the remaining source/snapshot/privacy questions and then implement **Slice B** only after explicit ADR-039 acceptance. No export CLI or new evaluation scoring is yet authorized.
 
 ## Non-goals
 

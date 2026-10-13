@@ -112,6 +112,13 @@ from projectctl.schemas.task import (
 )
 from projectctl.schemas.task_authority import TaskAuthorityCapabilities
 from projectctl.schemas.task_claim import TaskClaim, TaskClaimRequest
+from projectctl.schemas.trace import (
+    ExecutionTraceBundle,
+    TraceAssessment,
+    TraceEventSummary,
+    TraceFinding,
+    TraceSourceDescriptor,
+)
 from projectctl.schemas.verification import (
     DiffPolicy,
     VerificationCatalog,
@@ -155,6 +162,7 @@ __all__ = [
     "ExecutionCodeInput",
     "ExecutionInputManifest",
     "ExecutionInputManifestV1",
+    "ExecutionTraceBundle",
     "parse_execution_input_manifest",
     "ExecutionPathScope",
     "ExecutionScopeCatalog",
@@ -205,6 +213,10 @@ __all__ = [
     "TaskDeliveryPolicy",
     "TaskClaim",
     "TaskClaimRequest",
+    "TraceAssessment",
+    "TraceEventSummary",
+    "TraceFinding",
+    "TraceSourceDescriptor",
     "TaskCounts",
     "StrategyFallbackPolicy",
     "TaskHierarchy",
