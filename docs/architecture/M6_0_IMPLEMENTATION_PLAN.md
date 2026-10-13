@@ -1,6 +1,6 @@
 # M6.0 — Read-only Trace & Evaluation Export: Bounded Implementation Plan
 
-**Status: Slices A, B0 and B1a merged with operator-reported local regression passes; ADR-039 accepted. B1b pure artifact validation is in Draft; no Collector/CLI or safe live-WAL reader exists.**
+**Status: Slices A, B0, B1a and B1b merged with operator-reported local regression passes; ADR-039 accepted. B2a detached-WAL feasibility is experimental and not yet validated; no Collector/CLI or proven coherent live-WAL snapshot exists.**
 **Active goal:** `docs/PROJECT_STATE.yaml` — M6.0
 **Architecture decision:** ADR-039 (Accepted as bounded design on acceptance PR merge; implementation still gated)
 **Inherited safety decisions:** ADR-037, ADR-038 (Accepted)
@@ -48,6 +48,19 @@ families and rejects JSON exponent-overflow Infinity and escaped duplicate
 keys. The updated tests still require an operator-run acceptance report. See `docs/architecture/M6_0_SLICE_B1_READER_AUDIT.md` and
 `docs/architecture/M6_0_SLICE_B1B_ARTIFACT_VALIDATION.md`. Safe live-WAL
 reads and cross-source snapshot consistency remain separate blockers.
+
+### B2a — Experimental detached WAL feasibility, not a source of authority
+
+PR #58's versioned B1b validator and conservative derived bundle merged.
+`docs/architecture/M6_0_B2A_WAL_FEASIBILITY.md` now proposes a bounded
+test-only candidate that copies DB/WAL bytes by no-follow reads to an
+owner-private staging directory, opens **only the detached copy** with
+SQLite, rejects observed source changes and always declares
+`snapshot_proven=False`. Two matching samples and a passing detached
+`integrity_check` **cannot establish one atomic instant** with the run
+JSON files or even a latest-commit DB/WAL pair during checkpoints. Do not
+wire the probe into an operational exporter. Choose and test an explicit
+atomic/cooperative snapshot strategy or fail closed.
 
 ### B. Bounded local trace collection and export
 
