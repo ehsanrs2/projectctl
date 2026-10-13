@@ -121,6 +121,9 @@ def test_source_status_and_digest_constraints_are_fail_closed():
         TraceSourceDescriptor(source_kind="run_manifest",
                               validation_state="unsupported",
                               reason_code="unsupported_schema")
+    with pytest.raises(ValidationError, match="cannot be marked present"):
+        TraceSourceDescriptor(source_kind="run_manifest", schema_version=99,
+                              validation_state="present", content_sha256=digest)
     unknown = TraceSourceDescriptor(source_kind="run_manifest",
                                     validation_state="unsupported",
                                     schema_version=99,
