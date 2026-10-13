@@ -43,7 +43,9 @@ rollback-journal databases only**. Operator-reported local tests and patch
 hygiene passed. Live WAL remains deliberately refused before SQLite
 connects. The proposed B1b follow-up adds **pure versioned evidence parsing
 and an always-incomplete, no-assessments Trace builder**, without a Collector
-or CLI. See `docs/architecture/M6_0_SLICE_B1_READER_AUDIT.md` and
+or CLI. Its parser registry now has tests for all nine allowlisted evidence
+families and rejects JSON exponent-overflow Infinity and escaped duplicate
+keys. The updated tests still require an operator-run acceptance report. See `docs/architecture/M6_0_SLICE_B1_READER_AUDIT.md` and
 `docs/architecture/M6_0_SLICE_B1B_ARTIFACT_VALIDATION.md`. Safe live-WAL
 reads and cross-source snapshot consistency remain separate blockers.
 
