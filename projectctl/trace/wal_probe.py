@@ -127,6 +127,17 @@ def probe_detached_live_wal(project_root: Path) -> DetachedWalProbe:
     source as 'present', 'complete' or 'supported'.
     """
     _assert_supported_platform()
+    # Never let an operator/environment-controlled TMPDIR put private
+    # copies inside the project or any of its authoritative child paths.
+    try:
+        project_dir = Path(project_root).resolve(strict=True)
+        stage_parent = Path(tempfile.gettempdir()).resolve(strict=True)
+        if stage_parent == project_dir or project_dir in stage_parent.parents:
+            raise TraceSnapshotError("unsafe_source_path")
+    except TraceSnapshotError:
+        raise
+    except (OSError, ValueError):
+        raise TraceSnapshotError("source_unreadable") from None
     try:
         with _directory_chain(Path(project_root), ".projectctl") as parent_fd:
             db, wal = _sample_pair(parent_fd)
