@@ -253,3 +253,62 @@ def test_reader_rejects_unsupported_db_version_without_upgrading(tmp_path):
         read_run_db_snapshot(tmp_path, "run-1")
     assert e.value.reason_code == "invalid_content"
     assert _state(db) == before
+
+
+def test_reader_never_uses_side_effecting_projectctl_connection(
+    tmp_path, monkeypatch
+):
+    db = _fixture(tmp_path)
+    before = _state(db)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("connect_db must never be used by the trace reader")
+
+    monkeypatch.setattr("projectctl.storage.sqlite.connect_db", forbidden)
+    monkeypatch.setattr("projectctl.storage.runs.connect_db", forbidden)
+    assert read_run_db_snapshot(tmp_path, "run-1").run_id == "run-1"
+    assert _state(db) == before
+
+
+def test_active_wal_reader_cannot_modify_sqlite_authority_or_sidecars(tmp_path):
+    db = _fixture(tmp_path)
+    writer = sqlite3.connect(db)
+    writer.execute("PRAGMA journal_mode=WAL")
+    writer.execute(
+        "INSERT INTO run_events(run_id,created_at,event_type,payload_json) "
+        "VALUES(?,?,?,?)",
+        ("run-1", NOW.isoformat(), "review.requested", '{"secret":"test-token"}'),
+    )
+    writer.commit()
+    try:
+        before = _state(db)
+        # A fail-closed refusal is permissible on VFS/platforms where a
+        # genuinely non-mutating WAL-mode reader cannot be demonstrated.
+        try:
+            result = read_run_db_snapshot(tmp_path, "run-1")
+        except TraceSnapshotError as exc:
+            assert exc.reason_code in {
+                "source_unreadable", "inconsistent_snapshot", "source_changed",
+            }
+        else:
+            assert result.events[-1].category == "delivery"
+        assert _state(db) == before, (
+            "Read-only trace probe affected WAL/SHM: the collector must stay "
+            "disabled on this platform until the cause is resolved."
+        )
+    finally:
+        writer.close()
+
+
+def test_reader_fails_closed_on_incomplete_wal_sidecars(tmp_path, monkeypatch):
+    db = _fixture(tmp_path)
+    # Model a WAL file whose matching -shm sidecar does not yet exist.
+    wal = Path(str(db) + "-wal")
+    wal.write_bytes(b"test-incomplete-wal")
+    try:
+        with pytest.raises(TraceSnapshotError) as exc:
+            read_run_db_snapshot(tmp_path, "run-1")
+        assert exc.value.reason_code == "source_unreadable"
+        assert not Path(str(db) + "-shm").exists()
+    finally:
+        wal.unlink()
