@@ -282,16 +282,11 @@ def test_active_wal_reader_cannot_modify_sqlite_authority_or_sidecars(tmp_path):
     writer.commit()
     try:
         before = _state(db)
-        # A fail-closed refusal is permissible on VFS/platforms where a
-        # genuinely non-mutating WAL-mode reader cannot be demonstrated.
-        try:
-            result = read_run_db_snapshot(tmp_path, "run-1")
-        except TraceSnapshotError as exc:
-            assert exc.reason_code in {
-                "source_unreadable", "inconsistent_snapshot", "source_changed",
-            }
-        else:
-            assert result.events[-1].category == "delivery"
+        # B1a must *refuse* live WAL before sqlite3.connect; otherwise
+        # SQLite may modify -shm even when the connection is mode=ro.
+        with pytest.raises(TraceSnapshotError) as exc:
+            read_run_db_snapshot(tmp_path, "run-1")
+        assert exc.value.reason_code == "source_unreadable"
         assert _state(db) == before, (
             "Read-only trace probe affected WAL/SHM: the collector must stay "
             "disabled on this platform until the cause is resolved."
