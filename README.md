@@ -2273,7 +2273,7 @@ authority. Release version stays at `0.41.0` until a separate release decision.
 Slice B1a's private source readers merged in PR #57 after local tests; they
 still **refuse live WAL** before connecting to SQLite. A separate Draft B1b
 proposal adds pure historical artifact parsing, raw identity validation and
-an always-incomplete Trace builder with `assessments=[]`. See
+an always-incomplete Trace builder with `assessments=[]` (merged as PR #58 after local tests). See
 `docs/architecture/M6_0_SLICE_B1_READER_AUDIT.md` and
 `docs/architecture/M6_0_SLICE_B1B_ARTIFACT_VALIDATION.md`. This is **not** an
 enabled Collector or public CLI; safe live-WAL reading and cross-artifact
