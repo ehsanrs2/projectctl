@@ -237,7 +237,9 @@ def test_oversized_artifact_and_invalid_source_kind_rejected(tmp_path):
 
 
 def test_file_reader_does_not_create_missing_project_or_run_dirs(tmp_path):
-    assert read_run_artifact(tmp_path, "run-1", "worker_result") is None or True
+    with pytest.raises(TraceSnapshotError) as e:
+        read_run_artifact(tmp_path, "run-1", "worker_result")
+    assert e.value.reason_code == "unsafe_source_path"
     assert not (tmp_path / ".projectctl").exists()
 
 
