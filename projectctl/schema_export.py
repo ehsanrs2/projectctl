@@ -122,6 +122,7 @@ from projectctl.schemas.status import ProjectStatus
 from projectctl.schemas.task import TaskSnapshot, TaskSnapshotV1, TaskSnapshotV2
 from projectctl.schemas.task_authority import TaskAuthorityCapabilities
 from projectctl.schemas.task_claim import TaskClaim, TaskClaimRequest
+from projectctl.schemas.trace import ExecutionTraceBundle
 from projectctl.schemas.verification import VerificationCatalog, VerificationManifest, VerificationManifestV1
 
 PUBLIC_SCHEMAS = {
@@ -187,6 +188,7 @@ PUBLIC_SCHEMAS = {
     "parallel-reapplication.v1.schema.json": ParallelReapplicationManifestV1,
     "parallel-reapplication.v2.schema.json": ParallelReapplicationManifest,
     "parallel-batch-result.v1.schema.json": ParallelBatchResult,
+    "execution-trace-bundle.v1.schema.json": ExecutionTraceBundle,
     "run-manifest.v1.schema.json": RunManifestV1,
     "run-manifest.v2.schema.json": RunManifest,
     "context-manifest.v1.schema.json": ContextManifestV1,
