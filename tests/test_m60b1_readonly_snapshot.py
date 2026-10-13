@@ -312,3 +312,52 @@ def test_reader_fails_closed_on_incomplete_wal_sidecars(tmp_path, monkeypatch):
         assert not Path(str(db) + "-shm").exists()
     finally:
         wal.unlink()
+
+
+def test_file_replacement_during_read_is_not_presented_as_valid(
+    tmp_path, monkeypatch
+):
+    run = tmp_path / ".projectctl" / "runs" / "run-1"
+    run.mkdir(parents=True)
+    old_file = run / "worker-result.json"
+    old_file.write_bytes(b"old-data")
+    replacement = run / "replacement.json"
+    replacement.write_bytes(b"new-data")
+    import projectctl.trace.snapshot as snapshot
+
+    original = snapshot._read_fd
+
+    def replace_after_pinned_read(fd, *, limit):
+        old_bytes = original(fd, limit=limit)
+        os.replace(replacement, old_file)
+        return old_bytes
+
+    monkeypatch.setattr(snapshot, "_read_fd", replace_after_pinned_read)
+    with pytest.raises(TraceSnapshotError) as exc:
+        read_run_artifact(tmp_path, "run-1", "worker_result")
+    assert exc.value.reason_code == "source_changed"
+    assert old_file.read_bytes() == b"new-data"
+
+
+def test_run_directory_replacement_during_read_fails_closed(
+    tmp_path, monkeypatch
+):
+    base = tmp_path / ".projectctl" / "runs"
+    run = base / "run-1"
+    run.mkdir(parents=True)
+    (run / "worker-result.json").write_bytes(b"pinned-data")
+    import projectctl.trace.snapshot as snapshot
+
+    original = snapshot._read_fd
+
+    def swap_directory_after_read(fd, *, limit):
+        old_bytes = original(fd, limit=limit)
+        os.rename(run, base / "moved-run")
+        run.mkdir()
+        (run / "worker-result.json").write_bytes(b"new-run")
+        return old_bytes
+
+    monkeypatch.setattr(snapshot, "_read_fd", swap_directory_after_read)
+    with pytest.raises(TraceSnapshotError) as exc:
+        read_run_artifact(tmp_path, "run-1", "worker_result")
+    assert exc.value.reason_code == "source_changed"
