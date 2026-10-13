@@ -1,6 +1,6 @@
 # M6.0 — Read-only Trace & Evaluation Export: Bounded Implementation Plan
 
-**Status: Slices A, B0 and B1a merged with operator-reported local regression passes; ADR-039 accepted. B1b pure artifact validation is in Draft; no Collector/CLI or safe live-WAL reader exists.**
+**Status: Slices A, B0, B1a and B1b merged with operator-reported local regression passes; ADR-039 accepted. B2a detached-WAL feasibility is experimental and not yet validated; no Collector/CLI or proven coherent live-WAL snapshot exists.**
 **Active goal:** `docs/PROJECT_STATE.yaml` — M6.0
 **Architecture decision:** ADR-039 (Accepted as bounded design on acceptance PR merge; implementation still gated)
 **Inherited safety decisions:** ADR-037, ADR-038 (Accepted)
