@@ -343,7 +343,6 @@ def test_pure_trace_keeps_mixed_error_reasons_without_verified_assessments():
         None, source_kind="verification_manifest",
         run_id="run-1", task_id="task-1", project_id="project-1",
     )
-    invalid = _inspect(_context(task_id="wrong-task"))
     result = conservative_trace_from_snapshots(
         project_id="project-1", db_snapshot=_db(RunStatus.PASSED),
         file_sources={
@@ -362,3 +361,56 @@ def test_pure_trace_keeps_mixed_error_reasons_without_verified_assessments():
         ("missing_source", "verification_manifest"),
     ]
     assert b"supported" not in canonical_trace_json_bytes(result)
+
+
+@pytest.mark.parametrize("data", [
+    # Both keys decode to 'task_id'; ambiguity must be rejected before Pydantic.
+    b'{"schema_kind":"projectctl.context_manifest","schema_version":1,'
+    b'"task_id":"task-1","\\u0074ask_id":"task-1","git_commit":"deadbeef"}',
+    # Duplicate *nested* keys must also be rejected, not silently resolved.
+    b'{"schema_kind":"projectctl.context_manifest","schema_version":1,'
+    b'"task_id":"task-1","git_commit":"deadbeef",'
+    b'"artifacts":[{"name":"private","name":"other"}]}',
+])
+def test_duplicate_escaped_or_nested_json_keys_are_rejected(data):
+    result = _inspect(_file("context_manifest", data))
+    assert result.validation_state == "invalid"
+    assert result.reason_code == "invalid_content"
+
+
+def test_repeated_trace_construction_is_independent_of_descriptor_map_order():
+    present = _inspect(_context())
+    missing = inspect_artifact_snapshot(
+        None, source_kind="evidence_manifest",
+        run_id="run-1", task_id="task-1", project_id="project-1",
+    )
+    normal = conservative_trace_from_snapshots(
+        project_id="project-1", db_snapshot=_db(),
+        file_sources={
+            "context_manifest": present,
+            "evidence_manifest": missing,
+        },
+    )
+    reversed_input = conservative_trace_from_snapshots(
+        project_id="project-1", db_snapshot=_db(),
+        file_sources={
+            "evidence_manifest": missing,
+            "context_manifest": present,
+        },
+    )
+    assert canonical_trace_json_bytes(normal) == canonical_trace_json_bytes(
+        reversed_input
+    )
+    assert normal.completeness == "incomplete"
+    assert normal.assessments == []
+
+
+def test_large_snapshot_input_is_rejected_before_json_parsing():
+    from projectctl.trace.snapshot import MAX_ARTIFACT_BYTES
+    malicious = _file(
+        "context_manifest", b" " * (MAX_ARTIFACT_BYTES + 1)
+    )
+    descriptor = _inspect(malicious)
+    assert descriptor.validation_state == "invalid"
+    assert descriptor.reason_code == "invalid_content"
+    assert descriptor.content_sha256 is None
