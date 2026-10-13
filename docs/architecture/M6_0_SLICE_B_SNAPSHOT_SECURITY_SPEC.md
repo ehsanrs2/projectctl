@@ -1,9 +1,9 @@
 # M6.0 Slice B — Collector Snapshot, Privacy and Locator Decision Gate
 
-**Status: Proposed for architecture approval; Collector/CLI deliberately BLOCKED**
+**Status: Accepted bounded design on merger of ADR-039 acceptance PR; operational Collector/CLI remains BLOCKED until implementation checks pass**
 **Base:** `main@1b9672af619e7ff4e0fe151b8983c5ca3ec405f6` (PR #54 merged and locally tested)
-**Governing ADR:** ADR-039, still `Proposed`
-**Work in this PR:** concrete source/SQLite/security decisions and *pure* trace-format helper tests; no operational read APIs.
+**Governing ADR:** ADR-039 (Accepted as design on acceptance PR merge; no operational read implementation accepted)
+**Evidence:** PR #55 merged the snapshot-security proposal and pure trace formatting tests; this decision does not add an operational read API.
 
 ## 1. Existing data-store behavior (verified from code)
 
@@ -17,7 +17,7 @@ a trace exporter violates the strict "cannot create or mutate anything"
 boundary. It also cannot provide one consistent snapshot across all three
 independent calls.
 
-**Proposed resolution:** the Slice B reader must open an **existing**
+**Accepted design requirement:** the Slice B reader must open an **existing**
 project-state database via a new private, explicitly read-only connection,
 without importing or invoking `connect_db` or SQLite migration/initialization
 routines. Use a bounded SQLite `mode=ro` URI and `PRAGMA query_only=ON`,
@@ -36,7 +36,7 @@ miss committed WAL content. If a strictly side-effect-free read is impossible
 on a supported target, fail closed and document the limitation rather than
 silently weakening the contract.
 
-**Race policy (proposed):** inspect `PRAGMA data_version` before and after
+**Race policy (design requirement):** inspect `PRAGMA data_version` before and after
 the bounded read; check snapshot identity/status against source files before
 emitting any trusted result. A changed database or file means
 `inconsistent_snapshot`, not a coherent "complete" trace. One bounded
@@ -111,7 +111,7 @@ explicit source allowlist.
 
 ## 4. Identity disclosure and privacy decision (operator review)
 
-**Recommended default for the first local-only CLI:** retain bounded
+**Accepted default for the first local-only CLI:** retain bounded
 `project_id` and `run_id` exactly as the selected source identities.
 This keeps traces useful for a human to reconcile with `RunStore`.
 It is an **explicit privacy tradeoff**, not anonymization: IDs and raw
@@ -196,6 +196,4 @@ Record terminal output; earlier GitHub Actions quota exhaustion remains an
 infrastructure exception, not a green hosted CI result. No tests were
 executed from this GitHub-connected session.
 
-**Reviewer decision:** accept these snapshot/locator/privacy constraints,
-amend ADR-039 to Accepted, then begin the *actual* bounded collector
-implementation in a separate Slice B execution PR.
+**Architecture disposition:** these snapshot/locator/privacy constraints are accepted as the design on merger of the ADR-039 acceptance PR. An *actual* bounded collector and CLI must be developed in a separate implementation PR and cannot be accepted before demonstrating the read-only, WAL, symlink, concurrency and privacy gates above.
