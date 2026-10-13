@@ -1693,7 +1693,16 @@ verification, task completion or worker permissions. Historical schemas must
 be interpreted using their own versioned contracts; unsupported or missing
 evidence is explicit, never inferred as success.
 
-Bounded architecture decision: `docs/decisions/ADR-039-read-only-execution-trace-export.md` (**Accepted as design upon merger of its acceptance PR**). Initial Slice B must remain local-only, fail closed on SQLite/WAL and filesystem safety uncertainties, reveal only allowlisted information and make **no supported assessments**. See `docs/architecture/M6_0_SLICE_B_SNAPSHOT_SECURITY_SPEC.md` and `docs/architecture/M6_0_IMPLEMENTATION_PLAN.md`. Actual Collector/CLI verification remains pending.
+Bounded architecture decision: `docs/decisions/ADR-039-read-only-execution-trace-export.md` (**Accepted**). Initial Slice B remains local-only, fail-closed on SQLite/WAL and filesystem safety uncertainties, uses allowlisted outputs and makes **no supported assessments**.
+
+PRs #57, #58 and #59 merged private readers, versioned artifact validation,
+and a **non-authoritative** detached WAL probe. No coherent live WAL +
+artifact snapshot is proven, and no Collector/CLI exists. ADR-040
+(`docs/decisions/ADR-040-trace-snapshot-publication-consistency.md`) is
+**Proposed** and requires an explicit owner choice on trusted writer-published
+as-of seals versus an atomic filesystem snapshot or fail-closed refusal.
+See `docs/architecture/M6_0_B2B_SNAPSHOT_CONSISTENCY_REVIEW.md` and
+`docs/architecture/M6_0_IMPLEMENTATION_PLAN.md`.
 
 The active goal is set only in `docs/PROJECT_STATE.yaml`; the current package
 version remains `0.41.0` pending a separate release decision.
