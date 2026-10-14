@@ -405,3 +405,164 @@ def test_fenced_generation_and_token_shape_are_schema_only(tmp_path):
         assert conn.execute(
             "SELECT lease_generation FROM runs WHERE run_id='run-a'"
         ).fetchone()[0] == 1
+@pytest.mark.parametrize("value", ["garbage", 1.5, -1, b"\x01", True])
+def test_generation_rejects_noninteger_negative_and_blob_values(tmp_path, value):
+    db = _db(tmp_path)
+    with closing(_conn(db)) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _apply_disposable_candidate(conn)
+        conn.commit()
+        _run(conn, "run-a")
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "UPDATE runs SET lease_generation=? WHERE run_id='run-a'",
+                (value,),
+            )
+        assert conn.execute(
+            "SELECT lease_generation, typeof(lease_generation) FROM runs "
+            "WHERE run_id='run-a'"
+        ).fetchone() == (0, "integer")
+
+
+def test_generation_int64_overflow_is_refused_without_real_fallback(tmp_path):
+    db = _db(tmp_path)
+    with closing(_conn(db)) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _apply_disposable_candidate(conn)
+        conn.commit()
+        _run(conn, "run-a")
+        upper = (1 << 63) - 1
+        conn.execute(
+            "UPDATE runs SET lease_generation=? WHERE run_id='run-a'",
+            (upper,),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "UPDATE runs SET lease_generation=lease_generation+1 "
+                "WHERE run_id='run-a'"
+            )
+        assert conn.execute(
+            "SELECT lease_generation,typeof(lease_generation) FROM runs "
+            "WHERE run_id='run-a'"
+        ).fetchone() == (upper, "integer")
+
+
+def test_lease_token_rejects_blob_hex_bytes(tmp_path):
+    db = _db(tmp_path)
+    with closing(_conn(db)) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _apply_disposable_candidate(conn)
+        conn.commit()
+        _run(conn, "run-a")
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "UPDATE runs SET lease_token=? WHERE run_id='run-a'",
+                (b"a" * 32,),
+            )
+        assert conn.execute(
+            "SELECT lease_token FROM runs WHERE run_id='run-a'"
+        ).fetchone()[0] is None
+
+
+@pytest.mark.parametrize(
+    ("column", "replacement"),
+    [
+        ("event_type", "verification.failed"),
+        ("payload_json", '{"forged":true}'),
+        ("created_at", "2000-01-01T00:00:00+00:00"),
+        ("run_id", "run-b"),
+    ],
+)
+def test_sealed_anchor_is_immutable_after_insert(tmp_path, column, replacement):
+    db = _db(tmp_path)
+    with closing(_conn(db)) as conn:
+        _run(conn, "run-a")
+        _run(conn, "run-b")
+        anchor = _event(conn, "run-a")
+        conn.execute("BEGIN IMMEDIATE")
+        _apply_disposable_candidate(conn)
+        conn.commit()
+        _seal(conn, "run-a", anchor)
+        with pytest.raises(
+            sqlite3.IntegrityError, match="sealed_event_prefix_immutable"
+        ):
+            # Only test-controlled fixed column names are interpolated.
+            conn.execute(
+                f"UPDATE run_events SET {column}=? WHERE id=?",
+                (replacement, anchor),
+            )
+        assert conn.execute(
+            "SELECT event_type,run_id FROM run_events WHERE id=?", (anchor,)
+        ).fetchone() == ("run.transition", "run-a")
+
+
+def test_sealed_earlier_prefix_events_are_frozen_but_later_events_are_not(
+    tmp_path,
+):
+    db = _db(tmp_path)
+    with closing(_conn(db)) as conn:
+        _run(conn, "run-a")
+        _run(conn, "run-b")
+        earlier = _event(conn, "run-a", "run.created")
+        anchor = _event(conn, "run-a")
+        other = _event(conn, "run-b")
+        conn.execute("BEGIN IMMEDIATE")
+        _apply_disposable_candidate(conn)
+        conn.commit()
+        _seal(conn, "run-a", anchor)
+        for statement in (
+            "UPDATE run_events SET payload_json='{}' WHERE id=?",
+            "DELETE FROM run_events WHERE id=?",
+        ):
+            with pytest.raises(
+                sqlite3.IntegrityError, match="sealed_event_prefix_immutable"
+            ):
+                conn.execute(statement, (earlier,))
+        later = _event(conn, "run-a", "integration.started")
+        conn.execute(
+            "UPDATE run_events SET payload_json=? WHERE id=?",
+            ('{"later":true}', later),
+        )
+        conn.execute(
+            "UPDATE run_events SET payload_json=? WHERE id=?",
+            ('{"other":true}', other),
+        )
+        assert conn.execute(
+            "SELECT count(*) FROM run_events WHERE run_id='run-a'"
+        ).fetchone()[0] == 3
+
+
+def test_sealed_prefix_blocks_id_backfill_and_cross_run_event_relocation(
+    tmp_path,
+):
+    db = _db(tmp_path)
+    with closing(_conn(db)) as conn:
+        _run(conn, "run-a")
+        _run(conn, "run-b")
+        hole = _event(conn, "run-a", "run.created")
+        anchor = _event(conn, "run-a")
+        moving = _event(conn, "run-b")
+        conn.execute("DELETE FROM run_events WHERE id=?", (hole,))
+        conn.execute("BEGIN IMMEDIATE")
+        _apply_disposable_candidate(conn)
+        conn.commit()
+        _seal(conn, "run-a", anchor)
+        with pytest.raises(
+            sqlite3.IntegrityError, match="sealed_event_prefix_immutable"
+        ):
+            conn.execute(
+                "INSERT INTO run_events(id,run_id,created_at,event_type,payload_json)"
+                " VALUES(?,?,?,?,?)",
+                (hole, "run-a", STAMP, "run.created", "{}"),
+            )
+        with pytest.raises(
+            sqlite3.IntegrityError, match="sealed_event_prefix_immutable"
+        ):
+            conn.execute(
+                "UPDATE run_events SET run_id='run-a',id=? WHERE id=?",
+                (hole, moving),
+            )
+        assert conn.execute(
+            "SELECT run_id FROM run_events WHERE id=?", (moving,)
+        ).fetchone()[0] == "run-b"
+
