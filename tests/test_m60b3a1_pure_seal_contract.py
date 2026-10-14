@@ -12,6 +12,8 @@ from projectctl.trace.seal_contract import (
     VerificationAsOfSealV1,
     canonical_private_seal_json_bytes,
     private_seal_sha256,
+    parse_private_seal_json_bytes,
+    _InvalidSealJson,
 )
 
 
@@ -46,6 +48,7 @@ def test_private_seal_v1_exact_roundtrip_and_fingerprint():
                    allow_nan=False, separators=(",", ":")) + "\n"
     ).encode()
     assert VerificationAsOfSealV1.model_validate_json(encoded) == seal
+    assert parse_private_seal_json_bytes(encoded) == seal
     assert private_seal_sha256(seal) == hashlib.sha256(encoded).hexdigest()
 
 
@@ -150,15 +153,16 @@ def test_pure_contract_does_not_open_sqlite_or_files(monkeypatch):
     assert len(private_seal_sha256(seal)) == 64
 
 
-def test_defaulted_discriminator_does_not_allow_unsupported_versions():
+@pytest.mark.parametrize("field", [
+    "schema_kind", "schema_version", "seal_protocol_version",
+    "observed_status", "run_manifest_schema_version",
+    "artifact_digest_algorithm",
+])
+def test_missing_discriminator_must_fail_closed(field):
     data = _payload()
-    for key in ("schema_kind", "schema_version", "seal_protocol_version",
-                "observed_status", "run_manifest_schema_version",
-                "artifact_digest_algorithm"):
-        data.pop(key)
-    seal = VerificationAsOfSealV1.model_validate(data)
-    assert seal.observed_status == "ready_to_integrate"
-    assert seal.schema_version == 1
+    data.pop(field)
+    with pytest.raises(ValidationError):
+        VerificationAsOfSealV1.model_validate(data)
 
 
 def test_no_schema_file_hashing_or_worker_execution_dependencies():
@@ -170,3 +174,41 @@ def test_no_schema_file_hashing_or_worker_execution_dependencies():
     assert "subprocess" not in source
     assert "RunStore" not in source
     assert "read_run_artifact" not in source
+
+
+@pytest.mark.parametrize("raw", [
+    b"",
+    b"not-json",
+    b"[]",
+    b"null",
+    b'{"schema_kind":"projectctl.verification_as_of_seal",'
+    b'"schema_kind":"projectctl.verification_as_of_seal"}',
+    b'{"x": NaN}',
+    b'{"x": Infinity}',
+    b" " * 4097,
+])
+def test_strict_private_seal_parser_rejects_malformed_ambiguous_or_large_bytes(raw):
+    with pytest.raises(_InvalidSealJson):
+        parse_private_seal_json_bytes(raw)
+
+
+def test_strict_decoder_rejects_escaped_duplicate_key_even_if_values_equal():
+    raw = canonical_private_seal_json_bytes(
+        VerificationAsOfSealV1.model_validate(_payload())
+    ).rstrip(b"\n")
+    tampered = raw[:-1] + b',"\\u0072un_id":"run-42"}'
+    with pytest.raises(_InvalidSealJson):
+        parse_private_seal_json_bytes(tampered)
+
+
+def test_parser_roundtrip_preserves_exact_private_digest_data():
+    model = VerificationAsOfSealV1.model_validate(_payload())
+    encoded = canonical_private_seal_json_bytes(model)
+    assert parse_private_seal_json_bytes(encoded) == model
+    assert len(encoded) < 4096
+
+
+@pytest.mark.parametrize("wrong", [None, "", "{}", 123, [], b"x" * 4097])
+def test_parser_wrong_input_type_and_bounded_size_refused(wrong):
+    with pytest.raises(_InvalidSealJson):
+        parse_private_seal_json_bytes(wrong)
