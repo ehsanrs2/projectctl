@@ -93,6 +93,24 @@ schema or turn on export. A separate schema+writer implementation PR and
 local failure/concurrency proofs are required. The independent safe
 live-WAL Reader gate remains blocked and mandatory.
 
+### B3a2 — In-memory transaction lab (Draft, NOT a writer)
+
+After the B3a1 pure private Seal contract merged in PR #62, a dedicated
+`projectctl/trace/seal_transaction_lab.py` prototype and in-memory
+SQLite tests explore the next atomic **row + transition event + Seal**
+boundary. The private candidate DDL is **not an approved v2->v3
+migration** and is never executed on ProjectCTL project authority.
+The helper neither creates DB connections nor begins/commits transactions.
+It requires an already opened caller-owned transaction and validates the
+fixed run projection/manifest digest and event boundary before inserting
+one experimental Seal.
+
+See `docs/architecture/M6_0_B3A2_TRANSACTION_LAB.md`. This can prove
+specific SQLite failure/rollback behavior only. It does not prove
+durable file publication, actual verifier orchestration, same-run writer
+serialization, independent WAL reading, or a complete trace. Next
+production PR must separately address and test **all** those gaps.
+
 ### B. Bounded local trace collection and export
 
 1. Implement a read-only collector over one explicitly selected project/run.
