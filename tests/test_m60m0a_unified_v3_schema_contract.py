@@ -81,8 +81,8 @@ _V3_SQL = (
            WHERE run_id=OLD.run_id AND OLD.id<=event_prefix_id
        )
        BEGIN SELECT RAISE(ABORT, 'sealed_event_prefix_immutable'); END""",
-    """CREATE TRIGGER trace_seals_prefix_no_backfill BEFORE INSERT ON run_events
-       WHEN NEW.id IS NOT NULL AND NEW.id>0 AND EXISTS (
+    """CREATE TRIGGER trace_seals_prefix_no_backfill AFTER INSERT ON run_events
+       WHEN EXISTS (
            SELECT 1 FROM trace_seals
            WHERE run_id=NEW.run_id AND NEW.id<=event_prefix_id
        )
@@ -565,4 +565,42 @@ def test_sealed_prefix_blocks_id_backfill_and_cross_run_event_relocation(
         assert conn.execute(
             "SELECT run_id FROM run_events WHERE id=?", (moving,)
         ).fetchone()[0] == "run-b"
+def test_sealed_prefix_rejects_negative_id_and_insert_or_replace(tmp_path):
+    db = _db(tmp_path)
+    with closing(_conn(db)) as conn:
+        _run(conn, "run-a")
+        prior = _event(conn, "run-a", "run.created")
+        anchor = _event(conn, "run-a")
+        conn.execute("BEGIN IMMEDIATE")
+        _apply_disposable_candidate(conn)
+        conn.commit()
+        _seal(conn, "run-a", anchor)
+        before_rows = conn.execute(
+            "SELECT id,event_type,payload_json FROM run_events "
+            "WHERE run_id='run-a' ORDER BY id"
+        ).fetchall()
+        # A BEFORE INSERT trigger sees NEW.rowid=-1 for automatically
+        # allocated IDs, so the guard intentionally runs AFTER INSERT.
+        # Both a negative explicit ID and OR REPLACE must be rejected.
+        with pytest.raises(
+            sqlite3.IntegrityError, match="sealed_event_prefix_immutable"
+        ):
+            conn.execute(
+                "INSERT INTO run_events(id,run_id,created_at,event_type,payload_json)"
+                " VALUES(-7,'run-a',?,?,?)",
+                (STAMP, "run.created", "{}"),
+            )
+        with pytest.raises(
+            sqlite3.IntegrityError, match="sealed_event_prefix_immutable"
+        ):
+            conn.execute(
+                "INSERT OR REPLACE INTO run_events"
+                "(id,run_id,created_at,event_type,payload_json)"
+                " VALUES(?,?,?,?,?)",
+                (prior, "run-a", STAMP, "verification.failed", '{"rewrote":1}'),
+            )
+        assert conn.execute(
+            "SELECT id,event_type,payload_json FROM run_events "
+            "WHERE run_id='run-a' ORDER BY id"
+        ).fetchall() == before_rows
 
