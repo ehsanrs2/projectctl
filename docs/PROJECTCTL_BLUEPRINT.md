@@ -1695,13 +1695,19 @@ evidence is explicit, never inferred as success.
 
 Bounded architecture decision: `docs/decisions/ADR-039-read-only-execution-trace-export.md` (**Accepted**). Initial Slice B remains local-only, fail-closed on SQLite/WAL and filesystem safety uncertainties, uses allowlisted outputs and makes **no supported assessments**.
 
-PRs #57, #58 and #59 merged private readers, versioned artifact validation,
-and a **non-authoritative** detached WAL probe. No coherent live WAL +
-artifact snapshot is proven, and no Collector/CLI exists. ADR-040
-(`docs/decisions/ADR-040-trace-snapshot-publication-consistency.md`) is
-**Proposed** and requires an explicit owner choice on trusted writer-published
-as-of seals versus an atomic filesystem snapshot or fail-closed refusal.
-See `docs/architecture/M6_0_B2B_SNAPSHOT_CONSISTENCY_REVIEW.md` and
+PRs #57/#58/#59 merged private readers, historical artifact validation
+and a **non-authoritative** detached WAL feasibility probe. PR #60 merged
+the consistency review, without promoting any source to a proven snapshot.
+
+The owner selected **ADR-040 Path A: writer-published as-of Seal**.
+ADR-040 acceptance is conditional on its separate architecture PR merge;
+the first Seal v1 is restricted to non-review successful Verification at
+`VERIFYING -> READY_TO_INTEGRATE`. No historical raw-byte archive is
+introduced. Trusted writer implementation, SQLite migration, safe live-WAL
+reading and public Collector/CLI require separate explicit approvals and
+tests. No coherent live-WAL/file snapshot has been proven. See
+`docs/architecture/M6_0_B3_SEAL_V1_DESIGN_GATE.md`,
+`docs/architecture/M6_0_B2B_SNAPSHOT_CONSISTENCY_REVIEW.md`, and
 `docs/architecture/M6_0_IMPLEMENTATION_PLAN.md`.
 
 The active goal is set only in `docs/PROJECT_STATE.yaml`; the current package
