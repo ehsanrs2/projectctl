@@ -35,20 +35,18 @@ class VerificationAsOfSealV1(ProjectCtlModel):
     verdict or delivery claim and has no authority-bearing API.
     """
 
-    schema_kind: Literal["projectctl.verification_as_of_seal"] = (
-        "projectctl.verification_as_of_seal"
-    )
-    schema_version: Literal[1] = 1
-    seal_protocol_version: Literal[1] = 1
-    artifact_digest_algorithm: Literal["sha256"] = "sha256"
+    schema_kind: Literal["projectctl.verification_as_of_seal"]
+    schema_version: Literal[1]
+    seal_protocol_version: Literal[1]
+    artifact_digest_algorithm: Literal["sha256"]
 
     project_id: str
     run_id: str
     task_id: str
     seal_sequence: StrictInt = Field(ge=1, le=_MAX_SQLITE_INTEGER)
-    observed_status: Literal["ready_to_integrate"] = "ready_to_integrate"
+    observed_status: Literal["ready_to_integrate"]
     event_prefix_id: StrictInt = Field(ge=1, le=_MAX_SQLITE_INTEGER)
-    run_manifest_schema_version: Literal[2] = 2
+    run_manifest_schema_version: Literal[2]
     run_manifest_raw_sha256: str
     run_record_projection_sha256: str
     verification_manifest_raw_sha256: str
@@ -60,6 +58,22 @@ class VerificationAsOfSealV1(ProjectCtlModel):
         # ProjectCtlModel globally strips whitespace. This pre-check prevents
         # silently turning an altered identity/digest into an acceptable one.
         if isinstance(value, Mapping):
+            for key in (
+                "schema_version", "seal_protocol_version",
+                "run_manifest_schema_version",
+            ):
+                # Literal[int] alone must not silently admit JSON booleans.
+                if type(value.get(key)) is not int:
+                    raise ValueError("invalid_seal_version")
+            if (
+                type(value.get("schema_kind")) is not str
+                or value.get("schema_kind") != "projectctl.verification_as_of_seal"
+                or type(value.get("artifact_digest_algorithm")) is not str
+                or value.get("artifact_digest_algorithm") != "sha256"
+                or type(value.get("observed_status")) is not str
+                or value.get("observed_status") != "ready_to_integrate"
+            ):
+                raise ValueError("invalid_seal_kind_or_status")
             for key in ("project_id", "run_id", "task_id"):
                 field = value.get(key)
                 if type(field) is not str or not _IDENTIFIER.fullmatch(field):
@@ -70,6 +84,43 @@ class VerificationAsOfSealV1(ProjectCtlModel):
                     raise ValueError("invalid_seal_digest")
         return value
 
+
+
+_MAX_SEAL_JSON_BYTES = 4096
+
+
+class _InvalidSealJson(ValueError):
+    """Typed internal refusal; never return parser source bytes in an error."""
+
+
+def _unique_object_fields(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    obj: dict[str, object] = {}
+    for name, value in pairs:
+        if name in obj:
+            raise _InvalidSealJson("duplicate_seal_json_field")
+        obj[name] = value
+    return obj
+
+
+def parse_private_seal_json_bytes(data: bytes) -> VerificationAsOfSealV1:
+    """Bounded strict decoder; never accepts ambiguous repeated JSON keys."""
+    if not isinstance(data, bytes) or len(data) > _MAX_SEAL_JSON_BYTES:
+        raise _InvalidSealJson("invalid_seal_json")
+    try:
+        payload = json.loads(
+            data.decode("utf-8"),
+            object_pairs_hook=_unique_object_fields,
+            parse_constant=lambda _x: (_ for _ in ()).throw(_InvalidSealJson(
+                "nonfinite_seal_json"
+            )),
+        )
+        if not isinstance(payload, dict):
+            raise _InvalidSealJson("invalid_seal_json")
+        return VerificationAsOfSealV1.model_validate(payload)
+    except _InvalidSealJson:
+        raise
+    except (ValueError, UnicodeError, TypeError) as _exc:
+        raise _InvalidSealJson("invalid_seal_json") from None
 
 def canonical_private_seal_json_bytes(seal: VerificationAsOfSealV1) -> bytes:
     """Deterministic *private* seal serialization; never a public Trace API.
