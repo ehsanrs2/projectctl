@@ -50,9 +50,11 @@ the caller-owned `BEGIN IMMEDIATE`, never `executescript`. Candidate:
 6. three additional event-prefix protection triggers: after sealing
    Run R at boundary E, **UPDATE and DELETE of existing Run R events
    whose IDs are at or before E are refused**, including attempts to
-   reassign another Run's earlier event into R. Explicit backfill of
-   an event with `id <= E` is refused. Normal automatically allocated
-   later events and unrelated Runs remain writable. These triggers
+   reassign another Run's earlier event into R. The event INSERT
+   check is an **AFTER INSERT / RAISE(ABORT)** trigger so even explicit
+   negative IDs and `INSERT OR REPLACE` into the already sealed prefix
+   are rejected atomically; a normal automatically allocated ID after E
+   and unrelated Runs remain writable. These triggers
    protect SQLite event rows, not separately stored artifacts and not
    cryptographic historical authenticity;
 7. one `schema_migrations` entry and `PRAGMA user_version=3` in
