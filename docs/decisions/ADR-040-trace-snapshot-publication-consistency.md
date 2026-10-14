@@ -1,6 +1,6 @@
 # ADR-040: Consistent Trace Snapshot Publication and Proof
 
-**Status: Proposed — NOT Accepted; operator architecture decision required**
+**Status: Accepted as bounded Path A design on merge of the ADR-040 Path A acceptance PR (2026-10-14); no writer code, database migration, Collector, live-WAL reader, or release is accepted by this decision alone.**
 **Milestone:** M6.0 — Read-only Trace & Evaluation Export
 **Parent decision:** ADR-039 (Accepted; derived local-only non-authoritative export)
 **Baseline:** PR #59 merged into `main@90b5bd50777556756e6cf8caed233c3b132f7424`
@@ -36,13 +36,37 @@ latest committed transactions. Using a source `mode=ro` connection may
 still create/update WAL-index sidecars. Accordingly, none of the above
 may be promoted to a proven trace without additional authority evidence.
 
-## Decision under consideration: writer-published sealed observation
+## Selected decision: Path A — bounded writer-published as-of seal
 
-**Proposed preferred approach (NOT approved):** add a *trusted,
-writer-published, versioned, immutable observation seal* at carefully
-selected durable transition boundaries. A seal is **derived audit
-evidence**, not a new task/claim/Worker permission or a new verifier.
-The collector stays read-only and consumes only an existing seal.
+**Path A was explicitly selected by the owner. This architecture decision
+becomes Accepted only when its separate acceptance PR is merged.** Introduce
+a *trusted, writer-published, versioned, immutable observation seal* at an
+explicit durable lifecycle boundary. The Seal represents an **as-of local
+observation**, not a new verifier, Worker permission, task authority, or
+independent assertion of successful delivery.
+
+**Initial scope:** one successful non-review Verification path, at the
+`VERIFYING -> READY_TO_INTEGRATE` RunStore transition **only**, after the
+same Run's `verification-manifest.json` and `evidence-manifest.json` have
+been durably published. Other states, review-strategy `PASSED`, failures,
+reverification, integration, task-provider changes and remote delivery are
+explicitly **out of this first implementation**. The trusted writer must
+publish a monotonic versioned Seal **inside the same SQLite transaction as
+the status transition and its run.transition event**, not in a following
+transaction.
+
+**Historical bytes:** the first slice creates **no new raw-evidence archive**.
+If fixed-name files are later replaced, an older Seal may become
+unreplayable and must be marked unavailable/stale, never reinterpreted using
+new bytes. Retention and immutable content-addressed archives require a
+separate decision.
+
+**Read-only boundary:** the exporter/Collector remains strictly read-only
+per ADR-039. A Seal does not solve the live WAL snapshot reader problem;
+that has a distinct, mandatory security/consistency Gate. No operational
+export is authorized by accepting this design. See
+`docs/architecture/M6_0_B3_SEAL_V1_DESIGN_GATE.md` for the precise
+contract and tests-first rollout.
 
 The writer publication protocol, if explicitly authorized, must:
 
@@ -101,17 +125,17 @@ The writer publication protocol, if explicitly authorized, must:
    forbids any source metadata changes, enforce that in a supported
    platform test or fail closed rather than overstating "zero mutation".
 
-**Important change-control rule:** this proposal would add behavior to
-trusted ProjectCTL writers. It is a *scope extension* beyond the currently
-purely read-only M6.0 export implementation. It **requires an explicit
-operator architecture decision**, an ADR-039 compatibility review, and
-focused regression/security tests **before any production changes to
-writers, RunStore schema/events, or execution authority**. Merely merging
-this Proposed ADR does not accept or implement those changes.
+**Change-control rule:** Path A accepts the *architectural scope* for a
+future, narrowly scoped trusted writer-side Seal. It is not permission to
+merge an unreviewed implementation. A separate code/schema/test PR and
+explicit operator approval are required before modifying production writers,
+RunStore persistence, migrations, or execution authority. The first stage
+must remain disabled on existing projects until its migration compatibility,
+crash, privacy and concurrency test gates pass.
 
-## Candidate alternatives (unselected)
+## Alternatives considered (Path A selected; others remain fallbacks)
 
-### A. Writer-published sealed boundary — preferred to investigate
+### A. Writer-published sealed boundary — selected within the strict initial scope
 
 Pros: explicit as-of point, deterministic proof chain, possible support
 on existing local filesystems without privileged snapshot operations.
@@ -148,14 +172,15 @@ Costs: normal WAL-enabled ProjectCTL cannot yet offer an operational
 live RunStore trace. It remains the **mandatory fallback** if no
 fully reviewed proof-bearing strategy works.
 
-## Open decision questions (human review required)
+## Implementation-level decisions and follow-up gates (not implicit authorization)
 
-- Is adding a *trusted writer-produced, derived seal* permitted in M6.0,
-  or must M6.0 remain strictly read-only across **all** components?
-- Which lifecycle transition(s) are seal-worthy? Only a terminal
-  verification/integration boundary, or interim/pending-review states?
-  Some terminal states may later be rebound/reconciled; "terminal"
-  must not be assumed immutable without code-backed proof.
+- The owner has selected a **bounded trusted writer-side Seal** while retaining
+  the fully read-only Exporter. Any widening beyond the initial successful
+  `VERIFYING -> READY_TO_INTEGRATE` path requires a new approval.
+- The selected first boundary is `VERIFYING -> READY_TO_INTEGRATE` after
+  durable Verification and Evidence manifests. Additional phases, review,
+  failure, rebind/reverify and post-PASSED cleanup remain future decisions;
+  an initial Seal never asserts that the Run is forever terminal.
 - Can we augment the existing `run_events` within a single transaction
   safely, or is a separately migrated typed `trace_seals` table
   necessary? A seal must not hash its own containing event recursively.
@@ -165,9 +190,10 @@ fully reviewed proof-bearing strategy works.
   the first implementation explicitly reject historical replay when
   the fixed leaf has been replaced? What disk/retention/privacy budget
   applies to any archived raw bytes?
-- Is the initial use case a **sealed historical as-of trace** instead of
-  "most recent live state", and may local identity/digest correlation be
-  disclosed under ADR-039's non-anonymous privacy policy?
+- The first use case is a **local as-of Verification observation**, not
+  "most recent live state", with ADR-039's approved local-only identity and
+  digest correlation limits. Broader sharing, pseudonymization or a
+  published analytics API remains unapproved.
 - Can a seal publish an observation **after** a Run reaches PASSED and
   its integration manifest is replaced by worktree cleanup, without
   falsely presenting an earlier version as complete? Does any phase
@@ -177,9 +203,11 @@ fully reviewed proof-bearing strategy works.
 - Which external task/remote delivery receipts can be independently
   checked later, versus merely recorded as non-authoritative observed
   evidence? The seal itself must not expand provider authority.
-- Does the requirement prohibit **any** writer code/schema change?
-  If so, select explicit fail-closed D or a separately validated
-  filesystem snapshot facility; do not pretend B2a solved this.
+- The writer extension is restricted to publishing derived audit evidence
+  and the exact SQLite transaction boundary; it cannot grant privileges,
+  auto-complete tasks, run verification, alter review policy, or repair
+  historical authority. If a required security property cannot be proven,
+  the system **fails closed** rather than falling back to B2a.
 
 ## Required acceptance evidence (before any operational exporter)
 
@@ -216,10 +244,17 @@ fully reviewed proof-bearing strategy works.
   Linux/macOS portability coverage as applicable. Hosted Actions quota
   errors are tracked as non-green infrastructure status.
 
-## Disposition
+## Disposition and effectiveness
 
-**No option has been accepted.** This ADR is a proposal for a deliberate
-operator choice. PR #59 and this document are **not** an authorized
-cross-source consistency proof. Preserve `snapshot_proven=False` and
-no public `projectctl trace export` command until a separate approved,
-tested implementation satisfies ADR-039 and the selected design.
+**Path A is the selected bounded architecture.** On merge of the separate
+ADR-040 acceptance PR, this ADR is Accepted **as a design only**. Neither
+the selected Seal protocol nor safe live-WAL observation has yet been
+implemented, executed, or proven. PR #59's detached WAL candidate remains
+`snapshot_proven=False`.
+
+**No operational authority or readiness is implied**: no production writer
+change, SQLite schema migration, Collector, public `projectctl trace export`,
+verified assessment, new Worker capability, milestone closure, tag or
+package release is authorized by this ADR acceptance. The next PR must
+independently implement and test the narrowly bounded Seal contract before
+a separate merge decision; live-WAL reading remains another gate.

@@ -1,6 +1,6 @@
 # M6.0 — Read-only Trace & Evaluation Export: Bounded Implementation Plan
 
-**Status: Slices A, B0, B1a, B1b and feasibility-only B2a merged after operator-reported local regression passes; ADR-039 Accepted. ADR-040 cross-store consistency design is Proposed, not implemented; no Collector/CLI or proven coherent live-WAL snapshot exists.**
+**Status: Slices A/B0/B1a/B1b and feasibility-only B2a merged; ADR-039 Accepted. Owner selected ADR-040 Path A for design acceptance on merge of its separate PR. Verification-only Seal v1 is specified but NOT implemented; no operational Collector/CLI or coherent live-WAL read exists.**
 **Active goal:** `docs/PROJECT_STATE.yaml` — M6.0
 **Architecture decision:** ADR-039 (Accepted as bounded design on acceptance PR merge; implementation still gated)
 **Inherited safety decisions:** ADR-037, ADR-038 (Accepted)
@@ -71,13 +71,27 @@ focused/full-suite regression evidence. Its result still declares
 production writer order: JSON file replacements and SQLite lifecycle/event
 commits occur in **distinct transactions**.
 
-ADR-040 is **Proposed**. It compares a trusted writer-published,
-monotonic **as-of seal** (preferred to investigate, but requires explicit
-authorization to modify trusted writer paths) against a supported atomic
-filesystem snapshot or continued safe refusal. Neither B2a nor SQLite
-`integrity_check` proves a combined DB/WAL/file instant. **No chosen
-implementation, reader authority promotion or CLI** is authorized until
-the operator accepts an architecture with crash/replay/concurrency tests.
+Following the owner's explicit selection of **Path A**, a distinct
+ADR-040 acceptance PR now documents a bounded trusted-writer **as-of seal**.
+Its initial scope is only the successful non-review Verification transition
+`VERIFYING -> READY_TO_INTEGRATE`. Neither B2a nor SQLite `integrity_check`
+proves a combined DB/WAL/file instant; no Collector or CLI is authorized.
+
+### B3 — Verification-only Seal v1: approved architecture on merge, code gated
+
+`docs/architecture/M6_0_B3_SEAL_V1_DESIGN_GATE.md` defines a tests-first
+contract for publishing a versioned local-as-of Seal **inside the same
+trusted-writer SQLite transaction** that advances a non-review Verification
+run to `READY_TO_INTEGRATE` and appends its transition event. Files must
+already be safely and durably published, and same-run writers serialized;
+failure cannot leave a falsely accepted Seal.
+
+The first implementation adds **no raw historical evidence archive**; old
+Seals become unavailable when their referenced leaf bytes are overwritten.
+Design acceptance is **not** permission to merge code, change database
+schema or turn on export. A separate schema+writer implementation PR and
+local failure/concurrency proofs are required. The independent safe
+live-WAL Reader gate remains blocked and mandatory.
 
 ### B. Bounded local trace collection and export
 
@@ -122,16 +136,15 @@ symlink/cross-project rejection and no-action proofs.
 **Gate D:** reviewed local/hosted evidence, explicit architecture acceptance,
 and no widening of worker authority.
 
-## Immediate next architecture decision
+## Next independent implementation review
 
-B2b presents ADR-040 as **Proposed** only. The owner must decide whether
-modifying trusted ProjectCTL writer paths to publish a derived, immutable,
-versioned as-of seal is within M6.0's authority contract. If yes, the
-next approved PR designs one bounded writer seal, exact DB commit/event
-anchor, recovery and adversarial fixtures; if no, use only a demonstrably
-atomic filesystem snapshot or continue fail-closed. No public exporter
-until its cross-store proof and no-source-mutation tests pass. No new
-Worker permission, provider, release or version change is implied.
+After the operator reviews and merges the ADR-040 Path A acceptance PR,
+design **one** separate tests-first code/schema PR for the successful
+non-review Verification as-of Seal v1. Its merge requires explicit operator
+approval and fault-injection proof. Do not silently migrate old projects,
+upgrade the B2a probe, or expose a trace exporter. WAL-read coherence and
+no-source-mutation remain another separately reviewed gate. No new Worker
+permissions, provider, package release or milestone promotion are implied.
 
 ## Non-goals
 
