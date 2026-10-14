@@ -1,6 +1,6 @@
 # M6.0 — Read-only Trace & Evaluation Export: Bounded Implementation Plan
 
-**Status: Slices A/B0/B1a/B1b and feasibility-only B2a merged; ADR-039 and ADR-040 Path A Accepted (PR #61). B3a1 pure private Seal contract/tests are experimental Draft work; NO production writer/migration, Collector/CLI, or coherent live-WAL read exists.**
+**Status: PRs #54–#67 merged, including architecture audit #66 and R0 disposable WAL-reader feasibility #67. ADR-039 and ADR-040 Path A Accepted. B3a1–B3a4 remain merged but isolated labs; no real Seal writer, migration, WAL Reader proof, Collector/CLI or supported assessments exist. W0 writer fencing and Seal publication is now a separate review proposal.**
 **Active goal:** `docs/PROJECT_STATE.yaml` — M6.0
 **Architecture decision:** ADR-039 (Accepted as bounded design on acceptance PR merge; implementation still gated)
 **Inherited safety decisions:** ADR-037, ADR-038 (Accepted)
@@ -145,6 +145,29 @@ durable/verified backup retention, v1/v2/v3 upgrade chain and human
 authorization. Writer Seal publication and the strictly non-mutating
 WAL trace Reader remain **independent blockers**.
 
+### M6.0 architecture checkpoint and W0 — Fencing review (design only)
+
+PR #66 audited the full M6.0 architecture and advised conditional continuation,
+not operational migration. PR #67 added only disposable R0 WAL behavior
+tests: success there **does not** prove safe source non-mutation or a
+cross-store epoch; fail-closed remains mandatory.
+
+`docs/architecture/M6_0_W0_WRITER_FENCING_AND_SEAL_PROTOCOL.md`
+now proposes monotonic per-acquisition lease generation plus fresh token,
+an independently supported per-run artifact publication mutex, and a
+single trusted SQLite transaction for conditional Run update,
+`verification.passed` event, new `run.transition` event and v1 Seal.
+Only the successful non-review VERIFYING -> READY_TO_INTEGRATE path
+is eligible. This is **not implemented or approved for production**.
+
+**Gate W0:** inventory and coordinate *all* writers of the protected
+manifest leaves/Run lineage, prove generation-based stale-owner
+refusal and lock order, decide durable no-follow file publication and
+one-transaction SQL keys/events, and define crash/recovery tests.
+Gate R0 independently still requires a chosen safe live-WAL strategy.
+Do not start operational M0 migration or W1 writer changes merely
+because the W0 design document is merged.
+
 ### B. Bounded local trace collection and export
 
 1. Implement a read-only collector over one explicitly selected project/run.
@@ -182,21 +205,26 @@ symlink/cross-project rejection and no-action proofs.
 2. Audit resource limits and race conditions; document residual limitations.
 3. Update README, Blueprint, ADR, `docs/PROJECT_STATE.yaml` and version only
    according to accepted milestone and release decisions.
-4. Retain the GitHub Actions quota exception as an infrastructure status;
-   rerun hosted jobs when quota is available.
+4. GitHub Actions is active for recent PRs. Require successful **exact-head**
+   full-test/schema-export/pinned SDK jobs for each implementation PR.
+   Keep prior quota-blocked runs labeled as historical infrastructure
+   exceptions, not retroactively green.
 
 **Gate D:** reviewed local/hosted evidence, explicit architecture acceptance,
 and no widening of worker authority.
 
-## Next independent implementation review
+## Next independent architecture decision
 
-After the operator reviews and merges the ADR-040 Path A acceptance PR,
-design **one** separate tests-first code/schema PR for the successful
-non-review Verification as-of Seal v1. Its merge requires explicit operator
-approval and fault-injection proof. Do not silently migrate old projects,
-upgrade the B2a probe, or expose a trace exporter. WAL-read coherence and
-no-source-mutation remain another separately reviewed gate. No new Worker
-permissions, provider, package release or milestone promotion are implied.
+After review of the W0 candidate, choose and record the supported
+cross-process mutex and complete participant inventory, monotonic
+generation/token lease protocol, safe directory-fsync file publication
+and a single trusted Run/event/Seal transaction. Test the chosen design
+in a **separately reviewed** W1 implementation; in parallel R0 must
+resolve to a proven non-mutating sealed live-WAL reader design or an
+explicit fail-closed limitation. Only then may M0 production
+migration/backup and W1 writer wiring be reconsidered. Never silently
+migrate live projects, turn on trace export, or expand Worker/provider
+authority.
 
 ## Non-goals
 
