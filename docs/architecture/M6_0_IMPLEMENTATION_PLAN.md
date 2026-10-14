@@ -127,6 +127,24 @@ recovery protocol, full v1/v2/v3 compatibility, trusted verifier
 integration, file and directory fsync, same-run writer coordination
 and independently proven WAL Reader safety.
 
+### B3a4 — WAL-inclusive v2 backup/recovery rehearsal (experimental only)
+
+Following B3a3's real-v2 disposable migration rehearsal (PR #64), this
+isolated slice exercises SQLite's supported backup API on *disposable*
+ProjectCTL v2 WAL fixtures. It verifies committed uncheckpointed WAL
+data are included in a standalone version-checked, owner-private,
+fsynced no-clobber backup file, plus fault-injected prepublication
+cleanup and **fresh-file** restore. See
+`docs/architecture/M6_0_B3A4_BACKUP_RECOVERY_REHEARSAL.md`.
+
+There is **no production backup/restore or migration wiring**.
+`PROJECT_STATE_DB_VERSION=2` remains unchanged. Production approval
+requires a separate quiescent maintenance protocol, anchored secure
+destination, power-loss and fsync-after-link tests, recovery policy,
+durable/verified backup retention, v1/v2/v3 upgrade chain and human
+authorization. Writer Seal publication and the strictly non-mutating
+WAL trace Reader remain **independent blockers**.
+
 ### B. Bounded local trace collection and export
 
 1. Implement a read-only collector over one explicitly selected project/run.
