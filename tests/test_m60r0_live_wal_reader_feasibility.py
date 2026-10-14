@@ -14,6 +14,7 @@ import sqlite3
 import stat
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 from urllib.parse import quote
 
 import pytest
@@ -37,9 +38,17 @@ class R0Candidate:
     source_changed: tuple[str, ...]
     atime_changed: tuple[str, ...]
     created_sidecars: tuple[str, ...]
-    snapshot_proven: bool = False
-    source_nonmutation_proven: bool = False
-    cross_store_epoch_proven: bool = False
+    snapshot_proven: Literal[False] = False
+    source_nonmutation_proven: Literal[False] = False
+    cross_store_epoch_proven: Literal[False] = False
+
+    def __post_init__(self):
+        if not (
+            self.snapshot_proven is False
+            and self.source_nonmutation_proven is False
+            and self.cross_store_epoch_proven is False
+        ):
+            raise ValueError("r0_never_proves_authority")
 
 
 class R0FixtureRefused(ValueError):
@@ -244,6 +253,7 @@ def test_sqlite_epoch_never_binds_a_separately_replaced_json_file(tmp_path):
     try:
         reader = sqlite3.connect(uri, uri=True, isolation_level=None)
         try:
+            reader.execute("PRAGMA query_only=ON")
             reader.execute("BEGIN")
             assert reader.execute("SELECT count(*) FROM r0_samples").fetchone()[0] == 1
             replacement = db.parent / "replacement.json"
@@ -302,3 +312,48 @@ def test_result_cannot_claim_safe_snapshot_even_if_samples_match():
     assert not recorded.snapshot_proven
     assert not recorded.source_nonmutation_proven
     assert not recorded.cross_store_epoch_proven
+
+def test_negative_proof_flags_are_not_overridable():
+    with pytest.raises(ValueError, match="r0_never_proves_authority"):
+        R0Candidate(
+            "candidate_readable", (1,), (), (), (), snapshot_proven=True
+        )
+
+
+def test_checkpoint_during_native_observation_cannot_upgrade_proof(
+    tmp_path, monkeypatch
+):
+    db, writer = _fixture(tmp_path / "checkpoint")
+    real_connect = sqlite3.connect
+    saw_checkpoint = []
+
+    def checkpoint_then_open(value, *args, **kwargs):
+        if str(value).startswith("file:"):
+            result = writer.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+            saw_checkpoint.append(result)
+        return real_connect(value, *args, **kwargs)
+
+    try:
+        monkeypatch.setattr(sqlite3, "connect", checkpoint_then_open)
+        observation = _r0_disposable_native_ro_observation(db)
+        assert saw_checkpoint
+        assert observation.snapshot_proven is False
+        assert observation.source_nonmutation_proven is False
+        assert observation.cross_store_epoch_proven is False
+        # A completed checkpoint may change source WAL bytes/size; whether
+        # a native readonly connection also touched sidecars is not proven.
+    finally:
+        writer.close()
+
+
+def test_no_sqlite_vfs_connection_after_rejecting_missing_or_unsafe_wal(
+    tmp_path, monkeypatch
+):
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("unsafe fixture must be rejected before VFS open")
+
+    missing = tmp_path / "missing" / "state.sqlite"
+    monkeypatch.setattr(sqlite3, "connect", forbidden)
+    with pytest.raises(R0FixtureRefused):
+        _r0_disposable_native_ro_observation(missing)
+    assert not missing.parent.exists()
