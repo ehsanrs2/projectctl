@@ -26,24 +26,39 @@ starts with ProjectCTL project-state v2; it adds no production source
 files. Each candidate SQL statement is run with `conn.execute` inside
 the caller-owned `BEGIN IMMEDIATE`, never `executescript`. Candidate:
 
-1. `runs.lease_generation INTEGER NOT NULL DEFAULT 0 CHECK(>=0)`;
+1. `runs.lease_generation INTEGER NOT NULL DEFAULT 0` with an exact
+   SQLite storage-class requirement `typeof(...)='integer'`, a
+   nonnegative value, and a rejected int64-overflow increment.
+   This is a storage-level constraint; caller-side validation must
+   reject Python booleans before binding because SQLite binds them
+   as INTEGER 0/1;
 2. `runs.lease_token TEXT` limited to NULL or exactly 32 lowercase
-   hex characters, representing a *future* unpredictable per-acquisition
-   token; the value and generation must remain PRIVATE;
+   hex characters **stored as SQLite TEXT** (never a BLOB), representing
+   a *future* unpredictable per-acquisition token; the value and
+   generation must remain PRIVATE;
 3. a `UNIQUE` index on `run_events(run_id,id)` to support a
    **composite same-run** event FK;
 4. a private append-only `trace_seals` with a single pilot
-   `seal_sequence=1`, `seal_protocol_version=1`, bounded JSON bytes,
-   SHA-256-shaped private fingerprint and
+   `seal_sequence=1`, `seal_protocol_version=1`, bounded JSON bytes
+   stored as TEXT (not BLOB), a lowercase-hex SHA-256-shaped TEXT
+   fingerprint (not BLOB), and
    `FOREIGN KEY(run_id,event_prefix_id) REFERENCES
    run_events(run_id,id) ON DELETE RESTRICT`;
 5. an INSERT trigger requiring `run.transition` for the same Run and
    current Run status `ready_to_integrate`, plus UPDATE/DELETE
-   rejection triggers;
-6. one `schema_migrations` entry and `PRAGMA user_version=3` in
+   rejection triggers for the Seal itself;
+6. three additional event-prefix protection triggers: after sealing
+   Run R at boundary E, **UPDATE and DELETE of existing Run R events
+   whose IDs are at or before E are refused**, including attempts to
+   reassign another Run's earlier event into R. Explicit backfill of
+   an event with `id <= E` is refused. Normal automatically allocated
+   later events and unrelated Runs remain writable. These triggers
+   protect SQLite event rows, not separately stored artifacts and not
+   cryptographic historical authenticity;
+7. one `schema_migrations` entry and `PRAGMA user_version=3` in
    the same transaction.
 
-All nine statements are explicit in the test file. Candidate preflight
+All twelve statements are explicit in the test file. Candidate preflight
 requires existing v2 application ID, exact migration-history versions
 1+2, foreign keys ON, expected tables/absence of conflicting schema
 objects and **no run with non-NULL legacy lease_owner**. This last
@@ -60,15 +75,21 @@ Neither `PROJECT_STATE_DB_VERSION=2` nor
 - Combined candidate can be applied atomically to disposable v2,
   preserves existing Run/event rows and defaults generation=0/token=NULL.
 - Rollback restores all DDL, `schema_migrations` and
-  `PRAGMA user_version`; error injection at every one of the nine
+  `PRAGMA user_version`; error injection at every one of the twelve
   statements must also restore the original v2 state.
 - Legacy non-NULL owner refuses upgrade; no transaction, foreign keys
   disabled and wrong application ID fail closed.
 - The composite event/run FK rejects a cross-run reference; the
-  preinsert trigger rejects a non-transition event.
+  preinsert trigger rejects a non-transition event. Post-Seal
+  event-prefix tests reject changes to anchor fields and earlier event
+  rows, deletions, explicit ID backfill and cross-run relocation, while
+  allowing legitimate later and unrelated events.
 - Duplicate/non-v1 Seal, update/delete, referenced event deletion and
-  parent Run deletion fail. Hash/JSON size/version constraints reject
-  malformed shape, and generation/token constraints reject bad values.
+  parent Run deletion fail. Hash/JSON size/version and SQLite TEXT
+  storage-class constraints reject malformed values and BLOB payloads.
+  Generation must be SQLite INTEGER, nonnegative and cannot silently
+  overflow into REAL. The lease token must be NULL or lowercase-hex
+  TEXT; tests reject BLOB credentials.
 - A SHA-shaped fingerprint plus an arbitrary private JSON string can
   still be inserted directly by a sufficiently privileged SQL caller.
   Thus SQL structure is **not a proof of historical byte authenticity,
@@ -76,6 +97,9 @@ Neither `PROJECT_STATE_DB_VERSION=2` nor
   independent Verification**. The future trusted constructor must
   revalidate canonical `VerificationAsOfSealV1` and actual published
   bytes, and the Reader must revalidate everything it consumes.
+  Even the guarded SQL event-prefix rows are not an authenticated
+  audit log against arbitrary privileged modification of the
+  database, SQL schema, or filesystem.
 
 ## Explicit decisions needed BEFORE production M0/W1
 
@@ -87,16 +111,21 @@ actual migration must refuse if the project has live or unresolved
 legacy leases, including stale processes outside SQLite. Define how
 an owner may explicitly stop/reconcile before retrying.
 
-**2. Per-grant fencing.** The DDL only constrains *shape*. A trusted
-writer must atomically increment generation, mint a new unpredictable
+**2. Per-grant fencing.** The DDL only constrains *shape*. Python
+booleans are bound as SQLite integers; the trusted application must
+validate strict integer inputs separately rather than relying on
+`typeof()` to detect original Python types. A trusted writer must
+atomically increment generation, mint a new unpredictable
 token on every grant/regrant (including same-owner ABA), enforce
 expiry/time source, and CAS-check both values on heartbeat, release
 and authority-bearing transitions. It must use the same supported
 per-run artifact mutex for every participating lease grant/takeover
 and evidence writer.
 
-**3. Seal consistency.** SQL cannot require that the event was
-*created in the same transaction*, that previous status was VERIFYING,
+**3. Seal consistency.** The candidate protects previously sealed
+event-prefix rows from ordinary UPDATE/DELETE and explicit ID backfill,
+but SQL cannot require that the event was *created in the same
+transaction*, that previous status was VERIFYING,
 that all digests came from the same actual byte files, or that the
 manifest/candidate lineage is semantically correct. The real
 Verification writer must own status + `verification.passed` +
