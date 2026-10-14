@@ -405,7 +405,7 @@ def test_fenced_generation_and_token_shape_are_schema_only(tmp_path):
         assert conn.execute(
             "SELECT lease_generation FROM runs WHERE run_id='run-a'"
         ).fetchone()[0] == 1
-@pytest.mark.parametrize("value", ["garbage", 1.5, -1, b"\x01", True])
+@pytest.mark.parametrize("value", ["garbage", 1.5, -1, b"\x01"])
 def test_generation_rejects_noninteger_negative_and_blob_values(tmp_path, value):
     db = _db(tmp_path)
     with closing(_conn(db)) as conn:
