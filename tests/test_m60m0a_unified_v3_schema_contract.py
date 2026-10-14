@@ -25,14 +25,15 @@ from projectctl.storage.sqlite import (
 
 STAMP = datetime(2026, 10, 14, 12, tzinfo=timezone.utc).isoformat()
 MIGRATION_NAME = "candidate-m6-fenced-seal-v3"
-# The 9 statements are intentionally executed separately, never executescript.
+# All 12 statements execute separately; never executescript.
 # SQLite executescript may commit an already-open transaction.
 _V3_SQL = (
     """ALTER TABLE runs ADD COLUMN lease_generation INTEGER NOT NULL DEFAULT 0
-       CHECK(lease_generation >= 0)""",
+       CHECK(typeof(lease_generation)='integer' AND lease_generation >= 0)""",
     """ALTER TABLE runs ADD COLUMN lease_token TEXT
        CHECK(lease_token IS NULL OR
-       (length(lease_token)=32 AND lease_token NOT GLOB '*[^0-9a-f]*'))""",
+       (typeof(lease_token)='text' AND length(lease_token)=32
+        AND lease_token NOT GLOB '*[^0-9a-f]*'))""",
     """CREATE UNIQUE INDEX idx_run_events_run_id_id ON run_events(run_id, id)""",
     """CREATE TABLE trace_seals (
        run_id TEXT NOT NULL REFERENCES runs(run_id) ON DELETE RESTRICT,
@@ -40,10 +41,12 @@ _V3_SQL = (
        event_prefix_id INTEGER NOT NULL,
        seal_protocol_version INTEGER NOT NULL CHECK(seal_protocol_version = 1),
        seal_json TEXT NOT NULL
-           CHECK(length(CAST(seal_json AS BLOB)) BETWEEN 1 AND 4096),
+           CHECK(typeof(seal_json)='text'
+                 AND length(CAST(seal_json AS BLOB)) BETWEEN 1 AND 4096),
        seal_sha256 TEXT NOT NULL CHECK(
-           length(seal_sha256)=64 AND
-           seal_sha256 NOT GLOB '*[^0-9a-f]*'
+           typeof(seal_sha256)='text'
+           AND length(seal_sha256)=64
+           AND seal_sha256 NOT GLOB '*[^0-9a-f]*'
        ),
        PRIMARY KEY (run_id, seal_sequence),
        UNIQUE (run_id, event_prefix_id),
@@ -65,6 +68,25 @@ _V3_SQL = (
        BEGIN SELECT RAISE(ABORT, 'immutable_seal'); END""",
     """CREATE TRIGGER trace_seals_no_delete BEFORE DELETE ON trace_seals
        BEGIN SELECT RAISE(ABORT, 'immutable_seal'); END""",
+    """CREATE TRIGGER trace_seals_prefix_no_update BEFORE UPDATE ON run_events
+       WHEN EXISTS (
+           SELECT 1 FROM trace_seals
+           WHERE (run_id=OLD.run_id AND OLD.id<=event_prefix_id)
+              OR (run_id=NEW.run_id AND NEW.id<=event_prefix_id)
+       )
+       BEGIN SELECT RAISE(ABORT, 'sealed_event_prefix_immutable'); END""",
+    """CREATE TRIGGER trace_seals_prefix_no_delete BEFORE DELETE ON run_events
+       WHEN EXISTS (
+           SELECT 1 FROM trace_seals
+           WHERE run_id=OLD.run_id AND OLD.id<=event_prefix_id
+       )
+       BEGIN SELECT RAISE(ABORT, 'sealed_event_prefix_immutable'); END""",
+    """CREATE TRIGGER trace_seals_prefix_no_backfill BEFORE INSERT ON run_events
+       WHEN NEW.id IS NOT NULL AND NEW.id>0 AND EXISTS (
+           SELECT 1 FROM trace_seals
+           WHERE run_id=NEW.run_id AND NEW.id<=event_prefix_id
+       )
+       BEGIN SELECT RAISE(ABORT, 'sealed_event_prefix_immutable'); END""",
     """INSERT INTO schema_migrations(version,name,applied_at,projectctl_version)
        VALUES (3, ?, ?, ?)""",
     "PRAGMA user_version = 3",
@@ -146,13 +168,17 @@ def _apply_disposable_candidate(
     if {
         "trace_seals", "idx_run_events_run_id_id",
         "trace_seals_valid_anchor", "trace_seals_no_update",
-        "trace_seals_no_delete",
+        "trace_seals_no_delete", "trace_seals_prefix_no_update",
+        "trace_seals_prefix_no_delete", "trace_seals_prefix_no_backfill",
     } & names:
         raise ContractRefused("conflicting_schema_object")
     for number, sql in enumerate(_V3_SQL, start=1):
         if number == fault_at:
             raise sqlite3.OperationalError("injected_statement_failure")
-        params = (MIGRATION_NAME, STAMP, __version__) if number == 8 else ()
+        params = (
+            (MIGRATION_NAME, STAMP, __version__)
+            if sql.lstrip().startswith("INSERT INTO schema_migrations") else ()
+        )
         conn.execute(sql, params)
 
 
@@ -323,6 +349,8 @@ def test_seal_single_epoch_immutable_and_parent_deletion_restricted(tmp_path):
     {"seal_sha256": "a" * 63},
     {"seal_protocol_version": 2},
     {"seal_json": "x" * 4097},
+    {"seal_json": b"\x00"},
+    {"seal_sha256": b"a" * 64},
 ])
 def test_seal_shape_constraints_reject_invalid_private_rows(tmp_path, kwargs):
     db = _db(tmp_path)
