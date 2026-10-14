@@ -1,6 +1,6 @@
 # M6.0 — Read-only Trace & Evaluation Export: Bounded Implementation Plan
 
-**Status: Slices A/B0/B1a/B1b and feasibility-only B2a merged; ADR-039 Accepted. Owner selected ADR-040 Path A for design acceptance on merge of its separate PR. Verification-only Seal v1 is specified but NOT implemented; no operational Collector/CLI or coherent live-WAL read exists.**
+**Status: Slices A/B0/B1a/B1b and feasibility-only B2a merged; ADR-039 and ADR-040 Path A Accepted (PR #61). B3a1 pure private Seal contract/tests are experimental Draft work; NO production writer/migration, Collector/CLI, or coherent live-WAL read exists.**
 **Active goal:** `docs/PROJECT_STATE.yaml` — M6.0
 **Architecture decision:** ADR-039 (Accepted as bounded design on acceptance PR merge; implementation still gated)
 **Inherited safety decisions:** ADR-037, ADR-038 (Accepted)

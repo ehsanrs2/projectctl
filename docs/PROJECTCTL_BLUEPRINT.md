@@ -1699,13 +1699,16 @@ PRs #57/#58/#59 merged private readers, historical artifact validation
 and a **non-authoritative** detached WAL feasibility probe. PR #60 merged
 the consistency review, without promoting any source to a proven snapshot.
 
-The owner selected **ADR-040 Path A: writer-published as-of Seal**.
-ADR-040 acceptance is conditional on its separate architecture PR merge;
-the first Seal v1 is restricted to non-review successful Verification at
-`VERIFYING -> READY_TO_INTEGRATE`. No historical raw-byte archive is
-introduced. Trusted writer implementation, SQLite migration, safe live-WAL
-reading and public Collector/CLI require separate explicit approvals and
-tests. No coherent live-WAL/file snapshot has been proven. See
+**ADR-040 Path A was Accepted in PR #61 as a bounded design** for a
+writer-published, versioned as-of Seal at the successful non-review
+`VERIFYING -> READY_TO_INTEGRATE` boundary. B3a1 proposes only a
+**pure private schema/serialization/parser plus adversarial tests**;
+it does not authorize or implement a production writer or migration.
+
+No raw historical evidence archive is introduced. Future trusted writer
+integration, migration, safe WAL Reader and public Collector/CLI need
+separate approvals and tests; no coherent live-WAL/file snapshot is yet
+proven. See `docs/architecture/M6_0_B3A1_PURE_SEAL_CONTRACT_AUDIT.md`,
 `docs/architecture/M6_0_B3_SEAL_V1_DESIGN_GATE.md`,
 `docs/architecture/M6_0_B2B_SNAPSHOT_CONSISTENCY_REVIEW.md`, and
 `docs/architecture/M6_0_IMPLEMENTATION_PLAN.md`.
