@@ -2283,11 +2283,16 @@ only a feasibility probe**, not a trusted WAL source. Its result stays
 not establish an atomic, latest-commit DB/WAL/file snapshot. See
 `docs/architecture/M6_0_B2A_WAL_FEASIBILITY.md`.
 
-**The next decision, ADR-040, is Proposed only:** production writers
-commit JSON files and RunStore event/status updates separately, so B2b
-reviews a trusted writer-published as-of seal, a supported atomic
-filesystem snapshot or continued fail-closed refusal. Any writer
-publication change requires explicit architectural authorization and
-regression evidence. See
+The owner selected **ADR-040 Path A: a bounded trusted-writer as-of Seal**.
+ADR-040 becomes architecture-Accepted **only when the separate acceptance
+PR merges**; no Seal or database migration has been implemented. The
+initial design covers only a successful non-review Verification transition
+to `READY_TO_INTEGRATE` and commits the Seal, run state and transition
+event atomically in SQLite after durable source files. The first slice
+keeps no historical raw-byte archive; overwritten evidence is unavailable.
+See `docs/architecture/M6_0_B3_SEAL_V1_DESIGN_GATE.md` and
 `docs/architecture/M6_0_B2B_SNAPSHOT_CONSISTENCY_REVIEW.md`.
+
+Writer code/migration, a **safe live-WAL reader**, and the read-only
+Collector/CLI all require later separate test and approval gates.
 `projectctl trace export` remains disabled.
