@@ -2283,16 +2283,18 @@ only a feasibility probe**, not a trusted WAL source. Its result stays
 not establish an atomic, latest-commit DB/WAL/file snapshot. See
 `docs/architecture/M6_0_B2A_WAL_FEASIBILITY.md`.
 
-The owner selected **ADR-040 Path A: a bounded trusted-writer as-of Seal**.
-ADR-040 becomes architecture-Accepted **only when the separate acceptance
-PR merges**; no Seal or database migration has been implemented. The
-initial design covers only a successful non-review Verification transition
-to `READY_TO_INTEGRATE` and commits the Seal, run state and transition
-event atomically in SQLite after durable source files. The first slice
-keeps no historical raw-byte archive; overwritten evidence is unavailable.
-See `docs/architecture/M6_0_B3_SEAL_V1_DESIGN_GATE.md` and
-`docs/architecture/M6_0_B2B_SNAPSHOT_CONSISTENCY_REVIEW.md`.
+**ADR-040 Path A was Accepted as a bounded design in PR #61.**
+The initial as-of Seal is restricted to successful non-review Verification
+at `VERIFYING -> READY_TO_INTEGRATE` after durable artifacts, with
+state/event/Seal to be bound in one future trusted-writer SQLite commit.
+No historical raw-byte archive is authorized: overwritten source files
+render old Seal epochs unavailable.
 
-Writer code/migration, a **safe live-WAL reader**, and the read-only
-Collector/CLI all require later separate test and approval gates.
-`projectctl trace export` remains disabled.
+B3a1 proposes **only a pure, private, strict Verification Seal v1 model
+and unit tests**, not a trusted writer, SQLite migration or working
+snapshot. See `docs/architecture/M6_0_B3A1_PURE_SEAL_CONTRACT_AUDIT.md`,
+`docs/architecture/M6_0_B3_SEAL_V1_DESIGN_GATE.md`, and accepted ADR-040.
+
+Production writer integration, schema migration, **safe live-WAL reading**
+and the read-only Collector/CLI remain separate, test-gated work.
+`projectctl trace export` is still disabled.
