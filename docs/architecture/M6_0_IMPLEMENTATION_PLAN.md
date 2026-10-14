@@ -111,6 +111,22 @@ durable file publication, actual verifier orchestration, same-run writer
 serialization, independent WAL reading, or a complete trace. Next
 production PR must separately address and test **all** those gaps.
 
+### B3a3 — Real-v2 schema migration rehearsal (experimental only)
+
+After B3a2's isolated transaction laboratory merged in PR #63, the
+B3a3 experiment creates **disposable real ProjectCTL v2 SQLite**
+fixtures and rehearses a proposed v2->v3 Seal table upgrade entirely
+within a caller-owned transaction. Its tests verify rollback of DDL,
+migration history and user_version under injected faults. No production
+`projectctl migrate` hook, database-version bump or authority change
+is added. The existing runtime **must reject** the candidate v3 database.
+
+See `docs/architecture/M6_0_B3A3_SCHEMA_MIGRATION_REHEARSAL.md`.
+The real migration still requires a separately approved backup and
+recovery protocol, full v1/v2/v3 compatibility, trusted verifier
+integration, file and directory fsync, same-run writer coordination
+and independently proven WAL Reader safety.
+
 ### B. Bounded local trace collection and export
 
 1. Implement a read-only collector over one explicitly selected project/run.
