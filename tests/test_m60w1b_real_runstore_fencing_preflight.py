@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import inspect
 import sqlite3
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -72,7 +73,7 @@ def test_deployed_v2_has_no_lease_generation_or_token_contract(tmp_path):
     assert {"lease_owner", "lease_expires_at", "heartbeat_at"} <= _lease_columns(store)
     assert "lease_generation" not in _lease_columns(store)
     assert "lease_token" not in _lease_columns(store)
-    with sqlite3.connect(store.db_path) as conn:
+    with closing(sqlite3.connect(store.db_path)) as conn:
         tables = {
             row[0] for row in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'"
