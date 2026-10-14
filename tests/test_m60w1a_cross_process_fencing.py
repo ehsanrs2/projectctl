@@ -13,7 +13,7 @@ import secrets
 import sqlite3
 import stat
 import tempfile
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 
 import pytest
@@ -75,7 +75,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
     lock_dir.mkdir(exist_ok=True)
     # This table is created ONLY in a disposable v2 DB, never registered in
     # storage/sqlite.py and never queried by production RunStore methods.
-    with _connect(db) as conn:
+    with closing(_connect(db)) as conn:
         conn.execute("""
             CREATE TABLE w1a_epochs (
                 run_id TEXT PRIMARY KEY,
@@ -178,7 +178,7 @@ def _release(db, generation, token, now=_NOW):
 def _publish_under_lock(
     db, evidence, generation, token, now=_NOW, *, paused_pipe=None, fault=False
 ):
-    lock = evidence.parent / "locks" / "w1a-run.lock"
+    lock = evidence.parent / ".projectctl" / "locks" / "w1a-run.lock"
     with _mutex(lock):
         # Short independent DB read, not an SQLite write transaction held
         # across filesystem fsync. Takeover also takes this mutex.
@@ -240,7 +240,7 @@ def _publish_under_lock(
 
 
 def _state(db):
-    with _connect(db) as conn:
+    with closing(_connect(db)) as conn:
         row = conn.execute(
             "SELECT generation, token, expires_at, publications "
             "FROM w1a_epochs WHERE run_id=?", (_RUN,),
@@ -444,12 +444,12 @@ def test_db_only_takeover_cannot_be_assumed_to_fence_file_write_gap(tmp_path):
     db, lock, evidence = _fixture(tmp_path)
     old = _grant(db, lock)
     with _mutex(lock):
-        with _connect(db) as conn:
+        with closing(_connect(db)) as conn:
             conn.execute("BEGIN")
             _validate(conn, *old, _NOW)
             conn.rollback()
         # Simulated non-participant: takes over only in SQLite.
-        with _connect(db) as conn:
+        with closing(_connect(db)) as conn:
             conn.execute(
                 "UPDATE w1a_epochs SET generation=generation+1, token=? "
                 "WHERE run_id=?", ("nonparticipating-token", _RUN),
