@@ -200,10 +200,10 @@ class _TestSupervisor:
 
     def stop_all(self) -> bool:
         # False if any previously enrolled worker did not exit in time.
-        return all(
+        return all([
             _stop_owned(proc, identity)
             for proc, _pipe, identity in self.owned
-        )
+        ])
 
     def cleanup(self):
         for proc, pipe, _identity in self.owned:
@@ -250,7 +250,7 @@ def test_controlled_relaunch_refused_without_creating_process(tmp_path):
         with pytest.raises(ScopeRefused, match="fixture_launcher_closed"):
             scope.launch()
         assert scope.owned == []
-        assert store.events(_RUN)
+        assert inspect_db(store.db_path) == (APPLICATION_ID, 2)
         assert _decision(
             tracked_terminated=True,
             controlled_starts_blocked=True,
@@ -296,6 +296,36 @@ def test_unmanaged_preexisting_v2_process_bypasses_fixture_start_block(
         scope.cleanup()
         if outsider is not None:
             proc, pipe, _ = outsider
+            if proc.is_alive():
+                proc.kill()
+            proc.join(timeout=5)
+            pipe.close()
+
+
+
+def test_unmanaged_new_v2_start_bypasses_closed_fixture_launcher(tmp_path):
+    root, store = _fixture(tmp_path)
+    scope = _TestSupervisor(root)
+    outsider = None
+    try:
+        scope.close_starts()
+        with pytest.raises(ScopeRefused, match="fixture_launcher_closed"):
+            scope.launch()
+        # Deliberately ignore the cooperative fixture launch path.
+        outsider = _launch(root)
+        outsider[1].send("db")
+        assert _recv(outsider[1]) == ("done", "db")
+        assert store.events(_RUN)[-1].event_type == "m0d.fixture"
+        assert _decision(
+            tracked_terminated=True,
+            controlled_starts_blocked=True,
+            identities_verified=True,
+            unmanaged_writer_seen=True,
+        ) == "NO_GO_UNMANAGED_WRITER_SCOPE"
+    finally:
+        scope.cleanup()
+        if outsider is not None:
+            proc, pipe, _identity = outsider
             if proc.is_alive():
                 proc.kill()
             proc.join(timeout=5)
