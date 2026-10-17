@@ -126,7 +126,11 @@ def _cases(blob: bytes) -> dict[str, str]:
         raise EvidenceRefused("invalid_junit_xml") from error
     if root.tag not in ("testsuites", "testsuite"):
         raise EvidenceRefused("wrong_junit_root")
-    cases = root.findall(".//testcase")
+    suites = [root] if root.tag == "testsuite" else root.findall("./testsuite")
+    if len(suites) != 1:
+        raise EvidenceRefused("wrong_suite_count")
+    suite = suites[0]
+    cases = suite.findall("./testcase")
     if len(cases) != len(EXPECTED_CASES):
         raise EvidenceRefused("wrong_case_count")
     seen: dict[str, str] = {}
@@ -144,6 +148,18 @@ def _cases(blob: bytes) -> dict[str, str]:
         seen[name] = states[0] if states else "passed"
     if set(seen) != EXPECTED_CASES:
         raise EvidenceRefused("missing_required_case")
+    totals = {
+        "tests": len(seen),
+        "skipped": sum(v == "skipped" for v in seen.values()),
+        "failures": sum(v == "failure" for v in seen.values()),
+        "errors": sum(v == "error" for v in seen.values()),
+    }
+    for field, expected in totals.items():
+        value = suite.get(field)
+        if value is None or not value.isascii() or not value.isdecimal():
+            raise EvidenceRefused("missing_or_malformed_suite_total")
+        if int(value) != expected:
+            raise EvidenceRefused("inconsistent_suite_total")
     return seen
 
 
