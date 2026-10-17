@@ -7,6 +7,7 @@ a passed enforcement proof. No systemd/cgroup/host mount changes occur.
 """
 from __future__ import annotations
 
+import errno
 import json
 import os
 import shutil
@@ -98,6 +99,31 @@ try:
             result(status="preopened_fd_wrote")
         sys.exit(0)
 
+    # SQLite WAL mode can report SQLITE_CANTOPEN (14) when the read-only
+    # mount cannot create WAL/SHM. That code alone is NOT proof of EROFS.
+    # Independently probe O_CREAT under the SAME disposable .projectctl
+    # directory through both writable source and readonly view aliases.
+    # These probes never touch state.sqlite or production state.
+    def create_then_remove(root):
+        probe = os.path.join(root, ".projectctl", "m0k-vfs-probe")
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW
+        try:
+            fd = os.open(probe, flags, 0o600)
+        except OSError as exc:
+            return exc.errno
+        else:
+            os.close(fd)
+            os.unlink(probe)
+            return 0
+
+    view_probe_errno = None
+    source_probe_errno = None
+    if operation == "view_db":
+        source_probe_errno = create_then_remove(source)
+        view_probe_errno = create_then_remove(view)
+
+    from scripts.m0k_sqlite_view_contract import classify_view_write_error
+
     target = view if operation in ("view_db", "view_json") else source
     try:
         if operation in ("view_db", "alias_db"):
@@ -114,12 +140,20 @@ try:
             raise AssertionError("unknown_operation")
     except (OSError, sqlite3.Error) as exc:
         error_code = getattr(exc, "sqlite_errorcode", None)
-        if getattr(exc, "errno", None) == errno.EROFS or (isinstance(error_code, int) and error_code & 255 == 8):
-            result(status="kernel_denied", errno=getattr(exc, "errno", None),
-                   sqlite_code=error_code)
-        else:
-            result(status="unexpected_error", type=type(exc).__name__,
-                   errno=getattr(exc, "errno", None), sqlite_code=error_code)
+        classification = classify_view_write_error(
+            os_errno=getattr(exc, "errno", None),
+            sqlite_code=error_code,
+            view_create_errno=view_probe_errno,
+            source_create_errno=source_probe_errno,
+        )
+        result(
+            status=classification,
+            type=type(exc).__name__,
+            errno=getattr(exc, "errno", None),
+            sqlite_code=error_code,
+            view_probe_errno=view_probe_errno,
+            source_probe_errno=source_probe_errno,
+        )
     else:
         result(status="wrote")
 finally:
@@ -215,7 +249,15 @@ def test_kernel_readonly_bind_view_blocks_new_legacy_writes(tmp_path, mode):
     source, view, store = _fixture(tmp_path)
     before = tuple(x.event_type for x in store.events(_RUN))
     outcome = _namespace_probe(source, view, mode)
-    assert outcome["status"] == "kernel_denied", outcome
+    if mode == "view_db" and outcome["status"] == "vfs_ro_confirmed_sqlite_cantopen":
+        # The SQLite internals that produced code 14 remain unproven.
+        # The separate source/view O_CREAT controls directly establish
+        # a per-mount EROFS boundary for new sidecars (NOT global fencing).
+        assert outcome["sqlite_code"] & 255 == sqlite3.SQLITE_CANTOPEN, outcome
+        assert outcome["view_probe_errno"] == errno.EROFS, outcome
+        assert outcome["source_probe_errno"] == 0, outcome
+    else:
+        assert outcome["status"] == "kernel_denied", outcome
     assert tuple(x.event_type for x in store.events(_RUN)) == before
     assert not (source / ".projectctl" / "m0h-evidence.json").exists()
     assert not (source / ".projectctl" / "m0h-evidence.stage").exists()

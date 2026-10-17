@@ -82,6 +82,15 @@ def test_ideal_self_report_still_only_operator_lab_review():
     assert result.as_dict()["authorizes_migration"] is False
 
 
+def test_historical_failed_m0h_evidence_cannot_be_replayed_as_new_revision():
+    xml = _xml()
+    old_sha = "4c0b28ebe3b05a3c550b8ccd10b419ab4d3dd6fe"
+    assert old_sha != M0H_HEAD
+    assert review(_manifest(xml, m0h_commit=old_sha), xml).decision == (
+        "QUARANTINE_MANIFEST"
+    )
+
+
 def test_owner_host_all_passes_still_no_operational_admission():
     xml = _xml()
     result = review(_manifest(xml, kind="owner_host"), xml)

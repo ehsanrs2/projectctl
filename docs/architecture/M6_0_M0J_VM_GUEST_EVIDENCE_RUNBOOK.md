@@ -2,7 +2,7 @@
 
 **Status:** A runnable, **owner-invoked guest-only pilot** with synthetic test coverage. This is NOT VM creation, cryptographic VM attestation, a production security control, an operational cutover, a backup tool or v2→v3 migration authorization.
 **Baseline:** `main@7d5d17f7320237c0892942a521d0ea388b57e54e` (PRs #78 M0h and #79 M0i both merged).
-**Pinned test source:** exact original M0h PR head `4c0b28ebe3b05a3c550b8ccd10b419ab4d3dd6fe`, not the newer `main` merge SHA.
+**Pinned test source:** corrected M0k test-only M0h revision `bcc488f523bec10e952b22dd2fedcdf12ffb850f`, not the original M0h PR head. The old M0h HEAD 4c0b28ebe3b05a3c550b8ccd10b419ab4d3dd6fe evidence remains a historical **NO-GO** and cannot be relabelled.
 **Files:** `scripts/m0j_collect_vm_evidence.py`, `tests/test_m60m0j_vm_collector_contract.py` and this document only. No `projectctl/` code changes.
 
 ## Concrete deployment decision
@@ -33,11 +33,11 @@ Create a second, detached source tree for the *exact* M0h tests. The parent repo
 
 ```bash
 git fetch origin
-git cat-file -t 4c0b28ebe3b05a3c550b8ccd10b419ab4d3dd6fe  # commit
-git worktree add --detach "$HOME/m0h-pinned-pilot" \
-  4c0b28ebe3b05a3c550b8ccd10b419ab4d3dd6fe
-git -C "$HOME/m0h-pinned-pilot" rev-parse HEAD
-git -C "$HOME/m0h-pinned-pilot" status --porcelain --untracked-files=all
+git cat-file -t bcc488f523bec10e952b22dd2fedcdf12ffb850f  # commit
+git worktree add --detach "$HOME/m0k-pinned-pilot" \
+  bcc488f523bec10e952b22dd2fedcdf12ffb850f
+git -C "$HOME/m0k-pinned-pilot" rev-parse HEAD
+git -C "$HOME/m0k-pinned-pilot" status --porcelain --untracked-files=all
 ```
 
 The last command must print **nothing**; the rev-parse output must match the 40-character pinned SHA. Prefer a dedicated VM with a clean local repository; do not reuse a production directory. From the M0j checkout, activate the prepared virtual environment (the script itself does not install dependencies):
@@ -45,7 +45,7 @@ The last command must print **nothing**; the rev-parse output must match the 40-
 ```bash
 source .venv/bin/activate
 python -B -m scripts.m0j_collect_vm_evidence \
-  --checkout "$HOME/m0h-pinned-pilot" --inspect
+  --checkout "$HOME/m0k-pinned-pilot" --inspect
 ```
 
 This checks the exact commit and worktree; it **does not** claim the system is a VM, run namespaces or produce evidence. Its result is `CHECKOUT_PINNED_REVIEW_VM_SEPARATELY`.
@@ -56,7 +56,7 @@ If and only if the owner has independently inspected the guest, kernel/LSM polic
 mkdir -p -m 700 "$HOME/m0j-private-evidence"
 chmod 700 "$HOME/m0j-private-evidence"
 python -B -m scripts.m0j_collect_vm_evidence \
-  --checkout "$HOME/m0h-pinned-pilot" \
+  --checkout "$HOME/m0k-pinned-pilot" \
   --collect \
   --output-parent "$HOME/m0j-private-evidence" \
   --acknowledge DISPOSABLE_VM_REVIEWED_NO_PRODUCTION_MOUNTS \

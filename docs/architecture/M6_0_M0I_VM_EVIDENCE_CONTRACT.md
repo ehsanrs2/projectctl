@@ -2,7 +2,7 @@
 
 **Status:** test-only/owner-side **read-only evidence verifier**, no service changes, no operational migration.
 **Baseline:** `main@5be3ddf87fe9191c593a3744dc6cfd44bf0453a9` (M0g merged).
-**Dependency:** M0h **PR #78 is still Draft and unmerged**. Pin its reviewed **exact HEAD** `4c0b28ebe3b05a3c550b8ccd10b419ab4d3dd6fe` for the contract only. This M0i branch is created independently from `main`; it does not import or bundle M0h code.
+**Dependency:** M0h PR #78 and M0i PR #79 are both merged. After Debian 13 M0k evidence revealed a SQLite WAL CANTOPEN-14 ambiguity, pin the **M0k corrected M0h test revision** `bcc488f523bec10e952b22dd2fedcdf12ffb850f` for the contract only. This document records historical M0i creation; the M0k re-pin is a new test-source contract, not a retrospective approval of historical evidence.
 **Scope:** `scripts/m0i_verify_vm_evidence.py`, `tests/test_m60m0i_vm_evidence_contract.py`, and this document. No changes under `projectctl/`, migration registry or system configuration.
 
 ## Why M0i exists
@@ -42,19 +42,19 @@ In a *clean M0h checkout at the pinned SHA*, with `pytest` installed:
 
 ```bash
 # The following creates only local evidence files and disposable pytest fixtures.
-git rev-parse HEAD  # MUST print 4c0b28ebe3b05a3c550b8ccd10b419ab4d3dd6fe
+git rev-parse HEAD  # MUST print bcc488f523bec10e952b22dd2fedcdf12ffb850f
 EVIDENCE_DIR="$(mktemp -d)"
 python -m pytest -q -rs \
   --junitxml="$EVIDENCE_DIR/m0h-junit.xml" \
   tests/test_m60m0h_mount_namespace_access_pilot.py
 ```
 
-The reviewer lives in a **different M0i checkout** because M0h remains unmerged. Populate `manifest.json` in the evidence directory using the actual JUnit digest and **reviewed** selected-VM environment values. This sample records format only, not a trustworthy attestation:
+The reviewer is run from the independent current controller checkout; the pinned test source is a separate detached worktree. Populate `manifest.json` in the evidence directory using the actual JUnit digest and **reviewed** selected-VM environment values. This sample records format only, not a trustworthy attestation:
 
 ```json
 {
   "protocol": "projectctl-m0i-v1",
-  "m0h_commit": "4c0b28ebe3b05a3c550b8ccd10b419ab4d3dd6fe",
+  "m0h_commit": "bcc488f523bec10e952b22dd2fedcdf12ffb850f",
   "test_module": "tests/test_m60m0h_mount_namespace_access_pilot.py",
   "junit_sha256": "REPLACE_WITH_SHA256_OF_M0H_JUNIT_BYTES",
   "environment": {

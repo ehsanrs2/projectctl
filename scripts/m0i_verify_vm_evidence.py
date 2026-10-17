@@ -18,12 +18,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 PROTOCOL = "projectctl-m0i-v1"
-M0H_HEAD = "4c0b28ebe3b05a3c550b8ccd10b419ab4d3dd6fe"
+M0H_HEAD = "bcc488f523bec10e952b22dd2fedcdf12ffb850f"
 M0H_MODULE = "tests/test_m60m0h_mount_namespace_access_pilot.py"
 M0H_CLASS = "tests.test_m60m0h_mount_namespace_access_pilot"
 MAX_FILE_BYTES = 1_048_576
 
-# The seven *actual* parameterized cases of the still-unmerged PR #78.
+# The same seven M0h cases at the M0k repaired-test commit.
+# Historical M0h-PR-HEAD evidence retains its old NO-GO verdict and
+# MUST NOT be presented as a new independent kernel result.
 EXPECTED_CASES = frozenset({
     "test_kernel_readonly_bind_view_blocks_new_legacy_writes[view_db]",
     "test_kernel_readonly_bind_view_blocks_new_legacy_writes[view_json]",
