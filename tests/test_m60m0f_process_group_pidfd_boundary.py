@@ -331,7 +331,9 @@ def test_claimed_wrong_process_birth_cannot_stop_owned_group(tmp_path):
 def test_independent_new_session_after_stop_remains_unblocked(tmp_path):
     root, store = _fixture(tmp_path)
     before = len(store.events(_RUN))
-    with _spawn(root, tmp_path / "first", mode="db", escape=False) as actor:
+    first = tmp_path / "first"
+    first.mkdir()
+    with _spawn(root, first, mode="db", escape=False) as actor:
         _stop_owned_group(actor, claimed=actor.leader_identity)
         assert _dead(actor.descendant_pidfd, 4000)
     # Another launch path outside the terminated process group remains
