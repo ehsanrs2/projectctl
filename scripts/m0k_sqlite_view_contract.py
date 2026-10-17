@@ -32,6 +32,7 @@ def classify_view_write_error(
         type(sqlite_code) is int
         and sqlite_code & 255 == sqlite3.SQLITE_CANTOPEN
         and view_create_errno == errno.EROFS
+        and type(source_create_errno) is int
         and source_create_errno == 0
     ):
         return "vfs_ro_confirmed_sqlite_cantopen"
