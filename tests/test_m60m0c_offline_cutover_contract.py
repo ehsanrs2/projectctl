@@ -7,6 +7,7 @@ model can establish or authenticate.
 """
 from __future__ import annotations
 
+import os
 import sqlite3
 from contextlib import closing
 from dataclasses import dataclass, replace
@@ -21,6 +22,11 @@ from projectctl.storage.sqlite import (
     inspect_db,
 )
 from projectctl.trace.seal_backup_lab import rehearse_disposable_v2_backup
+
+pytestmark = pytest.mark.skipif(
+    os.name != "posix" or not hasattr(os, "O_NOFOLLOW"),
+    reason="M0c disposable WAL backup admission model requires POSIX",
+)
 
 
 @dataclass(frozen=True)
