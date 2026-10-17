@@ -145,7 +145,7 @@ class IsolationClaims:
 def _review(claims: IsolationClaims) -> str:
     """Never grant migration, even for an all-True test-only claim."""
     for gate in IsolationClaims.__dataclass_fields__:
-        if not getattr(claims, gate):
+        if getattr(claims, gate) is not True:
             return "NO_GO_" + gate.upper()
     return "OPERATOR_REVIEW_ONLY"
 
@@ -294,4 +294,7 @@ def test_all_external_gates_mandatory_but_never_production_go():
         assert _review(replace(all_claimed, **{name: False})) == (
             "NO_GO_" + name.upper()
         )
+    assert _review(replace(all_claimed, child_mount_view_is_read_only="yes")) == (
+        "NO_GO_CHILD_MOUNT_VIEW_IS_READ_ONLY"
+    )
     assert PROJECT_STATE_DB_VERSION == 2
