@@ -114,7 +114,7 @@ try:
             raise AssertionError("unknown_operation")
     except (OSError, sqlite3.Error) as exc:
         error_code = getattr(exc, "sqlite_errorcode", None)
-        if getattr(exc, "errno", None) == errno.EROFS or error_code == 8:
+        if getattr(exc, "errno", None) == errno.EROFS or (isinstance(error_code, int) and error_code & 255 == 8):
             result(status="kernel_denied", errno=getattr(exc, "errno", None),
                    sqlite_code=error_code)
         else:
