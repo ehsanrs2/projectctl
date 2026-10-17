@@ -217,6 +217,25 @@ def test_post_backup_writer_invalidates_preflight_observation(tmp_path):
         conn.close()
 
 
+def test_external_json_change_is_invisible_to_sql_samples_and_never_auto_admits(tmp_path):
+    db, conn = _fixture(tmp_path)
+    try:
+        backup = _published_backup(conn, db)
+        before = _observe(db)
+        external = db.parent / "disposable-evidence.json"
+        external.write_text('{"replaced":true}', encoding="utf-8")
+        after = _observe(db)
+        assert before == after == _observe(backup)
+        # SQLite-only equality misses this independent JSON publication:
+        # an independently enforced writer barrier remains mandatory.
+        assert _admission_review(
+            _claim(), before, after, _observe(backup),
+            backup_durable_and_retained=True, paths_anchored=True,
+        ) == "OPERATOR_REVIEW_ONLY"
+    finally:
+        conn.close()
+
+
 def test_wrong_identity_version_history_integrity_or_owner_refused(tmp_path):
     db, conn = _fixture(tmp_path)
     try:
