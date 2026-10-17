@@ -160,6 +160,27 @@ def test_wrong_or_untrusted_junit_structure_is_quarantined(alteration):
     assert review(_manifest(xml), xml).decision == "QUARANTINE_JUNIT_CASES"
 
 
+
+@pytest.mark.parametrize("tamper", ["skipped", "tests", "missing", "extra_suite"])
+def test_inconsistent_junit_suite_metadata_is_refused(tamper):
+    xml = _xml()
+    root = ET.fromstring(xml)
+    suite = root.find("testsuite")
+    if tamper == "skipped":
+        suite.set("skipped", "5")
+    elif tamper == "tests":
+        suite.set("tests", "6")
+    elif tamper == "missing":
+        del suite.attrib["errors"]
+    else:
+        ET.SubElement(root, "testsuite", tests="0", errors="0",
+                      failures="0", skipped="0")
+    changed = ET.tostring(root, encoding="utf-8")
+    assert review(_manifest(changed), changed).decision == (
+        "QUARANTINE_JUNIT_CASES"
+    )
+
+
 def test_huge_or_ill_formed_artifacts_do_not_become_review():
     xml = _xml()
     assert review(_manifest(xml), b"x" * (MAX_FILE_BYTES + 1)).decision == (
