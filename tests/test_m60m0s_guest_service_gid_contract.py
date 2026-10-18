@@ -167,13 +167,51 @@ def test_root_owned_fixture_must_be_new_under_var_tmp(tmp_path):
         pilot._fixture(tmp_path)
 
 
-def test_guest_python_rejects_private_venv_for_child_actors(monkeypatch):
-    monkeypatch.setattr(
-        pilot.sys, "executable", "/home/ehsan/projectctl-m0k-lab/.venv/bin/python",
-    )
-    # If resolution escapes /usr/bin, the actor must refuse before spawn.
-    # The file may not exist on CI, still outside /usr/bin.
+def test_guest_python_rejects_private_binary_even_through_venv_link(
+    tmp_path, monkeypatch,
+):
+    # Unlike a real Debian venv symlink, this points to an actual *private*
+    # executable. Resolution therefore stays outside the trusted /usr/bin.
+    fake = tmp_path / "private" / "python3.13"
+    fake.parent.mkdir()
+    fake.write_bytes(b"test-owned fake interpreter; never execute")
+    venv_bin = tmp_path / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    link = venv_bin / "python"
+    link.symlink_to(fake)
+    monkeypatch.setattr(pilot.sys, "executable", str(link))
     with pytest.raises(pilot.Refused, match="SYSTEM_PYTHON_IN_USR_BIN_REQUIRED"):
+        pilot._guest_python()
+
+
+def test_guest_python_allows_venv_link_resolving_to_real_system_python(
+    tmp_path, monkeypatch,
+):
+    # Debian /home/.../.venv/bin/python commonly resolves to
+    # /usr/bin/python3.13. The child runs the resolved system binary
+    # with -I rather than importing from the caller's private venv.
+    system_python = Path("/usr/bin/python3")
+    if not system_python.is_file() or (
+        system_python.resolve().parent != Path("/usr/bin")
+    ):
+        pytest.skip("no /usr/bin/python3 system interpreter on this runner")
+    venv_bin = tmp_path / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    link = venv_bin / "python"
+    link.symlink_to(system_python)
+    monkeypatch.setattr(pilot.sys, "executable", str(link))
+    assert pilot._guest_python() == str(system_python.resolve())
+
+
+def test_guest_python_refuses_missing_system_binary_via_symlink(
+    tmp_path, monkeypatch,
+):
+    venv_bin = tmp_path / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    link = venv_bin / "python"
+    link.symlink_to("/usr/bin/python3-m0s-nonexistent")
+    monkeypatch.setattr(pilot.sys, "executable", str(link))
+    with pytest.raises(pilot.Refused, match="SYSTEM_PYTHON_NOT_REGULAR"):
         pilot._guest_python()
 
 
