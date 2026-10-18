@@ -1,0 +1,24 @@
+# M0t REVIEW-ONLY fixture systemd unit envelope.
+# Contains deliberately unresolved values: never install or systemctl start.
+# Runtime Linux systemd/AppArmor controls remain unproven.
+[Unit]
+Description=ProjectCTL M0t DISPOSABLE review-only service envelope
+ConditionPathIsDirectory=@M0T_PRIVATE_FIXTURE_DIR@
+
+[Service]
+Type=oneshot
+User=63072
+Group=63072
+SupplementaryGroups=63073
+WorkingDirectory=/
+ExecStart=@M0T_ROOT_OWNED_PINNED_ACTOR@ --fixture @M0T_PRIVATE_FIXTURE_DIR@
+AppArmorProfile=m0t-review-@M0T_NONCE@
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0077
+ProtectSystem=strict
+ReadWritePaths=@M0T_PRIVATE_FIXTURE_DIR@
+ProtectHome=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
