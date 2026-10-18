@@ -8,6 +8,7 @@ until evidence review and manual adjudication.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -69,6 +70,7 @@ def build_prompt(bundle:Path,case_id:str,arm:str)->str:
         f'\n# Pilot fixed context\nCase: {case_id}\nArm: {arm}\n'
         'Return exactly one valid JSON object conforming to the attached output schema. '
         'Set schema_version=research.advisory.v0, case_id and arm exactly as specified. '
+        f'Set run_id exactly to "{expected_run_id(case_id, arm)}" (not empty). '
         'Set reviewer="codex-cli-research". You must use only the three inline '
         'source files below; do not inspect the filesystem or invoke tools, commands, '
         'plugins, searches, network or subagents. Never read other files. '
@@ -92,6 +94,23 @@ def build_prompt(bundle:Path,case_id:str,arm:str)->str:
 _STRICT_KEEP = {'type', 'const', 'enum', 'properties', 'items', 'additionalProperties', 'required'}
 _LOCAL_VALIDATOR_ONLY = {'$schema', '$id', '$comment', 'title', 'description',
                          'minLength', 'pattern', 'minimum'}
+
+
+def expected_run_id(case: str, arm: str) -> str:
+    return case + '-' + arm.lower()
+
+
+def strict_schema_for_job(general_schema: dict, case: str, arm: str) -> dict:
+    """Pin model-controlled identity fields via supported Strict JSON Schema const."""
+    if case not in {c for c, _ in JOBS} or arm not in ARMS or (case, arm) not in JOBS:
+        raise ValueError('Unknown pilot job identity')
+    job_schema = copy.deepcopy(general_schema)
+    for key, value in (("run_id", expected_run_id(case, arm)),
+                       ("case_id", case), ("arm", arm)):
+        if key not in job_schema['properties']:
+            raise ValueError('Missing identity field in strict schema: ' + key)
+        job_schema['properties'][key] = {'type': 'string', 'const': value}
+    return job_schema
 
 
 def strict_model_schema(local_schema: dict) -> dict:
@@ -144,6 +163,7 @@ def prepare(bundle:Path,out:Path,model:str|None,reasoning:str)->list[dict]:
     out.mkdir(parents=True,mode=0o700)
     (out/'prompts').mkdir(mode=0o700)
     (out/'results').mkdir(mode=0o700)
+    (out/'wire_schemas').mkdir(mode=0o700)
     model_schema_path = out/'codex_strict_output_schema.json'
     model_schema_path.write_bytes(model_schema_bytes)
     os.chmod(model_schema_path,0o600)
@@ -154,8 +174,20 @@ def prepare(bundle:Path,out:Path,model:str|None,reasoning:str)->list[dict]:
         path=out/'prompts'/rel
         path.write_text(prompt,encoding='utf-8')
         os.chmod(path,0o600)
-        jobs.append({'ordinal':i,'case_id':case,'arm':arm,'prompt_file':f'prompts/{rel}',
-                     'prompt_sha256':sha256(prompt.encode()),'status':'prepared'})
+        job_schema = strict_schema_for_job(model_schema, case, arm)
+        jsonschema.Draft202012Validator.check_schema(job_schema)
+        job_schema_bytes = (json.dumps(job_schema, ensure_ascii=False, indent=2) + '\n').encode()
+        wire_rel = f'wire_schemas/{i:02d}.json'
+        wire_path = out/wire_rel
+        wire_path.write_bytes(job_schema_bytes)
+        os.chmod(wire_path,0o600)
+        jobs.append({'ordinal':i,'case_id':case,'arm':arm,
+                     'run_id':expected_run_id(case,arm),
+                     'prompt_file':f'prompts/{rel}',
+                     'prompt_sha256':sha256(prompt.encode()),
+                     'wire_schema_file':wire_rel,
+                     'wire_schema_sha256':sha256(job_schema_bytes),
+                     'status':'prepared'})
     plan={'kind':'projectctl.research.pilot-run-plan.v1','research_only':True,
           'real_model_invocations':0,'model':model,'reasoning_effort':reasoning,
           'oracle_disclosed_to_reviewer':False,
@@ -175,7 +207,7 @@ def validate_report(path:Path, schema_file:Path, case:str,arm:str)->dict:
     report=json.loads(path.read_text(encoding='utf-8'))
     schema=json.loads(schema_file.read_text(encoding='utf-8'))
     jsonschema.Draft202012Validator(schema).validate(report)
-    if report['case_id']!=case or report['arm']!=arm:
+    if report['case_id']!=case or report['arm']!=arm or report['run_id']!=expected_run_id(case,arm):
         raise ValueError('Mismatch between report and predeclared run identity')
     ids=[f['finding_id'] for f in report['findings']]
     if len(set(ids))!=len(ids):raise ValueError('Duplicate finding IDs')
@@ -249,8 +281,15 @@ def actual_run(args, out:Path, jobs:list[dict])->dict:
         # mode does NOT guarantee confidentiality of host files by itself.
         source=(out/j['prompt_file']).read_bytes()
         if sha256(source)!=j['prompt_sha256']:raise RuntimeError('Prompt integrity changed')
+        wire_path=(out/j['wire_schema_file']).resolve()
+        if not within(wire_path, out.resolve()) or not wire_path.is_file():
+            raise RuntimeError('Unsafe or missing per-job strict schema')
+        if sha256(wire_path.read_bytes()) != j['wire_schema_sha256']:
+            raise RuntimeError('Per-job strict schema integrity changed')
+        if j['run_id'] != expected_run_id(j['case_id'], j['arm']):
+            raise RuntimeError('Per-job expected run identity changed')
         final=run_dir/'final.json';events=run_dir/'events.jsonl';stderr=run_dir/'stderr.txt'
-        cmd=codex_args(binary,args.model,args.reasoning,schema,final)
+        cmd=codex_args(binary,args.model,args.reasoning,wire_path,final)
         started=time.monotonic()
         with tempfile.TemporaryDirectory(prefix='pctl-review-empty-') as empty:
             try:
