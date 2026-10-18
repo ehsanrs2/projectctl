@@ -86,15 +86,67 @@ def build_prompt(bundle:Path,case_id:str,arm:str)->str:
     return prompt
 
 
+
+# Derive a strict Codex wire schema from the pinned canonical research schema.
+# This does NOT change the source_bundle schema, fixture or blind oracle.
+_STRICT_KEEP = {'type', 'const', 'enum', 'properties', 'items', 'additionalProperties', 'required'}
+_LOCAL_VALIDATOR_ONLY = {'$schema', '$id', '$comment', 'title', 'description',
+                         'minLength', 'pattern', 'minimum'}
+
+
+def strict_model_schema(local_schema: dict) -> dict:
+    """Return a closed, fully-required strict wire schema; reject unknown keywords."""
+    def visit(node: dict, position: str) -> dict:
+        if not isinstance(node, dict):
+            raise ValueError('Invalid schema node at ' + position)
+        unknown = set(node) - _STRICT_KEEP - _LOCAL_VALIDATOR_ONLY
+        if unknown:
+            raise ValueError('Unsupported schema keyword at ' + position + ': ' + ','.join(sorted(unknown)))
+        out = {k: node[k] for k in ('type', 'const', 'enum') if k in node}
+        if 'properties' in node:
+            if node.get('type') != 'object' or node.get('additionalProperties') is not False:
+                raise ValueError('Strict object must be closed at ' + position)
+            props = node['properties']
+            if not isinstance(props, dict):
+                raise ValueError('Invalid properties at ' + position)
+            out['properties'] = {k: visit(v, position + '/' + k) for k, v in props.items()}
+            out['required'] = list(props)
+            out['additionalProperties'] = False
+        elif 'required' in node or 'additionalProperties' in node:
+            raise ValueError('Unexpected object-only keyword at ' + position)
+        if 'items' in node:
+            if node.get('type') != 'array':
+                raise ValueError('Non-array with items at ' + position)
+            out['items'] = visit(node['items'], position + '/items')
+        return out
+    result = visit(local_schema, '$')
+    if result.get('type') != 'object' or not result.get('properties'):
+        raise ValueError('Strict output schema needs root object')
+    return result
+
+
 def prepare(bundle:Path,out:Path,model:str|None,reasoning:str)->list[dict]:
     bundle=bundle.resolve()
     ensure_output_path(out,bundle)
-    if not (bundle/'schemas'/'advisory_report.v0.schema.json').is_file():
-        raise ValueError('Missing report schema')
+    canonical_path = bundle/'schemas'/'advisory_report.v0.schema.json'
+    if not canonical_path.is_file() or canonical_path.is_symlink():
+        raise ValueError('Missing or unsafe report schema')
+    local_schema = json.loads(canonical_path.read_text(encoding='utf-8'))
+    try:
+        import jsonschema
+    except ImportError as exc:
+        raise RuntimeError('Missing jsonschema. Install project dependencies first.') from exc
+    jsonschema.Draft202012Validator.check_schema(local_schema)
+    model_schema = strict_model_schema(local_schema)
+    jsonschema.Draft202012Validator.check_schema(model_schema)
+    model_schema_bytes = (json.dumps(model_schema, ensure_ascii=False, indent=2) + '\n').encode()
     # Redundant on purpose: no Oracle file is read or opened in preparation.
     out.mkdir(parents=True,mode=0o700)
     (out/'prompts').mkdir(mode=0o700)
     (out/'results').mkdir(mode=0o700)
+    model_schema_path = out/'codex_strict_output_schema.json'
+    model_schema_path.write_bytes(model_schema_bytes)
+    os.chmod(model_schema_path,0o600)
     jobs=[]
     for i,(case,arm) in enumerate(JOBS,1):
         prompt=build_prompt(bundle,case,arm)
@@ -106,7 +158,11 @@ def prepare(bundle:Path,out:Path,model:str|None,reasoning:str)->list[dict]:
                      'prompt_sha256':sha256(prompt.encode()),'status':'prepared'})
     plan={'kind':'projectctl.research.pilot-run-plan.v1','research_only':True,
           'real_model_invocations':0,'model':model,'reasoning_effort':reasoning,
-          'oracle_disclosed_to_reviewer':False,'jobs':jobs}
+          'oracle_disclosed_to_reviewer':False,
+          'codex_output_schema_file':model_schema_path.name,
+          'codex_output_schema_sha256':sha256(model_schema_bytes),
+          'canonical_validator_schema_sha256':sha256(canonical_path.read_bytes()),
+          'jobs':jobs}
     (out/'plan.json').write_text(json.dumps(plan,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     return jobs
 
@@ -173,7 +229,11 @@ def actual_run(args, out:Path, jobs:list[dict])->dict:
     if missing:raise RuntimeError('Codex CLI does not support required flags: '+', '.join(missing))
     v=subprocess.run([binary,'--version'],capture_output=True,text=True,timeout=15)
     version=(v.stdout or v.stderr).strip()[:200]
-    schema=(args.bundle.resolve()/'schemas'/'advisory_report.v0.schema.json')
+    local_schema = args.bundle.resolve()/'schemas'/'advisory_report.v0.schema.json'
+    schema = out/'codex_strict_output_schema.json'
+    plan = json.loads((out/'plan.json').read_text(encoding='utf-8'))
+    if sha256(schema.read_bytes()) != plan['codex_output_schema_sha256']:
+        raise RuntimeError('Strict output schema changed after preparation')
     summary={'mode':'real_codex_cli','research_only':True,'cli_version':version,
              'total_planned':len(JOBS),'batch_start':args.start_index,'batch_size':len(jobs),'attempted':0,'completed_valid':0,
              'qualified_tool_free':0,'results':[],'halt_reason':None}
@@ -218,7 +278,7 @@ def actual_run(args, out:Path, jobs:list[dict])->dict:
         except Exception as ex:record['protocol_violations'].append('invalid_events:'+str(ex))
         try:
             if not final.is_file() or final.stat().st_size>MAX_FINAL_BYTES:raise ValueError('Missing/oversized final')
-            parsed=validate_report(final,schema,j['case_id'],j['arm'])
+            parsed=validate_report(final,local_schema,j['case_id'],j['arm'])
             record['report_valid']=True;record['findings_claimed']=len(parsed['findings'])
             if parsed['protocol_violations']:
                 record['protocol_violations']+=['self_reported:'+x for x in parsed['protocol_violations']]
