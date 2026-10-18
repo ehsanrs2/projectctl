@@ -214,9 +214,12 @@ def inspect_events(events:Path)->dict:
 
 
 def codex_args(binary:str,model:str,reasoning:str,schema:Path,result:Path)->list[str]:
+    # The subprocess is launched with cwd set to an isolated empty temporary
+    # directory. Resolve both paths relative to the runner's original cwd,
+    # otherwise Codex cannot open the schema or write the final report.
     return [binary,'exec','--ignore-user-config','--ephemeral','--skip-git-repo-check',
-            '--sandbox','read-only','--json','--output-schema',str(schema),
-            '--output-last-message',str(result),
+            '--sandbox','read-only','--json','--output-schema',str(schema.resolve()),
+            '--output-last-message',str(result.resolve()),
             '--model',model,'-c',f'model_reasoning_effort="{reasoning}"','-']
 
 
