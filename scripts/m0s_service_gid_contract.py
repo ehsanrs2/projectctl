@@ -19,7 +19,6 @@ class GidWitnesses:
     candidate_uid_with_gid_wrote_db_json: bool | None = None
     old_code_with_candidate_uid_and_gid_wrote_db_json: bool | None = None
     negatives_preserved_sqlite_and_json: bool | None = None
-    final_fixture_cleanup_attempted: bool | None = None
 
 
 @dataclass(frozen=True)
