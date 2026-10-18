@@ -42,7 +42,11 @@ Stop if `git status --short` shows unexpected changes; do not discard them.
 
 The canonical `source_bundle/schemas/advisory_report.v0.schema.json` is unchanged. `scripts/codex_pilot_runner.py` derives a **closed, fully-required** strict Codex wire schema in the new run directory and validates the output using the original canonical schema. Do not edit the frozen input bundle to fix wire-format incompatibilities.
 
-The Runner also converts both `--output-schema` and `--output-last-message` paths to **absolute paths** before starting Codex in an isolated temporary working directory. This fixes a failure when the pilot used a relative `--out` path. An end-to-end mock regression now tests this exact shape. Tests must pass before any real execution.
+The Runner also converts both `--output-schema` and `--output-last-message` paths to **absolute paths** before starting Codex in an isolated temporary working directory. This fixes a failure when the pilot used a relative `--out` path. An end-to-end mock regression tests this exact shape.
+
+**v6 identity contract:** the general Strict wire schema intentionally omits `minLength`, which allowed a valid Codex response with `run_id=""` in v5 to fail the canonical validator. For every job, preparation now creates a separate immutable, SHA-256-bound `wire_schemas/NN.json` with `const` for `run_id`, `case_id`, and `arm`. The prompt specifies the same expected `run_id`; canonical validation additionally checks identity. No report is silently repaired after inference and no original `source_bundle` schema is modified.
+
+Treat v5 as diagnostic only: its A report was qualified but its B report was invalid, so **no complete paired v5 comparison exists**. The v6 pilot uses the same nine case-arm assignments but a slightly changed identity instruction. Do not combine v5 and v6 runs into one preregistered matched comparison. Tests must pass before any real execution.
 
 ## Pilot batch one
 
@@ -51,15 +55,15 @@ First make sure the tests above pass and the model `gpt-6-luna` is available wit
 ```bash
 uv run python scripts/codex_pilot_runner.py \
   --bundle source_bundle \
-  --out ./output/pctl-review-real-batch1-v5 \
+  --out ./output/pctl-review-real-batch1-v6 \
   --model gpt-6-luna \
   --reasoning medium \
   --execute --ack-paid --ack-host-read-risk
 ```
 
-Use a new `--out` directory for every attempt. Do not delete historic failed runs. Stop after this batch and inspect `output/pctl-review-real-batch1-v5/execution_summary.json`: require `attempted=3`, `completed_valid=3`, `qualified_tool_free=3`, and `halt_reason=null` before considering the next batch.
+Use a new `--out` directory for every attempt. Do not delete historic failed runs. Stop after this batch and inspect `output/pctl-review-real-batch1-v6/execution_summary.json`: require `attempted=3`, `completed_valid=3`, `qualified_tool_free=3`, and `halt_reason=null` before considering the next batch.
 
-If a run fails, inspect the local private `results/01/stderr.txt`, `events.jsonl`, and `run_metadata.json`, redact secrets before sharing, and do not auto-retry or switch models in the same study. A `HALTED` event is not an evaluation-quality result.
+If a run fails, inspect the local private `results/NN/stderr.txt`, `events.jsonl`, and `run_metadata.json` for the failed ordinal; redact secrets before sharing, and do not auto-retry or switch models in the same study. A `HALTED` event is not an evaluation-quality result.
 
 For scoring and future architecture decisions, first independently adjudicate all qualified findings on the private oracle and report TP/FP/FN, time and token usage. Do not infer outcomes from mocked end-to-end tests.
 
@@ -82,3 +86,7 @@ PY
 ```
 
 Check `output/pctl-review-real-batch1-v4/results/01/stderr.txt` **locally** for a schema-file path or output path error. If it is a different error, stop and review that error before running v5. Do not retry v4 in place; the historical attempt remains evidence.
+
+## v5 observed failure — historical evidence
+
+The v5 batch made **two real Codex invocations**, both `exit_code=0` and both without observed tool events. Run 1 (case-01 / baseline) passed local validation; run 2 (case-01 / gstack-inspired) returned `run_id=""`, rejected by the frozen local JSON Schema (`minLength: 1`). `attempted=2`, `completed_valid=1`, `qualified_tool_free=1`. The other seven runs were not attempted. Keep local raw evidence private; the v5 result is not sufficient to compare reviewer quality. See `PILOT_V5_DIAGNOSIS.md` for the sanitized diagnosis.
