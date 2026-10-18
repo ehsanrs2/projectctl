@@ -6,13 +6,13 @@
 
 ## 1. Decision boundary: one candidate, not a claim about the current VM
 
-**Propose exactly one supported *pilot* topology, named `D13-KVM-EXT4-SINGLE-UID-ROOT-GATE-v1`:**
+**Propose exactly one supported *pilot* topology, named `D13-KVM-EXT4-DUAL-UID-CUTOVER-ROOT-GATE-v2`:**
 
 | Dimension | Required pilot constraint | What is actually established now |
 | --- | --- | --- |
 | Compute | One *new, isolated, disposable*, Debian 13 KVM/QEMU guest under operator control | Earlier Debian KVM guest was used for test-only M0h–M0n; **not qualified as the proposed closed-world topology** |
 | Filesystem | One guest-local ext4 volume with owner-protected project and separate private backup area; no host bind, virtiofs, NFS, CIFS, FUSE, overlay/union, shared-volume or remote writer route | Existing lab confirmed only `/var/tmp` ext4 and `kvm`; that does not attest remote access or all aliases |
-| Writer identity | One **dedicated, static, unprivileged service UID**, distinct from operator/root, with no interactive shell, no sudo, no additional launch credentials, no untracked shared group write privilege | **Not established**; the historical `ehsan` lab account with sudo is not eligible as this writer UID |
+| Writer identities | **Two separate static, unprivileged writer UIDs for v2 and v3, never simultaneously writable**; root/operator is distinct; no interactive shell, sudo, credential-sharing, hidden group privilege or UID reuse | **Not established**; the historical `ehsan` lab account with sudo qualifies as neither identity |
 | Start authority | A root-controlled, audited systemd system-unit family and all known CLI/provider/child entry points; no reachable user-unit, cron, timer, socket, path-unit, manual `exec`, `systemd-run` or external API bypass | **Not established**. The systemd service manager is only a scoped lifecycle mechanism, not a global executable ban |
 | Maintenance authority | Independent operator/root-owned controller with sole permissions to hold embargo and manage backup; writer credentials do not control root-owned gate, ownership, unit configuration or evidence | **Not established** |
 | Project scope | Exactly one explicitly operator-selected, descriptor-anchored real v2 ProjectCTL source and its full DB/WAL/SHM + external JSON/inode ancestry; all aliases and writable destinations inventoried | **Not established** |
@@ -89,7 +89,7 @@ Do not use unprivileged named user/group observations as a proxy for controls ov
 
 ## 6. Design choice and scope-control checkpoint
 
-**Preferred bounded proof path:** a *separately proposed*, disposable guest-only independent embargo prototype for profile `D13-KVM-EXT4-SINGLE-UID-ROOT-GATE-v1`. It may require root inside the *reviewed guest* in the future, **only after a new PR and exact opt-in**; no application or production migration can run from this document.
+**Preferred bounded proof path:** a *separately proposed*, disposable guest-only independent embargo prototype for profile `D13-KVM-EXT4-DUAL-UID-CUTOVER-ROOT-GATE-v2`. It may require root inside the *reviewed guest* in the future, **only after a new PR and exact opt-in**; no application or production migration can run from this document.
 
 **Fallback if the closed-world topology cannot be proven:** revisit ADR-040's phased **v2-compatible cooperative writer rollout** (Option B) or defer operational M0. Cooperative locks alone do not retroactively stop live unmodified v2 writers, so even Option B still requires one trustworthy cutover boundary.
 
