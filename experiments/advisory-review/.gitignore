@@ -1,5 +1,6 @@
 # Private / blind evaluation materials (never commit to public GitHub)
 /source_bundle/oracle/
+/source_bundle/scripts/test_oracle_repro.py
 /output/
 /prepared_prompts/
 /.env
