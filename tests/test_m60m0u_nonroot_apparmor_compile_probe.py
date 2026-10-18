@@ -26,7 +26,9 @@ def test_exact_compile_only_flags_never_load_policy_or_cache():
     assert "--skip-cache" in probe._ARGS
     assert "--skip-read-cache" in probe._ARGS
     assert "--names" in probe._ARGS
-    assert probe._ARGS[-1] == "-"
+    # No filenames: Debian parser falls back to stdin, not a "-" path.
+    assert probe._ARGS[-1] == "--names"
+    assert "-" not in probe._ARGS
     assert "profile m0u-compile-only-unattached-review" in probe._PROFILE
     assert "/usr/bin/true ix," in probe._PROFILE
     assert "/var/tmp" not in probe._PROFILE
