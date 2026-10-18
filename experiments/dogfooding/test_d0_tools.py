@@ -107,6 +107,21 @@ class D0ToolTests(unittest.TestCase):
             self.assertEqual(preflight._version('projectctl', ['version'])['version'], '0.41.0')
         self.assertEqual(calls[0], ['/mock/projectctl', 'version'])
 
+    def test_beads_version_probe_disables_telemetry(self):
+        captured = []
+        def mock_run(argv, **kwargs):
+            captured.append((argv, kwargs))
+            return subprocess.CompletedProcess(argv, 0, stdout='bd version 1.3.1\\n', stderr='')
+        with patch.object(preflight.shutil, 'which', return_value='/mock/bd'), \\
+             patch.object(preflight.subprocess, 'run', side_effect=mock_run):
+            result = preflight._version('bd', ['version'])
+        self.assertTrue(result['available'])
+        self.assertEqual(captured[0][0], ['/mock/bd', 'version'])
+        env = captured[0][1]['env']
+        self.assertEqual(env['BD_DISABLE_METRICS'], '1')
+        self.assertEqual(env['DO_NOT_TRACK'], '1')
+        self.assertEqual(env['DOLT_DISABLE_EVENT_FLUSH'], '1')
+
     def test_environment_ready_does_not_claim_d1_ready(self):
         repo = self.fixture('clean')
         good = {'available': True, 'version': 'ok'}
