@@ -1,0 +1,14 @@
+# Private / blind evaluation materials (never commit to public GitHub)
+/source_bundle/oracle/
+/output/
+/prepared_prompts/
+/.env
+/.env.*
+/.venv/
+**/__pycache__/
+*.py[cod]
+*.log
+*.zip
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
