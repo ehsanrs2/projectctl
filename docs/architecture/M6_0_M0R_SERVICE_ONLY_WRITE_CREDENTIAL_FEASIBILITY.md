@@ -45,7 +45,7 @@ No privileged installation script or AppArmor profile template is shipped in M0r
 
 ## 4. Nonprivileged deliverables and exact commands
 
-scripts/m0r_guest_launch_authority_preflight.py performs only fixed read-only checks: Linux/nonroot process, systemd-detect-virt --vm, findmnt filesystem type for /var/tmp, AppArmor module enabled flag, the current caller's label, PID1 comm, and presence of apparmor_parser through executable lookup. **It never calls apparmor_parser**, does not install an OS policy and cannot attest the profile of any writer. All decisions are NO_GO, with authorizes_migration=false and authorizes_policy_install=false. A successful inspect command can exit 0 while retaining the explicit NO_GO decision.
+scripts/m0r_guest_launch_authority_preflight.py performs only fixed read-only checks: Linux/nonroot process, systemd-detect-virt --vm, findmnt filesystem type for /var/tmp, AppArmor module enabled flag, the current caller's label, PID1 comm, and **two separate Parser hints**: discovery on the invoking user's PATH and no-follow file metadata for the fixed Debian path `/usr/sbin/apparmor_parser` (root-owned regular executable; no group/world write). Neither verifies package provenance or active kernel confinement. **It never calls apparmor_parser**, does not install an OS policy and cannot attest the profile of any writer. All decisions are NO_GO, with authorizes_migration=false and authorizes_policy_install=false. A successful inspect command can exit 0 while retaining the explicit NO_GO decision.
 
 The BoundaryClaims model records twelve purely *untrusted* review claims; an affirmative direct old-program/same-UID bypass takes precedence over missing fields. Even twelve true values never produce permission to run a kernel installer. Nonroot CI tests exercise these stop decisions but are **not an independent kernel test**.
 
@@ -60,10 +60,23 @@ After owner review and merge, in the existing Debian VM without sudo:
     python -B -m scripts.m0r_guest_launch_authority_preflight --inspect
     command -v apparmor_parser || true
 
-Absent parser, the normal caller being unconfined, or positive KVM/ext4 hints are not requests to change host settings.
+A nonroot `PATH` may exclude `/usr/sbin`. In that case, if the **fixed standard-path file** is a root-owned regular executable with no group/world write, M0r reports `parser_on_path=false`, `parser_standard_path_status=root_owned_executable`, and the **diagnostic** decision `NO_GO_POLICY_PARSER_PRESENT_OUTSIDE_PATH` rather than the misleading old `NO_GO_POLICY_PARSER_NOT_PRESENT`. Missing/unreadable/nonregular/symlink/unsafe-permission standard-path hints have their own NO-GO results. A reported file does **not** establish that any profile is loaded, enforcing, attached to the proposed service or globally covers independent candidate-UID processes. Do not invoke or install it as part of preflight.
+
+Absent parser at the fixed path, the normal caller being unconfined, or positive KVM/ext4 hints are not requests to change host settings.
 
 ## 5. Required separate PR after owner security sign-off
 
 If owner accepts the **service-only write GID** model and the boundaries in R0–R9, a separate Draft PR may construct **an opt-in root guest-only** systemd/AppArmor/credential experiment using a random private fixture, new names without collision, exact acknowledgment, and no production project. Its first objective must be the actual R4/R5 negative challenge, not a celebratory test of a positive confined service. It must separately prove no residual global profile, unit, group, process or FD state remains; never overwrite an existing host profile or rely on broad unit restarts.
 
 M0r explicitly does **not** authorize that later root run, a global Python profile, real systemd mutation, source migration, W1/R1, or enabling public Trace. Current operational v2→v3 remains **NO-GO**.
+
+
+## 6. M0r follow-up — nonroot PATH discovery correction (2026-10-18)
+
+The operator reported a real disposable Debian KVM observation on merged PR #88:
+- User `PATH`: `$HOME/projectctl-m0k-lab/.venv/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games` (no `/usr/sbin`).
+- `ls -l /usr/sbin/apparmor_parser`: executable owned by root with mode 0755.
+- `dpkg-query -W apparmor`: `apparmor 4.1.0-1`; `dpkg-query -S /usr/sbin/apparmor_parser` identified the AppArmor package.
+- `command -v apparmor_parser` produced no path. The initial `shutil.which` observation reported `parser_available=false` and yielded `NO_GO_POLICY_PARSER_NOT_PRESENT`.
+
+**Resolved interpretation:** the executable exists at its standard Debian location, but was not found using the ordinary caller's `PATH`. This correction adds the two separate hints and keeps every decision `NO_GO_*`. The standalone fixed-path file check is an **inode/permission hint only** and does not replace dpkg package verification, current running-process LSM labels, provenance attestation or independent policy enforcement. No root operation or system file modification is introduced.
