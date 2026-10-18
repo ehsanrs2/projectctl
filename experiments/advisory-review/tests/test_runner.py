@@ -10,7 +10,7 @@ import unittest
 
 ROOT=Path(__file__).resolve().parent.parent
 sys.path.insert(0,str(ROOT/'scripts'))
-from codex_pilot_runner import (ARMS,JOBS,build_prompt,inspect_events,prepare,validate_report,codex_args)
+from codex_pilot_runner import (ARMS,JOBS,build_prompt,inspect_events,prepare,validate_report,codex_args,strict_model_schema)
 BUNDLE=ROOT/'source_bundle'
 SCHEMA=BUNDLE/'schemas'/'advisory_report.v0.schema.json'
 
@@ -56,6 +56,51 @@ class PilotTests(unittest.TestCase):
             del good['hidden_field'];good['arm']='B-gstack-inspired';p.write_text(json.dumps(good))
             with self.assertRaises(ValueError):validate_report(p,SCHEMA,'case-05','A-baseline')
 
+
+    def test_codex_strict_schema_recursive_and_local_semantics(self):
+        original=json.loads(SCHEMA.read_text())
+        strict=strict_model_schema(original)
+        self.assertEqual(set(strict['required']),set(strict['properties']))
+        self.assertFalse(strict['additionalProperties'])
+        nested=strict['properties']['findings']['items']
+        self.assertEqual(set(nested['required']),set(nested['properties']))
+        self.assertFalse(nested['additionalProperties'])
+        self.assertNotIn('$schema',strict)
+        self.assertNotIn('minLength',strict['properties']['run_id'])
+        for metric in ('wall_seconds','input_tokens','output_tokens'):
+            self.assertIn(metric,strict['required'])
+            self.assertIn('null',strict['properties'][metric]['type'])
+        good={'schema_version':'research.advisory.v0','run_id':'r-1','case_id':'case-05',
+              'arm':'A-baseline','reviewer':'mock','findings':[],
+              'protocol_violations':[],'notes':'',
+              'wall_seconds':None,'input_tokens':None,'output_tokens':None}
+        import jsonschema
+        jsonschema.Draft202012Validator(strict).validate(good)
+        jsonschema.Draft202012Validator(original).validate(good)
+        del good['notes']
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(strict).validate(good)
+
+    def test_strict_schema_derived_without_mutating_frozen_bundle(self):
+        import hashlib
+        original_hash=hashlib.sha256(SCHEMA.read_bytes()).hexdigest()
+        with tempfile.TemporaryDirectory() as td:
+            out=Path(td)/'work'
+            prepare(BUNDLE,out,'gpt-6-luna','medium')
+            plan=json.loads((out/'plan.json').read_text())
+            strict_path=out/plan['codex_output_schema_file']
+            self.assertTrue(strict_path.is_file())
+            self.assertEqual(hashlib.sha256(strict_path.read_bytes()).hexdigest(),
+                             plan['codex_output_schema_sha256'])
+            self.assertEqual(original_hash,plan['canonical_validator_schema_sha256'])
+        self.assertEqual(original_hash,hashlib.sha256(SCHEMA.read_bytes()).hexdigest())
+
+    def test_strict_schema_unknown_keyword_fails_closed(self):
+        local=json.loads(SCHEMA.read_text())
+        local['properties']['run_id']['oneOf']=[{'type':'string'}]
+        with self.assertRaisesRegex(ValueError,'Unsupported schema keyword'):
+            strict_model_schema(local)
+
     def test_flags_and_event_tool_policy(self):
         c=codex_args('codex','test-model','medium',SCHEMA,Path('/tmp/final.json'))
         self.assertIn('read-only',c)
@@ -96,7 +141,7 @@ p=pathlib.Path(args[args.index('--output-last-message')+1])
 p.write_text(json.dumps({'schema_version':'research.advisory.v0','run_id':case+'-'+arm,
  'case_id':case,'arm':arm,'reviewer':'MOCK_NOT_A_REAL_REVIEW',
  'findings':[],'protocol_violations':[],
- 'wall_seconds':None,'input_tokens':None,'output_tokens':None}))
+ 'wall_seconds':None,'input_tokens':None,'output_tokens':None,'notes':''}))
 for e in [{'type':'thread.started'},{'type':'turn.started'},
  {'type':'item.completed','item':{'type':'agent_message','text':'test'}},
  {'type':'turn.completed','usage':{'input_tokens':123,'output_tokens':17}}]:
