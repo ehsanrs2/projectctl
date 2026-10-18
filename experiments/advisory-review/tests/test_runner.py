@@ -10,7 +10,7 @@ import unittest
 
 ROOT=Path(__file__).resolve().parent.parent
 sys.path.insert(0,str(ROOT/'scripts'))
-from codex_pilot_runner import (ARMS,JOBS,build_prompt,inspect_events,prepare,validate_report,codex_args,strict_model_schema)
+from codex_pilot_runner import (ARMS,JOBS,build_prompt,inspect_events,prepare,validate_report,codex_args,strict_model_schema,strict_schema_for_job,expected_run_id)
 BUNDLE=ROOT/'source_bundle'
 SCHEMA=BUNDLE/'schemas'/'advisory_report.v0.schema.json'
 
@@ -25,6 +25,7 @@ class PilotTests(unittest.TestCase):
         for case,arm in JOBS:
             p=build_prompt(BUNDLE,case,arm)
             self.assertIn(case,p)
+            self.assertIn('Set run_id exactly to "'+expected_run_id(case,arm)+'"',p)
             self.assertNotIn('G01',p)
             self.assertNotIn('G04',p)
             self.assertNotIn('gold.json',p)
@@ -40,13 +41,14 @@ class PilotTests(unittest.TestCase):
             self.assertEqual(p['real_model_invocations'],0)
             self.assertFalse((out/'oracle').exists())
             self.assertEqual(len(list((out/'prompts').glob('*.txt'))),9)
+            self.assertEqual(len(list((out/'wire_schemas').glob('*.json'))),9)
             with self.assertRaises(ValueError):prepare(BUNDLE,out,None,'medium')
             with self.assertRaises(ValueError):prepare(BUNDLE,BUNDLE/'inside',None,'medium')
 
     def test_schema_validates_and_rejects_extra(self):
         with tempfile.TemporaryDirectory() as td:
             p=Path(td)/'final.json'
-            good={'schema_version':'research.advisory.v0','run_id':'r-1','case_id':'case-05',
+            good={'schema_version':'research.advisory.v0','run_id':'case-05-a-baseline','case_id':'case-05',
                   'arm':'A-baseline','reviewer':'mock','findings':[],'protocol_violations':[],
                   'input_tokens':None,'output_tokens':None,'wall_seconds':None}
             p.write_text(json.dumps(good))
@@ -54,6 +56,10 @@ class PilotTests(unittest.TestCase):
             good['hidden_field']=123;p.write_text(json.dumps(good))
             with self.assertRaises(Exception):validate_report(p,SCHEMA,'case-05','A-baseline')
             del good['hidden_field'];good['arm']='B-gstack-inspired';p.write_text(json.dumps(good))
+            with self.assertRaises(ValueError):validate_report(p,SCHEMA,'case-05','A-baseline')
+            good['arm']='A-baseline';good['run_id']='';p.write_text(json.dumps(good))
+            with self.assertRaises(Exception):validate_report(p,SCHEMA,'case-05','A-baseline')
+            good['run_id']='other-nonempty-id';p.write_text(json.dumps(good))
             with self.assertRaises(ValueError):validate_report(p,SCHEMA,'case-05','A-baseline')
 
 
@@ -93,7 +99,34 @@ class PilotTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256(strict_path.read_bytes()).hexdigest(),
                              plan['codex_output_schema_sha256'])
             self.assertEqual(original_hash,plan['canonical_validator_schema_sha256'])
-        self.assertEqual(original_hash,hashlib.sha256(SCHEMA.read_bytes()).hexdigest())
+            self.assertEqual(len(list((out/'wire_schemas').glob('*.json'))),9)
+            for job in plan['jobs']:
+                wire_path=out/job['wire_schema_file']
+                self.assertTrue(wire_path.is_file())
+                self.assertEqual(hashlib.sha256(wire_path.read_bytes()).hexdigest(),job['wire_schema_sha256'])
+                wire=json.loads(wire_path.read_text())
+                self.assertEqual(wire['properties']['run_id']['const'],expected_run_id(job['case_id'],job['arm']))
+                self.assertEqual(wire['properties']['case_id']['const'],job['case_id'])
+                self.assertEqual(wire['properties']['arm']['const'],job['arm'])
+                self.assertEqual(wire['required'],list(wire['properties']))
+                self.assertFalse(wire['additionalProperties'])        self.assertEqual(original_hash,hashlib.sha256(SCHEMA.read_bytes()).hexdigest())
+
+    def test_job_specific_wire_schema_forbids_empty_id(self):
+        import jsonschema
+        general=strict_model_schema(json.loads(SCHEMA.read_text()))
+        wire=strict_schema_for_job(general,'case-01','B-gstack-inspired')
+        good={'schema_version':'research.advisory.v0',
+              'run_id':expected_run_id('case-01','B-gstack-inspired'),
+              'case_id':'case-01','arm':'B-gstack-inspired',
+              'reviewer':'mock','findings':[],'protocol_violations':[],
+              'wall_seconds':None,'input_tokens':None,'output_tokens':None,'notes':''}
+        jsonschema.Draft202012Validator(wire).validate(good)
+        good['run_id']=''
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(wire).validate(good)
+        good['run_id']='case-01-a-baseline'
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(wire).validate(good)
 
     def test_strict_schema_unknown_keyword_fails_closed(self):
         local=json.loads(SCHEMA.read_text())
@@ -148,9 +181,13 @@ arm=next(a for a in ('A-baseline','B-gstack-inspired','C-superpowers-inspired') 
 case=next(c for c in ('case-01','case-04','case-05') if 'Case: '+c in msg)
 schema=pathlib.Path(args[args.index('--output-schema')+1])
 assert schema.is_absolute() and schema.is_file(), 'Codex wire schema path must be accessible from isolated cwd'
+wire=json.loads(schema.read_text())
+assert wire['properties']['case_id']['const']==case
+assert wire['properties']['arm']['const']==arm
+assert wire['properties']['run_id']['const']==case+'-'+arm.lower()
 p=pathlib.Path(args[args.index('--output-last-message')+1])
 assert p.is_absolute(), 'Final output path must be absolute'
-p.write_text(json.dumps({'schema_version':'research.advisory.v0','run_id':case+'-'+arm,
+p.write_text(json.dumps({'schema_version':'research.advisory.v0','run_id':wire['properties']['run_id']['const'],
  'case_id':case,'arm':arm,'reviewer':'MOCK_NOT_A_REAL_REVIEW',
  'findings':[],'protocol_violations':[],
  'wall_seconds':None,'input_tokens':None,'output_tokens':None,'notes':''}))
