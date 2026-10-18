@@ -1,0 +1,17 @@
+{
+  "stage": "M6.0-M0u",
+  "artifact_kind": "NONDEPLOYABLE_LIFECYCLE_MODEL",
+  "fixture_root": "@M0U_NEW_ROOT_ONLY_GUEST_FIXTURE@",
+  "unique_unit_name": "@M0U_UNALLOCATED_UNIT_NAME@",
+  "unique_profile_name": "@M0U_UNALLOCATED_APPARMOR_NAME@",
+  "verified_executable": "@M0U_UNRESOLVED_ROOT_PINNED_ACTOR@",
+  "root_owned_recovery_journal": "@M0U_UNRESOLVED_DURABLE_JOURNAL@",
+  "independent_recovery_controller": "@M0U_UNRESOLVED_EXTERNAL_RECOVERY_OWNER@",
+  "policy_compile_mode": "NONROOT_SKIP_KERNEL_LOAD_SKIP_CACHE",
+  "kernel_global_policy_change_allowed": false,
+  "system_unit_install_allowed": false,
+  "root_trial_allowed": false,
+  "production_migration_allowed": false,
+  "authority": "NO_GO_ALL_STATES",
+  "dependency": "M0t T0-T12 REMAIN UNVERIFIED"
+}
