@@ -6,6 +6,8 @@ chown, or loads kernel policy. All mutations are private tmp_path files.
 from __future__ import annotations
 
 import json
+import os
+import stat
 from dataclasses import fields, replace
 from pathlib import Path
 
@@ -32,7 +34,8 @@ def _candidate_hints() -> GuestHints:
         apparmor_enabled="Y",
         own_apparmor_label="unconfined",
         pid1_name="systemd",
-        parser_available=True,
+        parser_on_path=True,
+        parser_standard_path_status="root_owned_executable",
     )
 
 
@@ -95,7 +98,14 @@ def test_even_ideal_lsm_pid1_and_parser_hints_are_not_security_proof():
     ({"apparmor_enabled": "N"}, "NO_GO_APPARMOR_NOT_VERIFIED_ENABLED"),
     ({"apparmor_enabled": "unknown"}, "NO_GO_APPARMOR_NOT_VERIFIED_ENABLED"),
     ({"pid1_name": "other"}, "NO_GO_SYSTEMD_PID1_UNVERIFIED"),
-    ({"parser_available": False}, "NO_GO_POLICY_PARSER_NOT_PRESENT"),
+    ({"parser_on_path": False}, "NO_GO_POLICY_PARSER_PRESENT_OUTSIDE_PATH"),
+    ({"parser_standard_path_status": "missing"},
+     "NO_GO_POLICY_PARSER_STANDARD_PATH_MISSING"),
+    ({"parser_standard_path_status": "unreadable"},
+     "NO_GO_POLICY_PARSER_STANDARD_PATH_UNREADABLE"),
+    ({"parser_standard_path_status": "unexpected_inode_or_permissions"},
+     "NO_GO_POLICY_PARSER_STANDARD_PATH_UNTRUSTED"),
+    ({"parser_on_path": "yes"}, "NO_GO_INVALID_GUEST_HINTS"),
 ])
 def test_missing_capabilities_never_become_positive(changes, status):
     result = assess_hints(replace(_candidate_hints(), **changes))
@@ -162,3 +172,89 @@ def test_no_privileged_subprocess_execution_in_preflight_source():
         "os.kill(", "os.killpg(", "shutil.rmtree(",
     ):
         assert forbidden not in src
+
+
+def _fake_inode(mode: int, *, uid: int = 0) -> os.stat_result:
+    return os.stat_result((mode, 0, 0, 1, uid, 0, 0, 0, 0, 0))
+
+
+def test_debian_root_owned_executable_inode_hint_is_not_install_attestation():
+    root_executable = _fake_inode(stat.S_IFREG | 0o755)
+    assert m0r._classify_parser_inode(root_executable) == (
+        "root_owned_executable"
+    )
+    hints = replace(
+        _candidate_hints(),
+        parser_on_path=False,
+        parser_standard_path_status="root_owned_executable",
+    )
+    assert assess_hints(hints) == Decision(
+        "NO_GO_POLICY_PARSER_PRESENT_OUTSIDE_PATH"
+    )
+
+
+@pytest.mark.parametrize("inode", [
+    _fake_inode(stat.S_IFREG | 0o775),
+    _fake_inode(stat.S_IFREG | 0o777),
+    _fake_inode(stat.S_IFREG | 0o644),
+    _fake_inode(stat.S_IFREG | 0o755, uid=1000),
+    _fake_inode(stat.S_IFLNK | 0o777),
+    _fake_inode(stat.S_IFDIR | 0o755),
+])
+def test_untrusted_parser_inode_never_passes_hint(inode):
+    assert m0r._classify_parser_inode(inode) == (
+        "unexpected_inode_or_permissions"
+    )
+
+
+def test_parser_path_uses_lstat_and_refuses_fixture_symlink(tmp_path):
+    missing = tmp_path / "missing-parser"
+    assert m0r._fixed_parser_path_status(missing) == "missing"
+    regular = tmp_path / "private-parser"
+    regular.write_bytes(b"not-executable")
+    symlink = tmp_path / "parser-symlink"
+    symlink.symlink_to(regular)
+    assert m0r._fixed_parser_path_status(symlink) == (
+        "unexpected_inode_or_permissions"
+    )
+
+
+def test_guest_inspect_keeps_separate_path_and_standard_inode_hints(
+    monkeypatch,
+):
+    monkeypatch.setattr(m0r.sys, "platform", "linux")
+    monkeypatch.setattr(m0r.os, "getuid", lambda: 1000)
+    monkeypatch.setattr(m0r.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(m0r.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(
+        m0r, "_fixed_parser_path_status",
+        lambda: "root_owned_executable",
+    )
+    monkeypatch.setattr(
+        m0r, "_fixed_command",
+        lambda args: "kvm" if args[0] == "systemd-detect-virt" else "ext4",
+    )
+    monkeypatch.setattr(
+        m0r, "_fixed_read",
+        lambda path: "Y" if str(path).startswith("/sys/") else (
+            "systemd" if str(path) == "/proc/1/comm" else "unconfined"
+        ),
+    )
+    hints = m0r.inspect()
+    assert hints.parser_on_path is False
+    assert hints.parser_standard_path_status == "root_owned_executable"
+    assert assess_hints(hints).status == (
+        "NO_GO_POLICY_PARSER_PRESENT_OUTSIDE_PATH"
+    )
+    assert assess_hints(hints).authorizes_policy_install is False
+
+
+def test_parser_path_on_user_path_does_not_overrule_absent_standard_path():
+    hints = replace(
+        _candidate_hints(),
+        parser_on_path=True,
+        parser_standard_path_status="missing",
+    )
+    assert assess_hints(hints).status == (
+        "NO_GO_POLICY_PARSER_STANDARD_PATH_MISSING"
+    )

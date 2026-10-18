@@ -29,7 +29,8 @@ class GuestHints:
     apparmor_enabled: str
     own_apparmor_label: str
     pid1_name: str
-    parser_available: bool
+    parser_on_path: bool
+    parser_standard_path_status: str
 
 
 @dataclass(frozen=True)
@@ -105,6 +106,28 @@ def _fixed_command(args: list[str]) -> str:
     return value
 
 
+def _classify_parser_inode(info: os.stat_result) -> str:
+    """This is a local file hint, NOT package provenance or MAC proof."""
+    mode = info.st_mode
+    if (not stat.S_ISREG(mode) or info.st_uid != 0
+            or (mode & 0o022) != 0 or not (mode & stat.S_IXUSR)):
+        return "unexpected_inode_or_permissions"
+    return "root_owned_executable"
+
+
+def _fixed_parser_path_status(
+    path: Path = Path("/usr/sbin/apparmor_parser"),
+) -> str:
+    """Caller cannot select paths via CLI; path arg only for fixture tests."""
+    try:
+        info = path.lstat()  # no symlink traversal
+    except FileNotFoundError:
+        return "missing"
+    except OSError:
+        return "unreadable"
+    return _classify_parser_inode(info)
+
+
 def inspect() -> GuestHints:
     """Do not use this result as VM isolation or LSM policy attestation."""
     return GuestHints(
@@ -117,7 +140,8 @@ def inspect() -> GuestHints:
         ),
         own_apparmor_label=_fixed_read(Path("/proc/self/attr/current")),
         pid1_name=_fixed_read(Path("/proc/1/comm")),
-        parser_available=shutil.which("apparmor_parser") is not None,
+        parser_on_path=shutil.which("apparmor_parser") is not None,
+        parser_standard_path_status=_fixed_parser_path_status(),
     )
 
 
@@ -134,8 +158,16 @@ def assess_hints(hints: GuestHints) -> Decision:
         return Decision("NO_GO_APPARMOR_NOT_VERIFIED_ENABLED")
     if hints.pid1_name != "systemd":
         return Decision("NO_GO_SYSTEMD_PID1_UNVERIFIED")
-    if hints.parser_available is not True:
-        return Decision("NO_GO_POLICY_PARSER_NOT_PRESENT")
+    if type(hints.parser_on_path) is not bool:
+        return Decision("NO_GO_INVALID_GUEST_HINTS")
+    if hints.parser_standard_path_status == "missing":
+        return Decision("NO_GO_POLICY_PARSER_STANDARD_PATH_MISSING")
+    if hints.parser_standard_path_status == "unreadable":
+        return Decision("NO_GO_POLICY_PARSER_STANDARD_PATH_UNREADABLE")
+    if hints.parser_standard_path_status != "root_owned_executable":
+        return Decision("NO_GO_POLICY_PARSER_STANDARD_PATH_UNTRUSTED")
+    if hints.parser_on_path is False:
+        return Decision("NO_GO_POLICY_PARSER_PRESENT_OUTSIDE_PATH")
     # Label belongs to the *caller*, not writer; no filesystem scope check.
     return Decision("NO_GO_DIRECT_SAME_UID_LAUNCH_ENFORCEMENT_UNPROVEN")
 
