@@ -42,6 +42,8 @@ Stop if `git status --short` shows unexpected changes; do not discard them.
 
 The canonical `source_bundle/schemas/advisory_report.v0.schema.json` is unchanged. `scripts/codex_pilot_runner.py` derives a **closed, fully-required** strict Codex wire schema in the new run directory and validates the output using the original canonical schema. Do not edit the frozen input bundle to fix wire-format incompatibilities.
 
+The Runner also converts both `--output-schema` and `--output-last-message` paths to **absolute paths** before starting Codex in an isolated temporary working directory. This fixes a failure when the pilot used a relative `--out` path. An end-to-end mock regression now tests this exact shape. Tests must pass before any real execution.
+
 ## Pilot batch one
 
 First make sure the tests above pass and the model `gpt-6-luna` is available with `codex exec`. Then, **only if you intend to make up to three real Codex invocations**:
@@ -49,14 +51,34 @@ First make sure the tests above pass and the model `gpt-6-luna` is available wit
 ```bash
 uv run python scripts/codex_pilot_runner.py \
   --bundle source_bundle \
-  --out ./output/pctl-review-real-batch1-v4 \
+  --out ./output/pctl-review-real-batch1-v5 \
   --model gpt-6-luna \
   --reasoning medium \
   --execute --ack-paid --ack-host-read-risk
 ```
 
-Use a new `--out` directory for every attempt. Do not delete historic failed runs. Stop after this batch and inspect `output/pctl-review-real-batch1-v4/execution_summary.json`: require `attempted=3`, `completed_valid=3`, `qualified_tool_free=3`, and `halt_reason=null` before considering the next batch.
+Use a new `--out` directory for every attempt. Do not delete historic failed runs. Stop after this batch and inspect `output/pctl-review-real-batch1-v5/execution_summary.json`: require `attempted=3`, `completed_valid=3`, `qualified_tool_free=3`, and `halt_reason=null` before considering the next batch.
 
 If a run fails, inspect the local private `results/01/stderr.txt`, `events.jsonl`, and `run_metadata.json`, redact secrets before sharing, and do not auto-retry or switch models in the same study. A `HALTED` event is not an evaluation-quality result.
 
 For scoring and future architecture decisions, first independently adjudicate all qualified findings on the private oracle and report TP/FP/FN, time and token usage. Do not infer outcomes from mocked end-to-end tests.
+
+## Failed v4 diagnosis (no model calls)
+
+If your earlier v4 batch halted, inspect its **local** metadata first; do not publish raw stderr or event streams without redaction:
+
+```bash
+uv run python - <<'PY'
+import json
+from pathlib import Path
+p = Path('output/pctl-review-real-batch1-v4/results/01/run_metadata.json')
+r = json.loads(p.read_text())
+print('exit_code:',r.get('exit_code'))
+print('report_valid:',r.get('report_valid'))
+print('protocol_violations:',r.get('protocol_violations'))
+print('event_type_counts:',r.get('event_type_counts'))
+print('usage:',r.get('usage'))
+PY
+```
+
+Check `output/pctl-review-real-batch1-v4/results/01/stderr.txt` **locally** for a schema-file path or output path error. If it is a different error, stop and review that error before running v5. Do not retry v4 in place; the historical attempt remains evidence.
