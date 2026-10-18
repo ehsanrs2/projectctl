@@ -1,0 +1,16 @@
+# M6.0 M0t — INTENTIONALLY INCOMPLETE AppArmor profile sketch.
+# Not syntactically loadable until all placeholders are resolved and
+# independently validated on a separately approved disposable guest.
+# NEVER run apparmor_parser -r/-a against this template.
+#
+# No profile attachment to /usr/bin/python3, so unrelated system Python
+# remains unaffected. Named profile alone does not attach to an independently
+# started candidate-UID process; systemd AppArmorProfile= only selects the
+# domain for processes launched by the reviewed service.
+profile m0t-review-@M0T_NONCE@ {
+  # Resolve only within root-owned private guest release/code closure.
+  @M0T_EXACT_INTERPRETER_AND_LIBRARY_READ_RULES@
+  @M0T_EXACT_ACTOR_AND_DEPENDENCY_RULES@
+  @M0T_PRIVATE_FIXTURE_DB_WAL_SHM_JSON_STAGE_RULES@
+  @M0T_ALLOWED_EXECUTION_TRANSITIONS_NO_UX_FALLBACK@
+}
