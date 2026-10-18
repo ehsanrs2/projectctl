@@ -66,7 +66,7 @@ def test_invalid_claim_type_is_rejected(bad):
 def test_direct_same_uid_old_executable_bypass_takes_precedence_over_other_unknowns():
     sample = BoundaryClaims(
         direct_same_uid_old_program_denied=False,
-        apparmor_profile_enforced_for_approved_unit=None,
+        profile_enforced_for_approved_unit=None,
     )
     assert assess_claims(sample).status == "NO_GO_DIRECT_SAME_UID_OLD_PROGRAM_BYPASS"
 
