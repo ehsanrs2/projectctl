@@ -28,7 +28,7 @@ _PROFILE = (
 )
 _ARGS = (
     str(_PARSER), "--skip-kernel-load", "--skip-cache",
-    "--skip-read-cache", "--names", "-",
+    "--skip-read-cache", "--names",
 )
 
 
