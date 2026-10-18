@@ -101,6 +101,15 @@ class PilotTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'Unsupported schema keyword'):
             strict_model_schema(local)
 
+    def test_codex_paths_are_absolute_even_for_relative_output(self):
+        command=codex_args('codex','gpt-6-luna','medium',
+                           Path('source_bundle/schemas/wire.json'),
+                           Path('output/attempt-1/results/01/final.json'))
+        schema=Path(command[command.index('--output-schema')+1])
+        result=Path(command[command.index('--output-last-message')+1])
+        self.assertTrue(schema.is_absolute(),command)
+        self.assertTrue(result.is_absolute(),command)
+
     def test_flags_and_event_tool_policy(self):
         c=codex_args('codex','test-model','medium',SCHEMA,Path('/tmp/final.json'))
         self.assertIn('read-only',c)
@@ -137,7 +146,10 @@ if args[:2]==['exec','--help']:
 msg=sys.stdin.read()
 arm=next(a for a in ('A-baseline','B-gstack-inspired','C-superpowers-inspired') if 'Arm: '+a in msg)
 case=next(c for c in ('case-01','case-04','case-05') if 'Case: '+c in msg)
+schema=pathlib.Path(args[args.index('--output-schema')+1])
+assert schema.is_absolute() and schema.is_file(), 'Codex wire schema path must be accessible from isolated cwd'
 p=pathlib.Path(args[args.index('--output-last-message')+1])
+assert p.is_absolute(), 'Final output path must be absolute'
 p.write_text(json.dumps({'schema_version':'research.advisory.v0','run_id':case+'-'+arm,
  'case_id':case,'arm':arm,'reviewer':'MOCK_NOT_A_REAL_REVIEW',
  'findings':[],'protocol_violations':[],
@@ -149,10 +161,10 @@ for e in [{'type':'thread.started'},{'type':'turn.started'},
 ''')
             fake.chmod(0o700)
             cmd=[sys.executable,str(ROOT/'scripts'/'codex_pilot_runner.py'),
-                '--bundle',str(BUNDLE),'--out',str(out),'--execute',
+                '--bundle',str(BUNDLE),'--out','out','--execute',
                 '--ack-paid','--ack-host-read-risk','--model','mock',
                 '--codex-bin',str(fake),'--timeout-seconds','30','--max-paid-runs','9']
-            r=subprocess.run(cmd,capture_output=True,text=True,timeout=30)
+            r=subprocess.run(cmd,cwd=td,capture_output=True,text=True,timeout=30)
             self.assertEqual(r.returncode,0,r.stderr+' '+r.stdout)
             summary=json.loads((out/'execution_summary.json').read_text())
             self.assertEqual(summary['attempted'],9)
