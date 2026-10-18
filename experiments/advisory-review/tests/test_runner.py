@@ -109,7 +109,8 @@ class PilotTests(unittest.TestCase):
                 self.assertEqual(wire['properties']['case_id']['const'],job['case_id'])
                 self.assertEqual(wire['properties']['arm']['const'],job['arm'])
                 self.assertEqual(wire['required'],list(wire['properties']))
-                self.assertFalse(wire['additionalProperties'])        self.assertEqual(original_hash,hashlib.sha256(SCHEMA.read_bytes()).hexdigest())
+                self.assertFalse(wire['additionalProperties'])
+        self.assertEqual(original_hash,hashlib.sha256(SCHEMA.read_bytes()).hexdigest())
 
     def test_job_specific_wire_schema_forbids_empty_id(self):
         import jsonschema
