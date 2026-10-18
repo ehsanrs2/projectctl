@@ -25,8 +25,14 @@ def _version(binary: str, args: list[str]) -> dict[str, object]:
     if not path:
         return {'available': False, 'version': None}
     try:
+        # Beads 1.3.x enables anonymous command telemetry by default. Its
+        # metadata probe must remain a non-networking, non-telemetry check.
+        env = os.environ.copy()
+        if binary == 'bd':
+            env.update({'BD_DISABLE_METRICS': '1', 'DO_NOT_TRACK': '1',
+                        'DOLT_DISABLE_EVENT_FLUSH': '1'})
         result = subprocess.run([path, *args], capture_output=True, text=True,
-                                timeout=5, check=False)
+                                timeout=5, check=False, env=env)
         lines = (result.stdout or result.stderr).strip().splitlines()
         version = lines[0][:100] if result.returncode == 0 and lines else None
         # Do not inadvertently serialize host paths printed by a probe.
