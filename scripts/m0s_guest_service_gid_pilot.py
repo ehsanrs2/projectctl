@@ -47,6 +47,7 @@ import sys
 from pathlib import Path
 
 root, op, label = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+os.umask(0o007)  # restrict newly staged dummy JSON and sidecars
 p = root / ".projectctl"
 try:
     if op == "probe":
