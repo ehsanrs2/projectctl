@@ -331,7 +331,6 @@ def _trial() -> dict:
                 old_synthetic_same_credentials
             ),
             negatives_preserved_sqlite_and_json=negatives_preserved,
-            final_fixture_cleanup_attempted=True,  # finally always attempts
         )
         decision = review(observations)
         return {
