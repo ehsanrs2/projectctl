@@ -28,7 +28,7 @@ Inspect the **actual current checked-out source** instead of assuming the Oct 18
 
 ## Non-negotiable scope and safety
 
-- **No live Codex/Codex-SDK inference**, no paid prompts, no network-mutating connector actions, and no background services.
+- **D0's preflight, scripts, tests, and evaluation harness must perform zero live Codex/Codex-SDK inference or paid trial runs.** Running this Goal interactively in Codex to implement those scripts is a separately user-initiated development action, not a D1 evaluation run. No network-mutating connector actions or background services.
 - Do not execute `projectctl init`, `run prepare`, `run start`, `run verify`, `run integrate`, `run auto`, `migrate`, or `bd create` against the user's repos in D0.
 - Do not change `projectctl/`, `tests/` at repo root, root policy files, docs/architecture, accepted ADRs, `docs/PROJECT_STATE.yaml`, any M6.0 branch, or earlier v6 files.
 - Preserve all preexisting and untracked changes; never reset, clean, force push, auto merge or silently edit outside `experiments/dogfooding/`. For D0 implementation, use only a scoped branch commit if justified and don't push unless clearly included in the user's execution request.
