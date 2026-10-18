@@ -1,0 +1,2 @@
+# Specification: canonical JSON
+Implement `canonical_json(value)` that accepts JSON-compatible inputs and returns UTF-8 bytes: sorted object keys, no decorative whitespace, ensure_ascii=False, and reject NaN/Infinity. A trailing newline is NOT required. Do not write files.

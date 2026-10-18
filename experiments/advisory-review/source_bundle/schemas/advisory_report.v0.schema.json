@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/projectctl-research/advisory_report.v0.schema.json",
+  "$comment": "Research-only schema. This is NOT a ProjectCTL public or persisted contract.",
+  "title": "Research Advisory Report v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "case_id",
+    "arm",
+    "reviewer",
+    "findings",
+    "protocol_violations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "research.advisory.v0"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "case_id": {
+      "type": "string",
+      "pattern": "^case-[0-9]{2}$"
+    },
+    "arm": {
+      "enum": [
+        "A-baseline",
+        "B-gstack-inspired",
+        "C-superpowers-inspired"
+      ]
+    },
+    "reviewer": {
+      "type": "string",
+      "minLength": 1
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "finding_id",
+          "severity",
+          "location",
+          "claim",
+          "reproduction"
+        ],
+        "properties": {
+          "finding_id": {
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "location": {
+            "type": "string"
+          },
+          "claim": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reproduction": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "protocol_violations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "wall_seconds": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "input_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "output_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "notes": {
+      "type": "string"
+    }
+  }
+}

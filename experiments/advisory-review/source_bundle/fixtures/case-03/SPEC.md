@@ -1,0 +1,2 @@
+# Specification: deterministic scheduler
+Implement `select_ready(tasks)` over a list of dicts with keys `id` (string), `priority` (integer), `ready` (bool). Return the task with maximum priority; ties must be broken by ascending `id`, independent of input order. Return `None` if none ready. Must not mutate inputs.

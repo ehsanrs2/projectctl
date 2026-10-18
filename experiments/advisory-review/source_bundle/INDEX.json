@@ -1,0 +1,14 @@
+{
+  "package_id": "projectctl-parallel-research-p0-2026-10-18",
+  "status": "research_only_unapproved",
+  "projectctl_base_commit": "c24eecd7bf3c94e80d444399a85394c57bbf4b67",
+  "milestone_in_scope": "none",
+  "active_project_milestone_untouched": "M6.0",
+  "pilot_framework_mode": "rubric_inspired_only",
+  "fixture_count": 6,
+  "intentional_defect_count": 4,
+  "intentional_clean_count": 2,
+  "live_agent_runs": 0,
+  "changes_to_projectctl_repo": 0,
+  "external_spend": 0
+}

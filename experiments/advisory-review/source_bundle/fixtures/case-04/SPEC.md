@@ -1,0 +1,2 @@
+# Specification: evidence gate
+Implement `integration_decision(worker_result, verification)` returning `READY_TO_INTEGRATE` only when the worker reports `implemented`, the independent verifier has `passed=True`, and `verification['candidate_digest']` equals `worker_result['candidate_digest']`. Otherwise return `REJECTED`. A worker declaration is not independent evidence.

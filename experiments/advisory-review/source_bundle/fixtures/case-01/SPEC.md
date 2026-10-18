@@ -1,0 +1,2 @@
+# Specification: repository path containment
+Implement `resolve_repo_path(root, relative)` using Python stdlib. Return an absolute resolved Path only when the final target is inside `root` or equal to it. Reject any escape, including `..`, symlinks, and a sibling with a similar string prefix. Raise `ValueError` for escapes. No filesystem writes.

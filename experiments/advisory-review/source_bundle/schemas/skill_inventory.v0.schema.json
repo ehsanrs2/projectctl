@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/projectctl-research/skill_inventory.v0.schema.json",
+  "$comment": "Non-authoritative design; external skill metadata is never an execution grant.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "skill_id",
+    "source_commit",
+    "source_path",
+    "content_sha256",
+    "declared_tools",
+    "requested_effects",
+    "compatibility_status",
+    "authority"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "research.skill_inventory.v0"
+    },
+    "skill_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "source_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "content_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "declared_tools": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "requested_effects": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "read_repository",
+          "write_report",
+          "write_source",
+          "execute_command",
+          "network",
+          "spawn_agent",
+          "git_commit",
+          "git_push",
+          "policy_mutation"
+        ]
+      }
+    },
+    "compatibility_status": {
+      "enum": [
+        "unverified",
+        "verified_research_host",
+        "unsupported",
+        "blocked"
+      ]
+    },
+    "authority": {
+      "const": "none"
+    }
+  }
+}

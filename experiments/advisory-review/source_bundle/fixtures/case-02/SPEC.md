@@ -1,0 +1,2 @@
+# Specification: redaction
+Implement `sanitize_trace(value)` that recursively processes JSON-compatible dicts/lists. Remove dictionary keys named `token`, `api_key`, `password` or `authorization` (case-insensitively) at every depth. Do not alter innocuous values. Do not write files.

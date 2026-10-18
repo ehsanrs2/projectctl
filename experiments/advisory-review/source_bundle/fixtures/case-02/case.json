@@ -1,0 +1,10 @@
+{
+  "case_id": "case-02",
+  "title": "Recursive trace redaction",
+  "language": "python",
+  "category": "standalone_synthetic",
+  "allowed_verification": [
+    "python -m unittest discover -p test_module.py -v"
+  ],
+  "ground_truth_available_to_reviewer": false
+}

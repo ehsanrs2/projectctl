@@ -1,0 +1,19 @@
+[project]
+name = "projectctl-parallel-phase2-2026-10-18"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "ehsan", email = "ehsan.r.s2@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "jsonschema>=4.26.0",
+]
+
+[project.scripts]
+projectctl-parallel-phase2-2026-10-18 = "projectctl_parallel_phase2_2026_10_18:main"
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"

@@ -1,0 +1,82 @@
+{
+  "kind": "projectctl.research.pilot-run-plan.v1",
+  "research_only": true,
+  "real_model_invocations": 0,
+  "model": "MODEL_TO_BE_SELECTED",
+  "reasoning_effort": "medium",
+  "oracle_disclosed_to_reviewer": false,
+  "jobs": [
+    {
+      "ordinal": 1,
+      "case_id": "case-01",
+      "arm": "A-baseline",
+      "prompt_file": "prompts/01_case-01_1.txt",
+      "prompt_sha256": "d3901cd9996b2ab3dec03a417b1ab7345455b240e017dc69c395434d0a32b39a",
+      "status": "prepared"
+    },
+    {
+      "ordinal": 2,
+      "case_id": "case-01",
+      "arm": "B-gstack-inspired",
+      "prompt_file": "prompts/02_case-01_2.txt",
+      "prompt_sha256": "29a3c49a089afa886692922725b5783ba0d97b09a049161adae1c89d50691d28",
+      "status": "prepared"
+    },
+    {
+      "ordinal": 3,
+      "case_id": "case-01",
+      "arm": "C-superpowers-inspired",
+      "prompt_file": "prompts/03_case-01_3.txt",
+      "prompt_sha256": "49164f8bab0262e111907fc32fb98e68906cc20da82c83460488445b1d34c693",
+      "status": "prepared"
+    },
+    {
+      "ordinal": 4,
+      "case_id": "case-04",
+      "arm": "B-gstack-inspired",
+      "prompt_file": "prompts/04_case-04_2.txt",
+      "prompt_sha256": "95536eb1dc3a697768a77cff562a6335d0452a38c761284837141a816a5f31e5",
+      "status": "prepared"
+    },
+    {
+      "ordinal": 5,
+      "case_id": "case-04",
+      "arm": "C-superpowers-inspired",
+      "prompt_file": "prompts/05_case-04_3.txt",
+      "prompt_sha256": "1b530dd431c04423e344e7f42beb71fd35140d4c0a2698680d1d5d9f85c53d58",
+      "status": "prepared"
+    },
+    {
+      "ordinal": 6,
+      "case_id": "case-04",
+      "arm": "A-baseline",
+      "prompt_file": "prompts/06_case-04_1.txt",
+      "prompt_sha256": "44ad80ae642ab96e568c55f71c9cdd89192c0b28ef4d0bbe082098c630ffd939",
+      "status": "prepared"
+    },
+    {
+      "ordinal": 7,
+      "case_id": "case-05",
+      "arm": "C-superpowers-inspired",
+      "prompt_file": "prompts/07_case-05_3.txt",
+      "prompt_sha256": "90933d15d0234b4ec69b63d9b137ee18d910634e42389e6609946cb1f5c61bdc",
+      "status": "prepared"
+    },
+    {
+      "ordinal": 8,
+      "case_id": "case-05",
+      "arm": "A-baseline",
+      "prompt_file": "prompts/08_case-05_1.txt",
+      "prompt_sha256": "67953d5973f0eb555225b20384ce9b1e4828eedb4e34e34f19f2d379dd05eae9",
+      "status": "prepared"
+    },
+    {
+      "ordinal": 9,
+      "case_id": "case-05",
+      "arm": "B-gstack-inspired",
+      "prompt_file": "prompts/09_case-05_2.txt",
+      "prompt_sha256": "df380427a3f6cdb4ea0c606f86bc34f2e5e6c7503ec6a42578b5ac56ac754a8d",
+      "status": "prepared"
+    }
+  ]
+}

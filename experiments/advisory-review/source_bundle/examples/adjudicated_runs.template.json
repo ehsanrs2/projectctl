@@ -1,0 +1,15 @@
+{
+  "runs": [
+    {
+      "arm": "A-baseline",
+      "case_id": "case-01",
+      "repetition": 1,
+      "detected_gold_ids": [],
+      "false_positive_count": 0,
+      "protocol_violation_count": 0,
+      "wall_seconds": null,
+      "input_tokens": null,
+      "output_tokens": null
+    }
+  ]
+}

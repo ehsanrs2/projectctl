@@ -1,0 +1,2 @@
+# Specification: run-state transition validator
+Implement `validate_transition(current, expected, target)` with exact case-sensitive names: CLAIMED -> RUNNING, RUNNING -> VERIFYING, VERIFYING -> READY_TO_INTEGRATE. Reject mismatched expected state or invalid transitions with ValueError. Return target for valid transitions. Pure function, no I/O.
