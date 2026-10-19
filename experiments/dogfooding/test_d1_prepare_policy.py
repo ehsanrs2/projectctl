@@ -47,6 +47,31 @@ class D1PolicyPreparationTests(unittest.TestCase):
         self.assertEqual(data["status"], "POLICY_FILES_WRITTEN")
         self.assertEqual(self.target.read_text(), "new-value")
 
+    def test_real_bd_init_ignore_rules_are_accepted(self):
+        # Exact patterns observed in the owner's Beads 1.3.1 fixture.
+        ignore = (
+            "# Beads / Dolt files (added by bd init)\n"
+            ".dolt/\n"
+            "*.db\n"
+            ".beads-credential-key\n"
+            ".beads/proxieddb/\n"
+            "*.gate.lock*\n"
+        )
+        mod.validate_beads_ignore(ignore)
+
+    def test_full_beads_directory_rule_is_rejected_but_subdir_allowed(self):
+        mod.validate_beads_ignore(".dolt/\n.beads/proxieddb/\n")
+        with self.assertRaisesRegex(ValueError, "unexpected Beads ignore"):
+            mod.validate_beads_ignore(".dolt/\n.beads/\n")
+
+    def test_missing_dolt_rule_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "unexpected Beads ignore"):
+            mod.validate_beads_ignore(".beads/proxieddb/\n")
+
+    def test_existing_projectctl_ignore_rule_blocks_double_apply(self):
+        with self.assertRaisesRegex(ValueError, "already exists"):
+            mod.validate_beads_ignore(".dolt/\n.projectctl/\n")
+
     def test_unexpected_repo_location_is_rejected(self):
         before = self.target.read_bytes()
         with self.assertRaises(ValueError):
