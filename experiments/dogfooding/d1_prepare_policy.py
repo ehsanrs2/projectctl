@@ -40,6 +40,18 @@ def git(root: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
+def validate_beads_ignore(text: str) -> None:
+    """Check actual ignore rules, not substrings of longer Beads path rules."""
+    active_rules = {
+        line.strip() for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    if ".dolt/" not in active_rules or ".beads/" in active_rules:
+        raise ValueError("unexpected Beads ignore content")
+    if ".projectctl/" in active_rules:
+        raise ValueError("ProjectCTL ignore rule already exists")
+
+
 def prepare(root_arg: Path) -> tuple[Path, dict[Path, str], dict[str, str]]:
     if root_arg.is_symlink():
         raise ValueError("refusing symlinked --repo")
@@ -82,10 +94,7 @@ def prepare(root_arg: Path) -> tuple[Path, dict[Path, str], dict[str, str]]:
             raise FileExistsError("refusing overwrite of " + name)
 
     original_ignore = (root / ".gitignore").read_text(encoding="utf-8")
-    if ".beads/" in original_ignore or ".dolt/" not in original_ignore:
-        raise ValueError("unexpected Beads ignore content")
-    if ".projectctl/" in original_ignore:
-        raise ValueError("ProjectCTL ignore rule already exists")
+    validate_beads_ignore(original_ignore)
 
     config_file = root / ".projectctl/config.yaml"
     cfg = yaml.safe_load(config_file.read_text(encoding="utf-8"))
