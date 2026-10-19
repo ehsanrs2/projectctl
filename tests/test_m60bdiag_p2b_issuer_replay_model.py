@@ -119,7 +119,8 @@ def test_restarting_with_unchanged_simulated_checkpoint_refuses_replay():
     newer = _receipt(receipt_id="1" * 32, package_id="2" * 32,
                      issue_sequence=8)
     candidate, next_state, _ = _run(
-        newer, checkpoint=recovered_state, anchor=recovered_anchor
+        newer, expected=_expected(newer),
+        checkpoint=recovered_state, anchor=recovered_anchor
     )
     assert candidate.durable_replay_prevention_proven is False
     assert next_state.revision == 2
@@ -241,7 +242,8 @@ def test_duplicate_identifier_refused_after_state_transfer(field, value):
                             issue_sequence=9)
     next_receipt[field] = value
     with pytest.raises(P2bRefusal):
-        _run(next_receipt, checkpoint=state, anchor=anchor)
+        _run(next_receipt, expected=_expected(next_receipt),
+             checkpoint=state, anchor=anchor)
 
 
 @pytest.mark.parametrize("sequence", [0, 6, 7])
@@ -250,7 +252,8 @@ def test_nonmonotonic_sequence_refused(sequence):
     newer = _receipt(receipt_id="1" * 32,
                      package_id="2" * 32, issue_sequence=sequence)
     with pytest.raises(P2bRefusal):
-        _run(newer, checkpoint=state, anchor=anchor)
+        _run(newer, expected=_expected(newer),
+             checkpoint=state, anchor=anchor)
 
 
 @pytest.mark.parametrize("changed", [
@@ -331,9 +334,10 @@ def test_synthetic_capacity_boundary_refuses_next_record():
         seen_package_ids=frozenset(f"{i + 512:032x}" for i in range(512)),
     )
     with pytest.raises(P2bRefusal):
+        candidate = _receipt(receipt_id="f" * 32, package_id="e" * 32,
+                             issue_sequence=513)
         _run(
-            _receipt(receipt_id="f" * 32, package_id="e" * 32,
-                     issue_sequence=513),
+            candidate, expected=_expected(candidate),
             policy=policy, checkpoint=state, anchor=lab_anchor(policy, state),
         )
 
