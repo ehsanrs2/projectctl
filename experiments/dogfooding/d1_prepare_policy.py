@@ -14,7 +14,7 @@ import yaml
 
 from projectctl.schemas.config import ProjectConfig
 from projectctl.schemas.execution_scope import ExecutionScopeCatalog
-from projectctl.schemas.verification import VerificationCatalog
+from projectctl.schemas.verification import VerificationCatalog, DEFAULT_PROTECTED_PATHS
 
 
 TASK_ID = "d1ctl-lh4"
@@ -129,6 +129,10 @@ def prepare(root_arg: Path) -> tuple[Path, dict[Path, str], dict[str, str]]:
             "commands": [{"id": "fixed-unittest",
                           "argv": ["python3", "-B", "-m", "unittest", "-v", "test_user_id.py"],
                           "timeout_seconds": 60, "required": True}],
+            "diff_policy": {"protected_paths": sorted(set(
+                DEFAULT_PROTECTED_PATHS +
+                ["POLICY.md", "SPEC.md", "test_user_id.py", ".gitignore"]
+            ))},
         }},
     })
     outputs = {
