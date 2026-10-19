@@ -173,21 +173,22 @@ def test_lost_checkpoint_or_out_of_date_anchor_fails_closed():
         )
 
 
-@pytest.mark.parametrize(("changes", "expected"), [
-    ({"issuer_claim": "other-issuer"}, None),
-    ({"key_id_claim": "other-key"}, None),
-    ({"project_id": "other-project"}, None),
-    ({"task_id": "other-task"}, None),
-    ({"package_id": "8" * 32}, _expected()),
-    ({"seal_sha256": "0" * 64}, _expected()),
-    ({"event_prefix_id": 45}, _expected()),
-    ({"seal_sequence": 9}, _expected()),
+@pytest.mark.parametrize("changes", [
+    {"issuer_claim": "other-issuer"},
+    {"key_id_claim": "other-key"},
+    {"project_id": "other-project"},
+    {"task_id": "other-task"},
+    {"package_id": "8" * 32},
+    {"seal_sha256": "0" * 64},
+    {"event_prefix_id": 45},
+    {"seal_sequence": 9},
 ])
-def test_policy_or_fixed_expected_identity_mismatch_refused(changes, expected):
+def test_policy_or_fixed_expected_identity_mismatch_refused(changes):
     p = _receipt(**changes)
+    # Independently supplied reference fixture stays unchanged; tampering
+    # with the receipt cannot silently redefine expected context.
     with pytest.raises(P2bRefusal, match="P2B_SIMULATED_ADMISSION_REFUSED"):
-        _run(p, expected=_expected(p) if expected is None else expected)
-
+        _run(p, expected=_expected())
 
 def test_attacker_can_forge_both_issuer_policy_and_anchor_not_authenticity():
     forged = _receipt(issuer_claim="attacker-issuer",
