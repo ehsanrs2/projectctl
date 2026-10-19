@@ -1,6 +1,6 @@
 # M6.0 Slice A — Trace v1 Contract, Source Inventory & Privacy Review
 
-**Status: Proposed for ADR-039 review — no collector/exporter exists.**  
+**Architecture status (2026-10-19): ADR-039 Accepted as a bounded design. This file remains the historical Slice A v1 contract; no operational Collector/Exporter or public CLI exists. For current M6.0 readiness and R/W/M dependencies see [the pinned implementation rebaseline](M6_0_REBASELINE_2026_10_19.md).**  
 **Implementation baseline:** `main@2f3cf5d18bae47544b7e99ed9bff954c005c0594`  
 **New proposed public schema:** `execution-trace-bundle.v1.schema.json`  
 **Ownership:** derived, read-only, non-authoritative; `docs/PROJECT_STATE.yaml` is still the active-goal authority.

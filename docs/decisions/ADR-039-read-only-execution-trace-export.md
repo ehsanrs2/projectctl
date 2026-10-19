@@ -235,6 +235,17 @@ exhausted-quota report. Its failure records must not be relabeled as green;
 rerun tests when quota returns. `docs/PROJECT_STATE.yaml` continues to
 identify M6.0 as the active milestone.
 
+**Historical CI status update (2026-10-19; no change to this accepted ADR):**
+The unavailable hosted-CI statement above describes the *original ADR
+acceptance context*, not the current repository. [Merge-main Actions run
+#39217591787](https://github.com/ehsanrs2/projectctl/actions/runs/39217591787)
+completed successfully at pinned main
+`325fc7ef54ae29823e84f35a14397c040c9649e5` (1860 passed, 6 skipped;
+SDK contract succeeded). This is regression evidence, not proof of live WAL
+source nonmutation, trusted Seal publication, kernel enforcement or an
+operational Collector. For current implementation gates see
+[the M6.0 rebaseline](../architecture/M6_0_REBASELINE_2026_10_19.md).
+
 See `docs/architecture/M6_0_TRACE_CONTRACT_V1.md`,
 `docs/architecture/M6_0_SLICE_B_SNAPSHOT_SECURITY_SPEC.md` and
 `docs/architecture/M6_0_IMPLEMENTATION_PLAN.md`.
