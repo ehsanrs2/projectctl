@@ -84,7 +84,7 @@ def _run(p=None, *, expected=None, policy=None, checkpoint=None, anchor=None):
     anchor = lab_anchor(policy, checkpoint) if anchor is None else anchor
     return model_receipt_admission(
         canonical_receipt_bytes(p), expected_claims=(
-            _expected(p) if expected is None else expected
+            _expected() if expected is None else expected
         ), policy=policy, checkpoint=checkpoint, expected_anchor=anchor,
     )
 
