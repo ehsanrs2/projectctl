@@ -104,3 +104,12 @@ Before beginning executable Producer/Custodian work, the owner must explicitly c
 The following remain **NO_GO**: live/source WAL R1, validated producer/custodian, production DB v2→v3 M0 migration, trusted W1 Verification Seal, public Trace Collector/CLI, root/systemd/AppArmor policy deployment, changes to Task/Worker permissions, and treating detached bytes as historical evidence. Existing test-only PR #100 can continue to return only NO_GO_DETACHED_FIXTURE_BYTES_ONLY.
 
 This is design and security review **only**. No shell scripts, executable examples, test source access, actual guest modifications, migrations or policy files are supplied by this PR.
+
+## 8. External reference boundaries (background, not acceptance evidence)
+
+- [SQLite WAL documentation](https://www.sqlite.org/wal.html): read-only WAL may be opened under documented WAL/SHM, directory-write or immutable conditions; the ability to read **does not** satisfy ProjectCTL's independently proven nonmutation and external JSON epoch requirements.
+- [SQLite WAL-index and sidecar lifecycle](https://www.sqlite.org/walformat.html): SHM is a mapped coordination index with lifecycle effects; a disk copy of DB or WAL bytes alone is not an application-level epoch certificate.
+- [Linux chmod](https://man7.org/linux/man-pages/man1/chmod.1.html): file mode bits are permission state, not proof of independent immutable custody against the file owner.
+
+These references support threat-model assumptions but provide **no evidence** that a source ProjectCTL database, proposed snapshot producer or custodian currently meets P0–P4.
+
