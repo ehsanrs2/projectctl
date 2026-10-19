@@ -81,3 +81,7 @@ After owner review and merge, run only the focused **ordinary-user** test. Tests
 No sudo, root, changing file permissions or database journal modes in any real project, source-snapshot acquisition, AppArmor/systemd, v3 migration, W1 Seal, R1 Reader, Collector, public CLI or new Worker/Task permissions are within this PR.
 
 **Disposition:** fixture-byte integrity and detached read composition LAB_ONLY; actual immutable snapshot, authenticated project provenance and cross-store historical epoch remain UNVERIFIED. Operational v2→v3, W1, R1 and Collector/CLI remain **NO_GO**.
+
+## Follow-up review (2026-10-19; design only)
+
+The [Snapshot Producer and Trusted Custody P0–P4 design](M6_0_BDIAG_SNAPSHOT_PRODUCER_TRUSTED_CUSTODY_DESIGN.md) and [its threat/falsification matrix](M6_0_BDIAG_PRODUCER_CUSTODY_SECURITY_MATRIX.md) propose explicit **future** gates for source-epoch proof, independent producer identity, versioned immutable custody and safe consumer admission. They do **not** upgrade this earlier self-hashed test fixture or authorize a producer, privileged pilot, Collector/CLI, W1, R1, migration or any root/system policy change. All provenance/epoch/custody evidence remains UNVERIFIED.
