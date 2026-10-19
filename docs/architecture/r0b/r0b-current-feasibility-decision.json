@@ -1,0 +1,19 @@
+{
+  "stage": "M6.0-R0b",
+  "baseline_main_sha": "f9b1c7ae31cfc1223586ca1001747dc36c67f0f7",
+  "decision_scope": "CURRENT_PROJECTCTL_v2_ACTIVE_WAL_EXPORT_FEASIBILITY_ONLY",
+  "selected": "C_FAIL_CLOSED_NOT_CURRENTLY_SUPPORTED",
+  "route_A_native_source_read_nonmutation_proven": false,
+  "route_A_cross_store_same_epoch_proven": false,
+  "route_B_snapshot_atomicity_proven": false,
+  "route_B_source_nonmutation_proven": false,
+  "route_B_cross_store_same_epoch_proven": false,
+  "route_C_live_WAL_export_must_refuse": true,
+  "reopen_requires": "SEPARATELY_REVIEWED_INDEPENDENT_PLATFORM_AND_EPOCH_EVIDENCE",
+  "authorizes_source_WAL_reader": false,
+  "authorizes_trace_collector_or_CLI": false,
+  "authorizes_writer_Seal": false,
+  "authorizes_migration": false,
+  "authorizes_root_trial": false,
+  "state": "PROPOSED_FAIL_CLOSED_DECISION_NOT_ADR_CHANGE"
+}
