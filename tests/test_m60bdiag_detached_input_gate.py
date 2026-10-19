@@ -90,6 +90,8 @@ def _package(tmp_path: Path) -> tuple[Path, Path]:
     package = Path(tempfile.mkdtemp(prefix=lab.PREFIX, dir=tmp_path))
     target_run = package / ".projectctl" / "runs" / lab.RUN
     target_run.mkdir(parents=True, mode=0o700)
+    for directory in (package / ".projectctl", package / ".projectctl/runs", target_run):
+        directory.chmod(0o700)  # mkdir(parents=True) uses default mode for parents
     for name in lab.PATHS:
         target = package / name
         shutil.copyfile(src / name, target)
