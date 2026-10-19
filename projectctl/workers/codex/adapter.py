@@ -78,6 +78,39 @@ def _runtime_version(metadata: Any) -> str | None:
     return None
 
 
+def _strict_worker_output_schema() -> dict[str, Any]:
+    """Produce the SDK's strict output format without changing stored Pydantic models.
+
+    All object properties, including defaulted list fields and nested permission
+    objects, must appear in required. Defaults and Pydantic-only minLength checks
+    are not sent to the provider; normal WorkerOutputPayload validation still
+    checks nonempty summaries and permission fields after the turn.
+    """
+    schema = WorkerOutputPayload.model_json_schema()
+
+    def normalize(node):
+        if isinstance(node, dict):
+            if node.get("type") == "object":
+                props = node.get("properties")
+                if not isinstance(props, dict):
+                    raise WorkerError("Worker output object schema has no properties.")
+                if node.get("additionalProperties", False) is not False:
+                    raise WorkerError("Worker output schema cannot allow extra properties.")
+                node["additionalProperties"] = False
+                node["required"] = list(props)
+            node.pop("default", None)
+            node.pop("minLength", None)
+            for child in node.values():
+                normalize(child)
+        elif isinstance(node, list):
+            for child in node:
+                normalize(child)
+
+    normalize(schema)
+    return schema
+
+
+
 class CodexWorkerAdapter:
     """Stable-surface Codex worker.
 
@@ -252,7 +285,7 @@ class CodexWorkerAdapter:
             "approval_mode": approval,
             "cwd": None,
             "model": request.worker.actual_model,
-            "output_schema": WorkerOutputPayload.model_json_schema(),
+            "output_schema": _strict_worker_output_schema(),
             "sandbox": sandbox,
         }
 
