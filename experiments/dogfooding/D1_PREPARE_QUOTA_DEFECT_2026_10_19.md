@@ -42,3 +42,21 @@ On `research/advisory-skills-eval` only, `projectctl/application/execution.py` n
 ## Evaluation integrity
 
 D1 original-runtime feasibility attempt has a real **NO-GO** result attributable to ProjectCTL, not to Codex. Any subsequent successful run with this patch is labeled **D1-R1 / research-patched ProjectCTL**, not original stock M6.0 behavior. Comparing its quality/time to direct Codex CLI must disclose this code deviation and initial failure, including preparatory effort. No blanket production compatibility claim follows.
+
+
+## Independent owner-run qualification (2026-10-19)
+
+The owner ran the patched research source using the isolated D0 Python environment, and reported:
+
+- `projectctl.application.execution.__file__` exactly resolves to `/home/ai/project/My/projectctl-advisory-lab/projectctl/application/execution.py`.
+- All **6/6** new `test_d1_quota_resource_consistency.py` regression tests passed (preclaim sufficient/insufficient, legacy preflight, start revalidation, checkpoint monitor, low-level UNKNOWN protection).
+- `projectctl runs --project CTL --json` exposed **one** durable prior run:
+  - `run_id=run-88361fe2431e4e299a0f4b9c506c50fa`;
+  - `status=failed`, `terminal_reason=quota_exhausted`;
+  - `started_at=null`, `worker_thread_id=null`, `candidate_commit=null`;
+  - `lease_owner=null`, `lease_expires_at=null`; base `7388896be4a7ba46770ae76c7cd5480f0cd9e27b`.
+- `bd show d1ctl-lh4 --json` reported `status=open` with no `assignee`, so the task remains unclaimed/ready, pending fresh live admission.
+- Fixture `ctl` `git status --short --untracked-files=all` was **empty**.
+- The diagnostic ended with `D1_DIAGNOSTIC_PASS` and `DIAGNOSTIC_EXIT_CODE=0`. The separately printed blank `BASH_EXIT_CODE=` is a shell `PIPESTATUS` capture issue in the reporting wrapper, not a failed test.
+
+**Decision updated:** `D1_R1_PATCH_OFFLINE_QUALIFIED`; first original-runtime attempt remains `FAILED_PRECLAIM`. No second `prepare`, `start`, model call, verification or integration has yet been reported. Research-only modified runtime and its success, if any, must remain distinguishable from the unpatched baseline.
