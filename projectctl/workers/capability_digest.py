@@ -7,9 +7,9 @@ from projectctl.schemas.capabilities import WorkerCapabilities
 
 
 _RUNTIME_VERSION_WITH_BANNER = re.compile(
-    r"^(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+"
+    r"^(?P<version>[0-9]+\.[0-9]+\.[0-9]+"
     r"(?:[-+][A-Za-z0-9][A-Za-z0-9._-]*)?)"
-    r"\\s+\\([^()\\n]+\\)(?:\\s+[^\\n]+)?$"
+    r"\s+\([^()\n]+\)(?:\s+[^\n]+)?$"
 )
 
 
@@ -32,7 +32,9 @@ def effective_capability_digest(capabilities: WorkerCapabilities) -> str:
     Observation timestamps, probe labels, and human-readable notes are excluded
     so a live re-probe can be compared with a version-only probe without false
     drift. Provider/SDK/runtime/adapter versions and all effective support
-    states remain part of the digest. Human-readable runtime platform/user-agent\n    banners are excluded while the leading semantic version is preserved.\n    """
+    states remain part of the digest. Human-readable runtime platform/user-agent
+    banners are excluded while the leading semantic version is preserved.
+    """
 
     payload = capabilities.model_dump(mode="json")
     payload.pop("probe_kind", None)
