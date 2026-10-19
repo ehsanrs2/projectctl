@@ -69,6 +69,7 @@ from projectctl.quota import (
     read_current_quota,
 )
 from projectctl.scheduler.digests import semantic_task_snapshot_digest
+from projectctl.scheduler.resource import effective_resource_class
 from projectctl.schemas.capabilities import (
     StrategyFallbackPolicy,
     WorkerCapabilities,
@@ -355,7 +356,7 @@ def _validate_plan_inputs(project_root: Path, plan: ExecutionPlan) -> RunTermina
     quota_manager = QuotaManager(config.quota)
     quota_state = quota_manager.state(quota, now=utc_now())
     if quota_state.stale or not quota_manager.eligible_for_resource(
-        task.resource_class, quota_state
+        effective_resource_class(task), quota_state
     ):
         return RunTerminalReason.QUOTA_EXHAUSTED
 
@@ -371,7 +372,7 @@ def _prepare_quota_reason(
     quota = read_current_quota(config.quota.account)
     manager = QuotaManager(config.quota)
     state = manager.state(quota, now=utc_now())
-    if state.stale or not manager.eligible_for_resource(task.resource_class, state):
+    if state.stale or not manager.eligible_for_resource(effective_resource_class(task), state):
         return RunTerminalReason.QUOTA_EXHAUSTED
     return None
 
@@ -817,7 +818,7 @@ def _quota_monitor(project_root: Path, task) -> QuotaCheckpointMonitor:
     return QuotaCheckpointMonitor(
         account=config.quota.account,
         policy=config.quota,
-        resource_class=task.resource_class,
+        resource_class=effective_resource_class(task),
     )
 
 
@@ -826,7 +827,7 @@ def _evaluate_current_worker_quota(project_root: Path, task):
     quota = read_current_quota(config.quota.account)
     manager = QuotaManager(config.quota)
     state = manager.state(quota, now=utc_now())
-    eligible = manager.eligible_for_resource(task.resource_class, state)
+    eligible = manager.eligible_for_resource(effective_resource_class(task), state)
     return config, quota, state, eligible
 
 
