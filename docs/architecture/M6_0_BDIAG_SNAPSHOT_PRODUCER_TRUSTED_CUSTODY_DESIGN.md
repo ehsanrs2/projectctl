@@ -112,4 +112,3 @@ This is design and security review **only**. No shell scripts, executable exampl
 - [Linux chmod](https://man7.org/linux/man-pages/man1/chmod.1.html): file mode bits are permission state, not proof of independent immutable custody against the file owner.
 
 These references support threat-model assumptions but provide **no evidence** that a source ProjectCTL database, proposed snapshot producer or custodian currently meets P0–P4.
-
