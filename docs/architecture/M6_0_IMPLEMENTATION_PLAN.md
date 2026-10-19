@@ -1,6 +1,8 @@
 # M6.0 — Read-only Trace & Evaluation Export: Bounded Implementation Plan
 
-**Status: PRs #54–#67 merged, including architecture audit #66 and R0 disposable WAL-reader feasibility #67. ADR-039 and ADR-040 Path A Accepted. B3a1–B3a4 remain merged but isolated labs; no real Seal writer, migration, WAL Reader proof, Collector/CLI or supported assessments exist. W0 writer fencing and Seal publication is now a separate review proposal.**
+**Implementation status (2026-10-19): PRs #54–#96 merged; ADR-039 and ADR-040 Path A are accepted DESIGNS, not production approval. Current evidence and all R/W/M gate statuses: [M6.0 reader-first rebaseline](M6_0_REBASELINE_2026_10_19.md), pinned at main 325fc7ef54ae29823e84f35a14397c040c9649e5. R0 live-WAL feasibility remains unresolved; real v3 migration, W1 Seal, R1 reader, Collector/CLI and supported assessments remain NO-GO.**
+
+> Historical note: the stage narratives below were written as PRs #54–#67 arrived. Their older Draft/Proposed wording is stage-local history, not the up-to-date readiness ledger. Do not derive current authorization from those paragraphs. **Pause new M0 journal labs pending the R0 A/B/C decision.**
 **Active goal:** `docs/PROJECT_STATE.yaml` — M6.0
 **Architecture decision:** ADR-039 (Accepted as bounded design on acceptance PR merge; implementation still gated)
 **Inherited safety decisions:** ADR-037, ADR-038 (Accepted)
@@ -215,16 +217,9 @@ and no widening of worker authority.
 
 ## Next independent architecture decision
 
-After review of the W0 candidate, choose and record the supported
-cross-process mutex and complete participant inventory, monotonic
-generation/token lease protocol, safe directory-fsync file publication
-and a single trusted Run/event/Seal transaction. Test the chosen design
-in a **separately reviewed** W1 implementation; in parallel R0 must
-resolve to a proven non-mutating sealed live-WAL reader design or an
-explicit fail-closed limitation. Only then may M0 production
-migration/backup and W1 writer wiring be reconsidered. Never silently
-migrate live projects, turn on trace export, or expand Worker/provider
-authority.
+**Current priority (2026-10-19): R0 feasibility DECISION first.** Scope a narrowly falsifiable test-only review of native active-WAL source nonmutation (option A), truly coherent atomic/cooperative copy (option B), or explicit unsupported/fail-closed (option C), on disposable fixtures. This is a feasibility decision, not a working R1 Reader. See [rebaseline decision ledger](M6_0_REBASELINE_2026_10_19.md).
+
+Only if the chosen proof-bearing product route justifies further investment, continue the W0 actual writer participant inventory, cross-process fencing and durable Run/event/Seal transaction specification. M0 operational migration needs a *separate* independently enforced offline-exclusion and crash/recovery review. R1 implementation follows the R0 decision and, for ADR-040 Path A, a real W1 Seal. No new M0y/M0z-style journal layer solely to move the last cleanup gap. Never silently migrate live projects, turn on trace export, or expand Worker/provider authority.
 
 ## Non-goals
 
