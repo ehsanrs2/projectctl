@@ -74,6 +74,19 @@ assert cfg.scope_governance.mode == "required"
 shown = json.loads((output/"run-before.json").read_text())["run"]
 store = RunStore(root)
 record = store.get(run_id)
+# No second active run/claimant; preserve the three known unsuccessful attempts.
+all_runs = {x.run_id: x for x in store.list(limit=100)}
+expected_prior = {
+    "run-88361fe2431e4e299a0f4b9c506c50fa": ("failed", "quota_exhausted"),
+    "run-10e606ca532c403487131ea092db232c": ("needs_decision", "capability_changed"),
+    "run-b5785a14e0ab4961a970c43b0dc2b303": ("failed", "worker_error"),
+}
+assert set(all_runs) == {run_id, *expected_prior}, "Unexpected additional run; stop"
+for past_id, (status, reason) in expected_prior.items():
+    past = all_runs[past_id]
+    assert past.status.value == status and past.terminal_reason.value == reason
+    assert past.lease_owner is None
+assert all_runs[run_id].status.value == "ready_to_integrate"
 assert shown["run_id"] == record.run_id == run_id
 assert shown["status"] == record.status.value == "ready_to_integrate"
 assert shown["base_commit"] == record.base_commit == base
