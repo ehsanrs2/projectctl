@@ -174,7 +174,7 @@ class LabRecovery:
                         "COMMIT_VISIBLE_ACK_UNKNOWN",
                         "COMMIT_VISIBLE_ACK_CLAIMED",
                     ))
-                or any((
+                or any(flag is not False for flag in (
                     self.safe_to_retry_without_external_reconciliation,
                     self.issuer_authenticated, self.source_origin_proven,
                     self.cross_store_epoch_proven, self.commit_durable_proven,
