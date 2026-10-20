@@ -156,6 +156,32 @@ class D2DirectHarnessTests(TestCase):
             self.assertTrue(result["single_completed_turn"])
             self.assertEqual(result["usage"], "unknown")
 
+    def test_git_read_head_matches_frozen_sha_without_terminal_newline(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            def g(*args):
+                return subprocess.run(["git", "-C", str(root), *args],
+                                      capture_output=True, text=True, check=True).stdout
+            g("init", "-q")
+            (root/"source.py").write_text("x = 1\n", encoding="utf-8")
+            g("add", "source.py")
+            g("-c", "user.name=D2 Offline Test",
+              "-c", "user.email=offline@invalid.example",
+              "-c", "commit.gpgsign=false", "commit", "-qm", "baseline")
+            raw_head = g("rev-parse", "HEAD")
+            self.assertTrue(raw_head.endswith("\n"))
+            self.assertEqual(h.git(root, "rev-parse", "HEAD"), raw_head.rstrip("\n"))
+            self.assertEqual(h.git(root, "status", "--porcelain=v1",
+                                   "--untracked-files=all"), "")
+
+    def test_git_read_preserves_leading_porcelain_status_column(self):
+        with patch.object(h, "run_read", return_value=" M source.py\n"):
+            self.assertEqual(h.git(Path("/tmp/unused"), "status", "--porcelain=v1"),
+                             " M source.py")
+        with patch.object(h, "run_read", return_value="?? new.py\n\n"):
+            self.assertEqual(h.git(Path("/tmp/unused"), "status", "--porcelain=v1"),
+                             "?? new.py")
+
     def test_changed_paths_includes_ignored_artifacts(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
