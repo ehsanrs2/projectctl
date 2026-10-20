@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import json
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -113,3 +114,9 @@ def test_cli_root_refused_before_stdin_read(monkeypatch, capsys):
     monkeypatch.setattr(p3d.os, "geteuid", lambda: 0)
     assert p3d.main() == 2
     assert capsys.readouterr().err.strip() == "P3D_PREFLIGHT_REFUSED"
+
+def test_checked_in_template_is_exact_unfilled_no_go_request():
+    root = Path(__file__).resolve().parents[1]
+    raw = (root / "docs/architecture/p3/p3d-disposable-trial-request.template.json").read_bytes()
+    assert p3d.parse_request(raw) == request()
+    assert p3d.review_request(p3d.parse_request(raw))["decision"] == "P3D_NO_GO_TRIAL_NOT_AUTHORIZED"
