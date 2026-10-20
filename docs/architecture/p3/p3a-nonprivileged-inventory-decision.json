@@ -1,0 +1,26 @@
+{
+  "document_kind": "projectctl.m6_0_p3a_nonprivileged_inventory_decision",
+  "document_version": 1,
+  "evidence_baseline_main": "5fbf1decc4b469cf28fcd98074b19b011a13928f",
+  "evidence_baseline_merged_pr": 106,
+  "classification": "RESEARCH_ONLY_NONAUTHORITATIVE",
+  "decision": "P3A_INVENTORY_ONLY_NO_GO",
+  "implementation": "BOUNDED_READ_ONLY_LOCAL_METADATA_OBSERVATION",
+  "real_debian_observation_collected_in_pr": false,
+  "two_principal_adversarial_tests_executed": false,
+  "independent_custodian_proven": false,
+  "durable_commit_or_antirollback_proven": false,
+  "source_epoch_and_issuer_proven": false,
+  "permissions": {
+    "root_or_sudo": false,
+    "create_identity_or_service": false,
+    "modify_mount_or_access_controls": false,
+    "read_real_project_db_or_wal": false,
+    "enable_migration_v3": false,
+    "enable_w1_r1_collector_or_cli": false,
+    "expand_worker_task_authority": false,
+    "approve_disposable_trial": false
+  },
+  "next_step": "HUMAN_REVIEW_SANITIZED_NONPRIVILEGED_DEBIAN_OUTPUT",
+  "automatic_go": false
+}
