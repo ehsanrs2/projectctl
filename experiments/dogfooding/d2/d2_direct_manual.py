@@ -207,6 +207,7 @@ def execute(prompt: str, preflight_result: dict) -> dict:
     admission = validate_admission(quota, next_decision, now=datetime.now(timezone.utc))
     if OBS.exists() or OBS.is_symlink():
         raise RuntimeError("Evidence path appeared: refusing duplicate paid execution")
+    os.umask(0o077)  # restrict prompt, provider usage and raw JSONL evidence
     OBS.mkdir(mode=0o700)
     (OBS/"direct-prompt.txt").write_text(prompt, encoding="utf-8")
     (OBS/"preflight.json").write_text(json.dumps(preflight_result,indent=2)+"\n")
