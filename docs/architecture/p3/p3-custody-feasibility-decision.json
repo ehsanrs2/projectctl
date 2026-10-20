@@ -1,0 +1,65 @@
+{
+  "document_kind": "projectctl.m6_0_p3_custody_feasibility_research_decision",
+  "document_version": 1,
+  "effective_date": "2026-10-20",
+  "evidence_baseline_main": "012e993fbf2c1ef797e974508953566e535c3b48",
+  "evidence_baseline_merged_pr": 105,
+  "classification": "RESEARCH_DESIGN_ONLY",
+  "current_decision": "P3_NO_GO_DEPLOYMENT_UNVERIFIED",
+  "preferred_candidate": "P3-C2_STATIC_INDEPENDENT_CUSTODIAN_CONDITIONAL",
+  "preferred_candidate_approved_for_implementation": false,
+  "other_choices": {
+    "same_uid_private_dir": "REJECT_AS_TRUSTED",
+    "same_uid_service_or_user_sandbox": "REJECT_AS_TRUSTED",
+    "dynamic_uid_service": "ALTERNATIVE_UNVERIFIED",
+    "fsverity_immutable_readonly_only": "ADDITIVE_UNSUFFICIENT",
+    "external_immutable_store": "UNAPPROVED_ALTERNATIVE",
+    "manual_offline_custody": "UNAPPROVED_ALTERNATIVE"
+  },
+  "observed_implementation": {
+    "self_hashed_synthetic_fixture": true,
+    "synthetic_issuer_replay_fault_models": true,
+    "authenticated_producer": false,
+    "real_cross_store_epoch": false,
+    "independent_custody_credential": false,
+    "separate_custody_state": false,
+    "actual_durable_commit": false,
+    "restart_powerloss_attestation": false,
+    "authoritative_replay_high_water": false
+  },
+  "proof_gates": {
+    "P0_source_admission": "UNVERIFIED",
+    "P1_cross_store_epoch": "UNVERIFIED",
+    "P2_issuer_identity_and_authorization": "UNVERIFIED",
+    "P3_credential_storage_durability_and_replay": "UNVERIFIED",
+    "P4_consumer_export": "NO_GO"
+  },
+  "required_trial_evidence": [
+    "target_disposable_os_fs_mount_and_idmap_inventory",
+    "owner_approved_privileged_scope_and_rollback",
+    "independent_static_uid_and_admin_owned_service_code_paths",
+    "legacy_writer_gid_fd_and_startup_bypass_denial",
+    "no_clobber_and_alias_replacement_denial",
+    "one_authoritative_durable_receipt_checkpoint_commit",
+    "trusted_source_epoch_and_issuer_admission_before_real_data",
+    "fsync_directory_and_restart_readback",
+    "simultaneous_old_checkpoint_anchor_rollback_denial_or_explicit_TCB_scope",
+    "lost_ack_revocation_retention_privacy_and_terminal_cleanup_witness"
+  ],
+  "current_permissions": {
+    "root_or_sudo_trials": false,
+    "create_service_or_identity": false,
+    "install_systemd_or_apparmor": false,
+    "change_mount_or_kernel_policy": false,
+    "create_signing_keys": false,
+    "touch_real_project_db": false,
+    "operational_v2_v3_migration": false,
+    "enable_trusted_W1_seal": false,
+    "enable_live_WAL_R1_reader": false,
+    "enable_collector_or_public_cli": false,
+    "expand_task_or_worker_authority": false,
+    "interpret_synthetic_hash_as_provenance": false
+  },
+  "safe_next_step": "HUMAN_REVIEW_OF_NONPRIVILEGED_DISPOSABLE_TOPOLOGY_INVENTORY_ONLY",
+  "no_automatic_go": true
+}
