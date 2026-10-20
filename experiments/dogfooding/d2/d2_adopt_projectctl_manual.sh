@@ -54,7 +54,7 @@ export PATH="$VENV/bin:$PATH"
 [[ "$(sha256sum "$DIRECT/SPEC.md" | cut -d' ' -f1)" == "$SPEC_SHA" ]]
 [[ ! -e "$OUT" && ! -L "$OUT" ]]
 
-"$VENV/bin/python" - "$OFFLINE" "$CTL" "$DIRECT" "$BASE" <<'PY'
+"$VENV/bin/python" - "$OFFLINE" "$CTL" "$DIRECT" "$BASE" "$BEADS_EVIDENCE/gitignore-after.txt" "$RESEARCH" <<'PY'
 import hashlib,json,subprocess,sys
 from pathlib import Path
 f,ctl,direct,base=Path(sys.argv[1]),Path(sys.argv[2]),Path(sys.argv[3]),sys.argv[4]
@@ -70,31 +70,27 @@ for name,expected in m["all_files_sha256"].items():
         assert file.is_file() and not file.is_symlink()
         assert hashlib.sha256(file.read_bytes()).hexdigest()==expected, name
 
+# Confirm original tracked ignore blob is identical to frozen 11-file baseline.
 base_ignore=subprocess.run(["git","-C",str(ctl),"show","HEAD:.gitignore"],
-   check=True,capture_output=True,text=True).stdout
-current_ignore=(ctl/".gitignore").read_text(encoding="utf-8")
-original=base_ignore.splitlines()
-current=current_ignore.splitlines()
-old=iter(current)
-assert all(any(line==next_line for next_line in old) for line in original), \
-    "Original ignore rules changed or were reordered"
-from collections import Counter
-added=list((Counter(current)-Counter(original)).elements())
-# Fail closed if Beads introduced anything except known local-only ignore rules
-# or comments/blank lines. Top-level .beads/ is forbidden: would hide evidence.
-allowed={
- ".dolt/", ".beads/proxieddb/", ".beads/.dolt/",
- "**/RECOVERY*.md", "**/SESSION*.md",
-}
-rules=[x.strip() for x in added if x.strip() and not x.lstrip().startswith("#")]
-assert len(rules)==len(set(rules)), "Duplicate added rules"
-assert set(rules).issubset(allowed), f"Unexpected Beads .gitignore entries: {rules}"
-assert ".dolt/" in rules, "Missing required local Dolt ignore rule"
-assert ".beads/" not in rules and ".projectctl/" not in rules
-assert not (ctl/".gitignore").is_symlink()
-print(json.dumps({"decision":"D2_BEADS_GITIGNORE_REVIEW_PASS",
- "baseline_rules":original,"added_rules":rules,
- "original_tracked_lines_preserved":True},indent=2))
+    check=True,capture_output=True,text=True).stdout
+assert hashlib.sha256(base_ignore.encode("utf-8")).hexdigest() == m["all_files_sha256"][".gitignore"], "Original .gitignore SHA drift"
+snapshot=Path(sys.argv[5])
+assert snapshot.is_file() and not snapshot.is_symlink(), "Missing Beads setup .gitignore snapshot"
+current_path=ctl/".gitignore"
+assert current_path.is_file() and not current_path.is_symlink(), "Invalid active .gitignore"
+current_ignore=current_path.read_text(encoding="utf-8")
+frozen_ignore=snapshot.read_text(encoding="utf-8")
+sys.path.insert(0,str(Path(sys.argv[6]).resolve()))
+from experiments.dogfooding.d2.gitignore_review import review_beads_gitignore, review_ignored_paths
+report=review_beads_gitignore(base_ignore,current_ignore,frozen_ignore)
+# Git ignore patterns can hide unexpected application artifacts from status/diff.
+# Fail closed if any such hidden artifact currently exists outside local Beads data.
+ignored=subprocess.run(["git","-C",str(ctl),"ls-files","--others","--ignored",
+                       "--exclude-standard","-z"],
+                       check=True,capture_output=True).stdout
+review_ignored_paths([x.decode("utf-8") for x in ignored.split(b"\\0") if x])
+report["ignored_application_paths_checked"]=True
+print(json.dumps(report,indent=2))
 PY
 
 bd -C "$CTL" show "$TASK" --json | "$VENV/bin/python" -c '
