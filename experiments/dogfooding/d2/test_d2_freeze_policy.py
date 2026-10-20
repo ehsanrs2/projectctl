@@ -8,7 +8,8 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch, SimpleNamespace
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import yaml
 
