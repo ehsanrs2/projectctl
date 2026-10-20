@@ -332,7 +332,7 @@ def build(destination: Path, *, output_root: Path) -> dict[str, str]:
         "GIT_AUTHOR_DATE": "2000-01-01T00:00:00+00:00",
         "GIT_COMMITTER_DATE": "2000-01-01T00:00:00+00:00",
     })
-    git("commit", "--quiet", "-m", "D2 frozen baseline", env=fixed)
+    git("-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "D2 frozen baseline", env=fixed)
     hashes = {
         "baseline_commit": git("rev-parse", "HEAD"),
         "spec_sha256": hashlib.sha256((destination / "SPEC.md").read_bytes()).hexdigest(),
