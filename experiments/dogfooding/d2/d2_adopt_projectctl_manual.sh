@@ -81,14 +81,17 @@ assert current_path.is_file() and not current_path.is_symlink(), "Invalid active
 current_ignore=current_path.read_text(encoding="utf-8")
 frozen_ignore=snapshot.read_text(encoding="utf-8")
 sys.path.insert(0,str(Path(sys.argv[6]).resolve()))
-from experiments.dogfooding.d2.gitignore_review import review_beads_gitignore, review_ignored_paths
+from experiments.dogfooding.d2.gitignore_review import (review_beads_gitignore, review_ignored_paths, validate_root_beads_gate_lock)
 report=review_beads_gitignore(base_ignore,current_ignore,frozen_ignore)
 # Git ignore patterns can hide unexpected application artifacts from status/diff.
 # Fail closed if any such hidden artifact currently exists outside local Beads data.
 ignored=subprocess.run(["git","-C",str(ctl),"ls-files","--others","--ignored",
                        "--exclude-standard","-z"],
                        check=True,capture_output=True).stdout
-review_ignored_paths([x.decode("utf-8") for x in ignored.split(b"\0") if x])
+ignored_paths=[x.decode("utf-8") for x in ignored.split(b"\\0") if x]
+review_ignored_paths(ignored_paths)
+validate_root_beads_gate_lock(ctl, ignored_paths)
+report["root_beads_gate_lock_observed"]=".beads.gate.lock" in ignored_paths
 report["ignored_application_paths_checked"]=True
 print(json.dumps(report,indent=2))
 PY
