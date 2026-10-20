@@ -55,7 +55,7 @@ def run(argv: list[str], *, cwd: Path | None = None, check: bool = True) -> subp
 
 
 def git(root: Path, *args: str) -> str:
-    return run(["git", "-C", str(root), *args]).stdout.strip()
+    return run(["git", "-C", str(root), *args]).stdout.rstrip("\n")  # preserve leading porcelain status marker
 
 
 def sha(path: Path) -> str:
