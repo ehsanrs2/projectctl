@@ -217,7 +217,7 @@ def test_stale_or_forged_preparation_rejected_by_in_memory_cas(wrong):
         )
     elif wrong == "wrong_revision":
         bad = replace(
-            intent, after=replace(intent.after, revision=2),
+            intent, after=replace(intent.after, last_sequence=8),
         )
     elif wrong == "wrong_sequence":
         bad = replace(intent, issue_sequence=8)
