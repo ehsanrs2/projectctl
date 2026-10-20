@@ -88,7 +88,7 @@ report=review_beads_gitignore(base_ignore,current_ignore,frozen_ignore)
 ignored=subprocess.run(["git","-C",str(ctl),"ls-files","--others","--ignored",
                        "--exclude-standard","-z"],
                        check=True,capture_output=True).stdout
-review_ignored_paths([x.decode("utf-8") for x in ignored.split(b"\\0") if x])
+review_ignored_paths([x.decode("utf-8") for x in ignored.split(b"\0") if x])
 report["ignored_application_paths_checked"]=True
 print(json.dumps(report,indent=2))
 PY
