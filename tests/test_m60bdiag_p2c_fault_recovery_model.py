@@ -398,7 +398,8 @@ def test_no_status_can_claim_safety_or_cryptographic_proof(phase):
     "authorizes_writer_seal", "authorizes_migration",
 ])
 def test_result_invariant_prevents_any_authority_promotions(field):
-    example = restart_lab(*_restart_args())
+    old, kwargs_for_restart = _restart_args()
+    example = restart_lab(old, **kwargs_for_restart)
     kwargs = example.__dict__.copy()
     kwargs[field] = True
     with pytest.raises(ValueError, match="P2C_AUTHORITY_CLAIM_FORBIDDEN"):
