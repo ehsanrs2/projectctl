@@ -1,0 +1,227 @@
+{
+  "document_kind": "projectctl.m6_0_p3c_disposable_dual_principal_topology_selection",
+  "document_version": 1,
+  "effective_date": "2026-10-20",
+  "classification": "DESIGN_ONLY_NONAUTHORIZING",
+  "evidence_baseline_main": "442e73d2a9dddfa4ca2ef77de98a58f73506f8b8",
+  "evidence_baseline_merged_pr": 108,
+  "current_decision": "P3C_NO_GO_TO_EXECUTE_TRIAL",
+  "selected_conditional_pattern": "P3C_T1_DISPOSABLE_VM_STATIC_DUAL_PRINCIPAL_WITH_TRUSTED_ADMIN",
+  "architecture_only_selected": true,
+  "target_host_or_vm_selected": false,
+  "target_disposable_disk_or_filesystem_selected": false,
+  "custodian_storage_path_selected": false,
+  "real_uid_gid_or_service_provisioned": false,
+  "independent_admin_or_observer_identified": false,
+  "root_and_host_rollback_scope": "ROOT_AND_HYPERVISOR_IN_TCB_NOT_ROLLBACK_RESISTANT",
+  "hostile_host_rollback_protection_claimed": false,
+  "source_inputs": "SYNTHETIC_ONLY_IN_FUTURE_AUTHORIZED_TRIAL",
+  "p3a_tmpfs_observation": "REJECTED_AS_DURABLE_CUSTODY_TARGET",
+  "current_evidence": {
+    "independent_code_and_credential_denial": "UNVERIFIED",
+    "legacy_v2_writer_gid_fd_start_bypass_denial": "UNVERIFIED",
+    "durable_nonvolatile_target": "UNVERIFIED",
+    "one_authoritative_receipt_high_water_commit": "UNVERIFIED",
+    "no_clobber_and_restart_recovery": "UNVERIFIED",
+    "real_authenticated_issuer": "UNVERIFIED",
+    "p0_p1_same_epoch_source": "UNVERIFIED",
+    "privacy_and_export_gate": "NO_GO"
+  },
+  "future_case_coverage": [
+    {
+      "id": "P3-F01",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F02",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F03",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F04",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F05",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F06",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F07",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F08",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F09",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F10",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F11",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F12",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F13",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F14",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F15",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F16",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F17",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F18",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F19",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F20",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F21",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F22",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F23",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F24",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F25",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F26",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F27",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    },
+    {
+      "id": "P3-F28",
+      "status": "NOT_RUN",
+      "independent_witness": "REQUIRED",
+      "accepted": false
+    }
+  ],
+  "owner_approval_package": {
+    "disposable_vm_exact_identity": "MISSING",
+    "independent_administrator_and_observer": "MISSING",
+    "approved_static_principals_and_groups": "MISSING",
+    "filesystem_path_and_mount_evidence": "MISSING",
+    "one_durable_commit_protocol_review": "MISSING",
+    "command_by_command_privileged_scope": "MISSING",
+    "reboot_fault_and_rollback_protocol": "MISSING",
+    "retention_privacy_and_abort_plan": "MISSING",
+    "independent_security_review": "MISSING"
+  },
+  "current_permissions": {
+    "approve_or_execute_disposable_trial": false,
+    "use_root_or_sudo": false,
+    "create_static_custodian_or_other_users": false,
+    "create_service_or_change_systemd": false,
+    "modify_mount_fs_kernel_or_apparmor": false,
+    "create_keys_or_sign_real_receipts": false,
+    "access_real_project_db_or_wal": false,
+    "enable_v3_migration": false,
+    "enable_w1_or_r1": false,
+    "enable_public_collector_cli": false,
+    "expand_worker_or_task_authority": false,
+    "authorize_production_custody": false
+  },
+  "approval_automatically_granted": false,
+  "next_step": "SEPARATE_OWNER_APPROVED_EXACT_DISPOSABLE_TOPOLOGY_AND_PRIVILEGED_COMMAND_PLAN"
+}
