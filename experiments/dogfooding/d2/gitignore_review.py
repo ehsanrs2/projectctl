@@ -7,6 +7,7 @@ check ignored files, since broad *.db and *.gate.lock* can hide unrelated writes
 from __future__ import annotations
 
 from collections import Counter
+from pathlib import Path
 
 BEADS_1_3_1_ADDITIONS = frozenset({
     ".dolt/",
@@ -78,4 +79,15 @@ def review_ignored_paths(paths: list[str]) -> None:
         raise ValueError(
             "Ignored paths outside Beads operational metadata: "
             + repr(sorted(unexpected))
+        )
+
+
+def validate_root_beads_gate_lock(root: Path, ignored_paths: list[str]) -> None:
+    """Ensure the sole ignored root gate lock is a local regular file, not a link."""
+    if ".beads.gate.lock" not in ignored_paths:
+        return
+    path = root / ".beads.gate.lock"
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(
+            "Observed root Beads gate lock is not a regular non-symlink file"
         )
