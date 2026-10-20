@@ -112,3 +112,7 @@ This is design and security review **only**. No shell scripts, executable exampl
 - [Linux chmod](https://man7.org/linux/man-pages/man1/chmod.1.html): file mode bits are permission state, not proof of independent immutable custody against the file owner.
 
 These references support threat-model assumptions but provide **no evidence** that a source ProjectCTL database, proposed snapshot producer or custodian currently meets P0–P4.
+
+## Follow-up P3 deployment feasibility (2026-10-20; no authority granted)
+
+The [P3 custody deployment feasibility gate](M6_0_P3_TRUSTED_CUSTODY_DEPLOYMENT_FEASIBILITY.md) and its [real-platform falsification matrix](M6_0_P3_TRUSTED_CUSTODY_DEPLOYMENT_MATRIX.md) select only a **conditional research candidate**: an independently administered static custodian identity with separately protected replay-state and package authority. Current P3 decision remains **P3_NO_GO_DEPLOYMENT_UNVERIFIED**. This does not certify a Debian topology, create a principal or authorize any root/systemd/AppArmor/policy, source-snapshot, W1/R1, migration or Collector action.
