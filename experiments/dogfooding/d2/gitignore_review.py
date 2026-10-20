@@ -64,13 +64,14 @@ def review_beads_gitignore(
 
 
 def review_ignored_paths(paths: list[str]) -> None:
-    """Reject silently ignored application files before committing broad rules."""
+    """Reject hidden application files; allow only exact observed Beads metadata paths."""
     unexpected = [
         p for p in paths
         if not (
             p.startswith(".beads/")
             or p.startswith(".dolt/")
             or p == ".beads-credential-key"
+            or p == ".beads.gate.lock"  # observed root-level Beads gate lock only
         )
     ]
     if unexpected:
