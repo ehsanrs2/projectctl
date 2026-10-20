@@ -1,0 +1,43 @@
+{
+  "document_kind": "projectctl.m6_0_p3b_independent_custodian_trial_readiness",
+  "document_version": 1,
+  "effective_date": "2026-10-20",
+  "evidence_baseline_main": "d68a80120f7ba8be6d56bad2465950536ae8d509",
+  "evidence_baseline_merged_pr": 107,
+  "classification": "DESIGN_AND_UNTRUSTED_OFFLINE_REVIEW_ONLY",
+  "decision": "P3B_NO_GO_TRIAL_UNAUTHORIZED",
+  "preferred_custody_candidate": "P3-C2_CONDITIONAL_STATIC_INDEPENDENT_PRINCIPAL",
+  "p3a_operator_observation": {
+    "source": "OPERATOR_SUPPLIED_UNATTESTED_P3A_OUTPUT",
+    "candidate_role": "TMP_OBSERVATION_EXAMPLE_NOT_CUSTODY_TARGET",
+    "mount_class": "VOLATILE_TMPFS_OBSERVED",
+    "shared_writable_sticky_directory": true,
+    "suitable_for_durable_custody": false,
+    "host_identity_or_paths_recorded": false
+  },
+  "evidence_gaps": {
+    "independent_administrator_and_static_principal": "UNVERIFIED",
+    "legacy_writer_group_fd_and_code_provenance_denial": "UNVERIFIED",
+    "nonvolatile_disposable_target_and_mount_semantics": "UNVERIFIED",
+    "no_clobber_and_alias_denials": "UNVERIFIED",
+    "single_durable_commit_and_restart": "UNVERIFIED",
+    "protected_monotonic_high_water": "UNVERIFIED",
+    "source_epoch_and_producer_authorization": "UNVERIFIED",
+    "independent_p3_f01_to_f28_results": "NOT_EXECUTED",
+    "human_owner_trial_scope_approval": "MISSING"
+  },
+  "host_root_and_full_vm_rollback": "IN_TRUSTED_COMPUTING_BASE_UNLESS_SEPARATELY_RESCOPED",
+  "current_permissions": {
+    "approve_disposable_trial": false,
+    "root_or_sudo": false,
+    "provision_custodian_or_identity": false,
+    "install_service_or_modify_mount_policy": false,
+    "modify_real_project_database_or_wal": false,
+    "enable_v3_migration": false,
+    "enable_w1_or_r1": false,
+    "enable_collector_or_public_cli": false,
+    "expand_worker_task_authority": false
+  },
+  "automatic_go": false,
+  "next_step": "SEPARATE_HUMAN_REVIEW_OF_DISPOSABLE_TOPOLOGY_AND_ADMINISTRATIVE_TRUST_BOUNDARY"
+}
