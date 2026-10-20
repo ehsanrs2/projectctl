@@ -88,7 +88,7 @@ report=review_beads_gitignore(base_ignore,current_ignore,frozen_ignore)
 ignored=subprocess.run(["git","-C",str(ctl),"ls-files","--others","--ignored",
                        "--exclude-standard","-z"],
                        check=True,capture_output=True).stdout
-ignored_paths=[x.decode("utf-8") for x in ignored.split(b"\\0") if x]
+ignored_paths=[x.decode("utf-8") for x in ignored.split(b"\0") if x]
 review_ignored_paths(ignored_paths)
 validate_root_beads_gate_lock(ctl, ignored_paths)
 report["root_beads_gate_lock_observed"]=".beads.gate.lock" in ignored_paths
