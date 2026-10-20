@@ -1,7 +1,7 @@
 """No-filesystem, no-provider regression tests for D2 Beads ignore review."""
 import unittest
 
-from experiments.dogfooding.d2.gitignore_review import review_beads_gitignore
+from experiments.dogfooding.d2.gitignore_review import (review_beads_gitignore, review_ignored_paths)
 
 BASE = "__pycache__/\n*.py[cod]\n"
 ADDED = "\n# Beads / Dolt files (added by bd init)\n.dolt/\n*.db\n.beads-credential-key\n.beads/proxieddb/\n*.gate.lock*\n"
@@ -57,6 +57,22 @@ class D2GitignoreReviewTests(unittest.TestCase):
         x = FROZEN + "# additional note\n\n"
         self.assertEqual(review_beads_gitignore(BASE, x, x)["decision"],
                          "D2_BEADS_GITIGNORE_REVIEW_PASS")
+
+    def test_ignored_metadata_paths_allowed(self):
+        review_ignored_paths([".beads/embeddeddolt/abc.db", ".beads/proxieddb/test",
+                              ".dolt/config.json", ".beads-credential-key"])
+
+    def test_broad_db_pattern_must_not_hide_application_file(self):
+        with self.assertRaisesRegex(ValueError, "outside Beads"):
+            review_ignored_paths(["d2events/silent.db"])
+
+    def test_broad_gate_lock_pattern_must_not_hide_application_file(self):
+        with self.assertRaisesRegex(ValueError, "outside Beads"):
+            review_ignored_paths(["out.gate.lock123"])
+
+    def test_other_hidden_sources_are_not_exempt(self):
+        with self.assertRaises(ValueError):
+            review_ignored_paths(["d2events/__pycache__/cli.cpython-310.pyc"])
 
 
 if __name__ == "__main__":
