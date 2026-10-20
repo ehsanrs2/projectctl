@@ -1,8 +1,11 @@
 # M6.0 P3c — Disposable Dual-Principal Trial Topology Selection
 
-**Date:** 2026-10-20  
-**Classification:** DESIGN_ONLY / HUMAN_REVIEW_REQUIRED / NONAUTHORIZING  
-**Decision:** `P3C_NO_GO_TO_EXECUTE_TRIAL`  
+**Date:** 2026-10-20
+
+**Classification:** DESIGN_ONLY / HUMAN_REVIEW_REQUIRED / NONAUTHORIZING
+
+**Decision:** `P3C_NO_GO_TO_EXECUTE_TRIAL`
+
 **Baseline:** merged P3b PR #108, `main@442e73d2a9dddfa4ca2ef77de98a58f73506f8b8`.
 
 This is a **selection of a conditional trial topology**, NOT an existing provisioned machine, verified filesystem, active custodian or permission to use root. The nonauthorizing P3 and P3a/P3b conclusions remain intact. ADR-039 Trace stays strictly local, read-only and nonauthoritative; ADR-040 Path A remains design-only; R0b C continues to refuse active v2 WAL reading. P0–P4 operational, v3 migration, trusted W1, R1, Collector/CLI and Worker/Task authority remain NO-GO.

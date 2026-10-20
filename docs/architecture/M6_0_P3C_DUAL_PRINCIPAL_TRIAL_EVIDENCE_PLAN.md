@@ -1,7 +1,9 @@
 # M6.0 P3c — Dual-principal experiment evidence and falsification plan
 
-**Classification:** FUTURE DISPOSABLE TRIAL PLAN ONLY — **NO SCENARIO EXECUTED OR PASSED**.  
-**Baseline:** merged P3b PR #108, `main@442e73d2a9dddfa4ca2ef77de98a58f73506f8b8`.  
+**Classification:** FUTURE DISPOSABLE TRIAL PLAN ONLY — **NO SCENARIO EXECUTED OR PASSED**.
+
+**Baseline:** merged P3b PR #108, `main@442e73d2a9dddfa4ca2ef77de98a58f73506f8b8`.
+
 **Selected candidate:** conditional P3-C2 / T1 single throwaway VM, separately administered static Custodian identity, independent ordinary writer and controlled persistent storage. The actual VM, FS, principals, privileges, observer, keys and runtime are NOT selected or provisioned.
 
 This matrix refines, but neither replaces nor weakens, the 28 scenarios in [P3-F01–F28](M6_0_P3_TRUSTED_CUSTODY_DEPLOYMENT_MATRIX.md). Every status is **NOT_RUN**, every absent/ambiguous witness results in **NO_GO**, and no P0–P4, W1/R1, v3, Collector/CLI or Worker/Task authority is granted.
