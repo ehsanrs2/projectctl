@@ -151,7 +151,9 @@ def audit() -> dict:
         ".gitignore","SPEC.md","POLICY.md","tests/**",
         "d2events/__init__.py","projectctl.scope.yaml","projectctl.verification.yaml"}
     assert protected.issubset(set(policy.protected_paths))
-    resolution = json.loads(cmd(["projectctl","verification","profile",
+    projectctl_bin = Path.home()/".local/share/projectctl-dogfood-d0/venv/bin/projectctl"
+    assert projectctl_bin.is_file(), "Pinned D0 venv ProjectCTL CLI missing"
+    resolution = json.loads(cmd([str(projectctl_bin),"verification","profile",
                                  "--project",str(ctl),"--json"]))
     assert resolution["source"] == "projectctl.verification.yaml"
     assert resolution["profile_digest"] == PROFILE_DIGEST
