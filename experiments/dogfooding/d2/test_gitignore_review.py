@@ -1,7 +1,9 @@
 """No-filesystem, no-provider regression tests for D2 Beads ignore review."""
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from experiments.dogfooding.d2.gitignore_review import (review_beads_gitignore, review_ignored_paths)
+from experiments.dogfooding.d2.gitignore_review import (review_beads_gitignore, review_ignored_paths, validate_root_beads_gate_lock)
 
 BASE = "__pycache__/\n*.py[cod]\n"
 ADDED = "\n# Beads / Dolt files (added by bd init)\n.dolt/\n*.db\n.beads-credential-key\n.beads/proxieddb/\n*.gate.lock*\n"
@@ -77,6 +79,35 @@ class D2GitignoreReviewTests(unittest.TestCase):
     def test_other_root_gate_lock_unrelated_to_beads_still_rejected(self):
         with self.assertRaisesRegex(ValueError, "outside Beads"):
             review_ignored_paths(["project.gate.lock"])
+
+    def test_root_gate_lock_regular_file_accepted(self):
+        with TemporaryDirectory() as folder:
+            path = Path(folder) / ".beads.gate.lock"
+            path.write_text("", encoding="utf-8")
+            validate_root_beads_gate_lock(Path(folder), [".beads.gate.lock"])
+
+    def test_root_gate_lock_absent_path_rejected_if_git_listed(self):
+        with TemporaryDirectory() as folder:
+            with self.assertRaisesRegex(ValueError, "not a regular"):
+                validate_root_beads_gate_lock(Path(folder), [".beads.gate.lock"])
+
+    def test_root_gate_lock_directory_rejected(self):
+        with TemporaryDirectory() as folder:
+            (Path(folder) / ".beads.gate.lock").mkdir()
+            with self.assertRaisesRegex(ValueError, "not a regular"):
+                validate_root_beads_gate_lock(Path(folder), [".beads.gate.lock"])
+
+    def test_root_gate_lock_symlink_rejected(self):
+        with TemporaryDirectory() as folder:
+            actual = Path(folder) / "target.txt"
+            actual.write_text("", encoding="utf-8")
+            (Path(folder) / ".beads.gate.lock").symlink_to(actual)
+            with self.assertRaisesRegex(ValueError, "not a regular"):
+                validate_root_beads_gate_lock(Path(folder), [".beads.gate.lock"])
+
+    def test_no_root_lock_observed_requires_no_lock(self):
+        with TemporaryDirectory() as folder:
+            validate_root_beads_gate_lock(Path(folder), [])
 
     def test_broad_db_pattern_must_not_hide_application_file(self):
         with self.assertRaisesRegex(ValueError, "outside Beads"):
