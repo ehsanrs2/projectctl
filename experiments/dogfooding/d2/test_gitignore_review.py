@@ -62,6 +62,22 @@ class D2GitignoreReviewTests(unittest.TestCase):
         review_ignored_paths([".beads/embeddeddolt/abc.db", ".beads/proxieddb/test",
                               ".dolt/config.json", ".beads-credential-key"])
 
+    def test_observed_root_beads_gate_lock_allowed(self):
+        review_ignored_paths([".beads.gate.lock"])
+        review_ignored_paths([".beads.gate.lock", ".beads/embeddeddolt/abc.db"])
+
+    def test_similar_root_gate_lock_names_still_rejected(self):
+        for p in (".beads.gate.lock.backup", ".beads.gate.lock2",
+                  "other.beads.gate.lock", ".BEADS.gate.lock",
+                  ".beads.gate.lock/subfile", "nested/.beads.gate.lock"):
+            with self.subTest(path=p):
+                with self.assertRaisesRegex(ValueError, "outside Beads"):
+                    review_ignored_paths([p])
+
+    def test_other_root_gate_lock_unrelated_to_beads_still_rejected(self):
+        with self.assertRaisesRegex(ValueError, "outside Beads"):
+            review_ignored_paths(["project.gate.lock"])
+
     def test_broad_db_pattern_must_not_hide_application_file(self):
         with self.assertRaisesRegex(ValueError, "outside Beads"):
             review_ignored_paths(["d2events/silent.db"])
