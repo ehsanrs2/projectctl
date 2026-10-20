@@ -46,7 +46,9 @@ def run_read(argv: list[str], *, timeout: int = 90) -> str:
 
 
 def git(repo: Path, *args: str) -> str:
-    return run_read(["git", "-C", str(repo), *args])
+    # Preserve leading Git porcelain status markers (e.g. " M"), but
+    # remove command-output terminal newlines before SHA comparisons.
+    return run_read(["git", "-C", str(repo), *args]).rstrip("\n")
 
 
 def sha(path: Path) -> str:
