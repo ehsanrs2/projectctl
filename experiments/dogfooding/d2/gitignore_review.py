@@ -61,3 +61,20 @@ def review_beads_gitignore(
             BROAD_ROOT_PATTERNS.intersection(rules)
         ),
     }
+
+
+def review_ignored_paths(paths: list[str]) -> None:
+    """Reject silently ignored application files before committing broad rules."""
+    unexpected = [
+        p for p in paths
+        if not (
+            p.startswith(".beads/")
+            or p.startswith(".dolt/")
+            or p == ".beads-credential-key"
+        )
+    ]
+    if unexpected:
+        raise ValueError(
+            "Ignored paths outside Beads operational metadata: "
+            + repr(sorted(unexpected))
+        )
