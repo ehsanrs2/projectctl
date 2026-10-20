@@ -97,7 +97,7 @@ if not isinstance(item,dict) or "id" not in item:
     raise ValueError("Task create returned an unknown JSON structure")
 assert re.fullmatch(r"d2ctl-[a-z0-9]+",item["id"])
 if item.get("description") is not None:
-    assert item["description"]==Path(sys.argv[2]).read_text()
+    assert item["description"].rstrip("\n")==Path(sys.argv[2]).read_text().rstrip("\n")
 assert item.get("status")=="open" and item.get("issue_type",item.get("type")) in ("task",None)
 Path(sys.argv[3]).write_text(item["id"]+"\n")
 print("ONE_D2_TASK_CREATED:",item["id"])
@@ -120,7 +120,7 @@ def items(data):
 task=items(json.loads(Path(sys.argv[1]).read_text()))
 ready=items(json.loads(Path(sys.argv[2]).read_text()))
 assert len(task)==1 and task[0]["id"]==sys.argv[4]
-assert task[0]["description"]==Path(sys.argv[3]).read_text()
+assert task[0]["description"].rstrip("\n")==Path(sys.argv[3]).read_text().rstrip("\n")
 assert task[0]["status"]=="open" and not task[0].get("assignee")
 assert len(ready)==1 and ready[0]["id"]==sys.argv[4]
 print("D2_SOLE_BEADS_TASK_READY_UNCLAIMED")
