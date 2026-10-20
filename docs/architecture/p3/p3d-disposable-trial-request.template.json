@@ -1,0 +1,153 @@
+{
+  "schema_kind": "projectctl.m6_0.p3d.disposable_trial_request",
+  "schema_version": 1,
+  "classification": "UNTRUSTED_OWNER_REQUEST_NOT_APPROVAL",
+  "decision_claim": "NO_GO_REQUEST_ONLY",
+  "selected_pattern": "P3C_T1_DISPOSABLE_VM_STATIC_DUAL_PRINCIPAL_WITH_TRUSTED_ADMIN",
+  "scope_claims": {
+    "uses_only_disposable_guest": false,
+    "uses_only_synthetic_data": false,
+    "separates_administrator_from_project_writer": false,
+    "treats_host_and_guest_root_as_tcb": false,
+    "excludes_full_vm_rollback_resistance_claim": false
+  },
+  "evidence_claims": {
+    "exact_disposable_vm_isolation_and_reset": "MISSING",
+    "independent_administrator_and_observer": "MISSING",
+    "static_principals_groups_and_no_sudo_overlap": "MISSING",
+    "durable_disk_mount_and_custody_ancestry": "MISSING",
+    "admin_owned_code_import_and_launcher_origin": "MISSING",
+    "old_writer_gid_fd_alias_and_service_denial_plan": "MISSING",
+    "single_commit_high_water_and_no_clobber_protocol": "MISSING",
+    "crash_reboot_ack_loss_and_cleanup_protocol": "MISSING",
+    "synthetic_only_privacy_retention_and_abort": "MISSING",
+    "independent_security_and_owner_review": "MISSING"
+  },
+  "prohibited_actions": {
+    "touch_real_project_db_or_wal": false,
+    "use_privileged_command_from_this_review": false,
+    "provision_identity_or_service_from_this_review": false,
+    "modify_mount_or_host_from_this_review": false,
+    "create_signing_key_from_this_review": false,
+    "enable_v3_w1_r1_collector_cli": false,
+    "expand_worker_task_authority": false,
+    "authorize_any_disposable_trial": false,
+    "authorize_production_custody": false
+  },
+  "cases": [
+    {
+      "id": "P3-F01",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F02",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F03",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F04",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F05",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F06",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F07",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F08",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F09",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F10",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F11",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F12",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F13",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F14",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F15",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F16",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F17",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F18",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F19",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F20",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F21",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F22",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F23",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F24",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F25",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F26",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F27",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "P3-F28",
+      "status": "NOT_RUN"
+    }
+  ],
+  "owner_authorization": false,
+  "reviewer_authorization": false
+}
