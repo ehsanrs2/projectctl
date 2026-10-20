@@ -72,7 +72,7 @@ All execution is local, network disabled, no shell-based external services.
 Independent acceptance: python3 -B -m unittest discover -s tests -p 'test_*.py' -v
 """
 
-PARSER_TESTS = dedent(r'''\
+PARSER_TESTS = dedent(r'''
 import json
 import unittest
 from d2events.parse import parse_events
@@ -166,9 +166,9 @@ class ParserTests(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             parse_events([raw])
         self.assertNotIn("sensitive-value", str(ctx.exception))
-''')
+''').lstrip("\n")
 
-REPORT_TESTS = dedent(r'''\
+REPORT_TESTS = dedent(r'''
 import unittest
 from d2events.parse import parse_events
 from d2events.report import build_report
@@ -208,9 +208,9 @@ class ReportTests(unittest.TestCase):
             event("e2","A","2026-01-02T00:00:00Z","purchase"),
             event("e3","B","2026-01-03T00:00:00Z","logout"))
         self.assertEqual(build_report(parse_events(rows)),build_report(parse_events(rows[::-1])))
-''')
+''').lstrip("\n")
 
-CLI_TESTS = dedent(r'''\
+CLI_TESTS = dedent(r'''
 import json
 from pathlib import Path
 import subprocess
@@ -274,7 +274,7 @@ class CLITests(unittest.TestCase):
     def test_wrong_arguments_exit_two(self):
         self.assertEqual(self.run_cli().returncode,2)
         self.assertEqual(self.run_cli("one","two").returncode,2)
-''')
+''').lstrip("\n")
 
 FILES = {
     ".gitignore": "__pycache__/\n*.py[cod]\n",
