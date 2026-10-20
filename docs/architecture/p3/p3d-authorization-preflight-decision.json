@@ -1,0 +1,58 @@
+{
+  "document_kind": "projectctl.m6_0_p3d_disposable_trial_authorization_preflight",
+  "document_version": 1,
+  "date": "2026-10-20",
+  "baseline_main": "44ca610409a781608fc1843dca8333701bc7e5d5",
+  "baseline_merged_pr": 110,
+  "classification": "UNTRUSTED_OFFLINE_REQUEST_REVIEW_ONLY",
+  "decision": "P3D_NO_GO_TRIAL_NOT_AUTHORIZED",
+  "selected_pattern": "P3C_T1_DISPOSABLE_VM_STATIC_DUAL_PRINCIPAL_WITH_TRUSTED_ADMIN",
+  "actual_guest_target_selected": false,
+  "independent_admin_selected": false,
+  "exact_privileged_command_manifest_approved": false,
+  "human_owner_approved": false,
+  "independent_security_reviewer_approved": false,
+  "actual_custodian_provisioned": false,
+  "actual_trial_executed": false,
+  "p3_f01_to_f28": {
+    "count": 28,
+    "all_status": "NOT_RUN",
+    "actual_executed": 0,
+    "accepted": 0
+  },
+  "evidence_review": {
+    "disposable_vm_isolation_and_reset": "MISSING",
+    "independent_admin_and_observer": "MISSING",
+    "static_identities_and_group_boundary": "MISSING",
+    "nonvolatile_fs_and_ancestor_attestation": "MISSING",
+    "protected_code_import_and_launcher": "MISSING",
+    "legacy_writer_gid_fd_alias_denial": "MISSING",
+    "single_durable_commit_high_water": "MISSING",
+    "crash_reboot_ack_and_retirement": "MISSING",
+    "privacy_synthetic_and_abort": "MISSING",
+    "independent_owner_and_security_review": "MISSING"
+  },
+  "forbidden_operations": {
+    "root_or_sudo": false,
+    "provision_identity": false,
+    "install_service": false,
+    "modify_system_mount_or_kernel": false,
+    "touch_real_project_db_or_wal": false,
+    "create_real_issuer_signing_key": false,
+    "enable_v3_w1_r1_collector_cli": false,
+    "expand_worker_task_authority": false,
+    "execute_any_dual_principal_trial": false,
+    "approve_production_custody": false
+  },
+  "source_constraints": {
+    "project_v2_live_wal_reader": "NO_GO",
+    "source_epoch_p0_p1": "UNVERIFIED",
+    "issuer_p2": "UNVERIFIED",
+    "custody_p3": "UNVERIFIED",
+    "consumer_p4": "NO_GO"
+  },
+  "administrator_and_hypervisor": "INSIDE_TCB_FULL_VM_ROLLBACK_NOT_PROTECTED",
+  "p3a_tmpfs_storage": "REJECTED_AS_DURABLE_CANDIDATE",
+  "approval_automatically_granted": false,
+  "next_step": "HUMAN_SELECTS_ISOLATED_DISPOSABLE_VM_AND_INDEPENDENT_ADMIN_WITH_PRIVATE_COMMAND_LEVEL_REVIEW"
+}
