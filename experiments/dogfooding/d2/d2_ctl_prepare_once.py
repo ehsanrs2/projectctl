@@ -188,10 +188,14 @@ def perform_prepare(initial: dict) -> tuple[dict, bool]:
         record("command-metadata.json", {"argv":command,
                                          "expected_task":TASK,
                                          "model_execution":"FORBIDDEN"})
-        dispatched = True
+        # Account for time spent on capability and frozen-state probes; the
+        # previously observed official quota must still be fresh at dispatch.
+        data["admission"] = validate_admission(
+            q, n, now=datetime.now(timezone.utc))
         data["prepare_dispatch_utc"] = utc()
         record("prepare-summary.json", data)
         t = time.monotonic_ns()
+        dispatched = True  # exactly one actual prepare subprocess follows
         try:
             proc = subprocess.run(command, cwd=RESEARCH, capture_output=True,
                                   text=True, timeout=PREPARE_TIMEOUT,
