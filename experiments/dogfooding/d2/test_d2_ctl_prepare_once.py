@@ -78,7 +78,7 @@ class D2CtlPrepareOfflineTests(unittest.TestCase):
             return ""
         with patch.dict(h.os.environ,{"PROJECTCTL_HOME":str(h.ROOT/"ctl-home"),
                                       "BD_ACTOR":"d2-dogfood-owner"}), (
-             patch.object(h,"VENV",Path(sys.executable).resolve().parent.parent)), (
+             patch.object(h,"VENV",Path(sys.executable).parent.parent)), (
              patch.object(h,"readiness_audit",return_value=valid)), (
              patch.object(h,"git",side_effect=fake_git)), (
              patch.object(h,"run_read",
@@ -96,7 +96,7 @@ class D2CtlPrepareOfflineTests(unittest.TestCase):
                               side_effect=AssertionError("must not audit again"))), (
                  patch.dict(h.os.environ,{"PROJECTCTL_HOME":str(h.ROOT/"ctl-home"),
                                            "BD_ACTOR":"d2-dogfood-owner"})), (
-                 patch.object(h,"VENV",Path(sys.executable).resolve().parent.parent)):
+                 patch.object(h,"VENV",Path(sys.executable).parent.parent)):
                 with self.assertRaisesRegex(ValueError,"NO RETRY"):
                     h.preview()
 
