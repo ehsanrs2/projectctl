@@ -115,9 +115,12 @@ class D2CtlPrepareOfflineTests(unittest.TestCase):
             ctl=root/"fixtures"/"ctl"
             (ctl/".projectctl"/"runs"/rid).mkdir(parents=True)
             (ctl/".projectctl"/"runs"/rid/"execution-plan.json").write_text("{}\n")
+            def frozen_git(path, *args):
+                if args[0] == "rev-parse":
+                    return h.BASE if path == h.DIRECT else h.POLICY_HEAD
+                return ""
             with patch.object(h,"ROOT",root),patch.object(h,"CTL",ctl), (
-                 patch.object(h,"git",side_effect=lambda path,*args:
-                              h.POLICY_HEAD if args[0]=="rev-parse" else "")):
+                 patch.object(h,"git",side_effect=frozen_git)):
                 got=h.check_preparation(dummy_plan(),dummy_run(),
                     {"id":rid,"path":str(wt),"base_commit":h.POLICY_HEAD},
                     target="main")
