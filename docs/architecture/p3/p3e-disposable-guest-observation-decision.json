@@ -1,0 +1,32 @@
+{
+  "document_kind": "projectctl.m6_0_p3e_disposable_guest_observation_gate",
+  "document_version": 1,
+  "baseline_main": "c495c22b0bd5a19ec57b7759340ca85ea71aa012",
+  "classification": "READ_ONLY_UNATTESTED_GUEST_HINT_ONLY",
+  "decision": "P3E_NO_GO_SEPARATE_VM_UNATTESTED",
+  "selected_pattern": "P3C_T1_DISPOSABLE_VM_STATIC_DUAL_PRINCIPAL_WITH_TRUSTED_ADMIN",
+  "independent_disposable_vm_selected": false,
+  "independent_administrator_and_observer_confirmed": false,
+  "real_custody_storage_candidate_verified": false,
+  "real_dual_principal_kernel_denials_executed": false,
+  "guest_preflight_observation_collected": false,
+  "privileged_trial_owner_approved": false,
+  "actual_p3_f01_to_f28_executed": 0,
+  "source_epoch_p0_p1_and_issuer_p2": "UNVERIFIED",
+  "p3_custody_credential_and_durability": "UNVERIFIED",
+  "p4_export": "NO_GO",
+  "root_hypervisor_snapshot_rollback": "IN_TCB_NOT_PROTECTED",
+  "permissions": {
+    "create_disposable_vm": false,
+    "run_privileged_trial": false,
+    "provision_custodian_or_service": false,
+    "modify_mount_or_host_policy": false,
+    "access_real_project_db_or_wal": false,
+    "issue_or_sign_real_receipts": false,
+    "enable_v3_w1_r1_collector_cli": false,
+    "expand_worker_or_task_authority": false,
+    "authorize_production_custody": false
+  },
+  "automatic_go": false,
+  "next_step": "HUMAN_IDENTIFIES_AND_APPROVES_REAL_DISPOSABLE_VM_AND_INDEPENDENT_ADMIN_BEFORE_READ_ONLY_GUEST_OBSERVATION"
+}
