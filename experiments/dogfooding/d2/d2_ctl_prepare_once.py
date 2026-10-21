@@ -19,6 +19,7 @@ import time
 
 from experiments.dogfooding.d2.d2_ctl_readiness import audit as readiness_audit
 from experiments.dogfooding.d2.d2_direct_manual import validate_admission
+from experiments.dogfooding.d2.d2_no_inference_preflight import validate_strategy
 from experiments.dogfooding.d2.d2_no_inference_preflight import (
     ROOT, RESEARCH, CTL, DIRECT, VENV, BASE, POLICY_HEAD, TASK, MODEL,
     ALLOWED_WRITES,
@@ -165,6 +166,16 @@ def perform_prepare(initial: dict) -> tuple[dict, bool]:
         record("scheduler-before-prepare.json", n)
         data["admission"] = validate_admission(
             q, n, now=datetime.now(timezone.utc))
+        capabilities = json.loads(run_read([
+            str(VENV/"bin/projectctl"),"worker","capabilities",
+            "--provider","codex","--json"]))
+        strategy = json.loads(run_read([
+            str(VENV/"bin/projectctl"),"worker","strategy",TASK,
+            "--project",str(CTL),"--provider","codex",
+            "--requested","direct","--json"]))
+        validate_strategy(capabilities, strategy)  # version-only; no model call
+        record("capabilities-before-prepare.json", capabilities)
+        record("strategy-before-prepare.json", strategy)
         # Re-check the task and evidence before the mutation, after quota reads.
         fresh = readiness_audit()
         if fresh["decision"] != initial["readiness"]:
