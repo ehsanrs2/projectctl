@@ -119,6 +119,43 @@ class Attempt2ReplayOfflineTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"post-dispatch"):
                 h.safe_historical_replay(folder)
 
+
+    def test_worker_started_marker_refused(self):
+        with TemporaryDirectory() as td:
+            folder=Path(td)
+            s,q,n=synthetic_payloads()
+            s["worker_started"]=True
+            write_synthetic(folder,(s,q,n))
+            with self.assertRaisesRegex(ValueError,"pre-dispatch"):
+                h.safe_historical_replay(folder)
+
+    def test_nonzero_retry_count_refused(self):
+        with TemporaryDirectory() as td:
+            folder=Path(td)
+            s,q,n=synthetic_payloads()
+            s["retries"]=1
+            write_synthetic(folder,(s,q,n))
+            with self.assertRaisesRegex(ValueError,"pre-dispatch"):
+                h.safe_historical_replay(folder)
+
+    def test_explicit_prepare_dispatched_marker_refused(self):
+        with TemporaryDirectory() as td:
+            folder=Path(td)
+            s,q,n=synthetic_payloads()
+            s["prepare_dispatched"]=True
+            write_synthetic(folder,(s,q,n))
+            with self.assertRaisesRegex(ValueError,"pre-dispatch"):
+                h.safe_historical_replay(folder)
+
+    def test_boolean_quota_ratio_refused(self):
+        with TemporaryDirectory() as td:
+            folder=Path(td)
+            s,q,n=synthetic_payloads()
+            q["effective"]["five_hour"]=True
+            write_synthetic(folder,(s,q,n))
+            with self.assertRaisesRegex(ValueError,"MEDIUM"):
+                h.safe_historical_replay(folder)
+
     def test_unrelated_quota_failure_reason_refused(self):
         with TemporaryDirectory() as td:
             folder=Path(td)

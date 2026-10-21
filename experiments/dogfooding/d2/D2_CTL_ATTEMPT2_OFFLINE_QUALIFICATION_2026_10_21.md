@@ -14,36 +14,41 @@ Digest equality confirms the **fallback snapshot identity**, not the exact trans
 
 - `experiments/dogfooding/d2/d2_ctl_attempt2_offline.py`: *only* `--replay-attempt1` and `--preview-attempt2`. No `--prepare`/`--execute` and no CLI paths to `projectctl quota`, `projectctl next`, `projectctl run prepare/start` or Codex App Server. `--replay-attempt1` loads the three retained evidence files (size/symlink bounded), rejects any sign of actual inner-Prepare dispatch, verifies first official high-confidence normal quota and its MEDIUM floor, frozen one-candidate Scheduler rejection with `quota_unknown`, consistent historical timestamps, and re-derives the canonical unknown/official digest identity. Outputs only approved non-secret classification and evidence file SHA-256, not account IDs or raw quota data. No exception messages from provider are surfaced in the classifier.
 - `--preview-attempt2` replays the historical evidence and then calls the existing **read-only** D2 CTL readiness audit. It requires zero CTL runs, clean frozen CTL, open/unclaimed Beads Task, frozen policy and Direct HEAD, pinned isolated D0 Python/environment and the non-existence of the new `ctl-prepare-attempt-2` identity. Returns `D2_ATTEMPT2_OFFLINE_PREVIEW_PASS__NO_CLAIM_NO_INFERENCE`. It **does not create or reserve** the suggested future evidence directory on disk.
-- `experiments/dogfooding/d2/test_d2_ctl_attempt2_offline.py`: 19 defined synthetic offline unit cases including exact digest match, wrong digests, altered eligibility, marker of inner Prepare dispatch, observed run ID, protected symlinked/missing evidence, no subprocess calls, provider `fail_closed=True` and `fail_closed=False` behavior, conservative unknown quota classification, safe exception-class-only diagnostics, non-mutating Preview, and refusal of an already-existing Attempt-2 evidence identity.
+- `experiments/dogfooding/d2/test_d2_ctl_attempt2_offline.py`: 23 defined synthetic offline unit cases including exact digest match, wrong digests, altered eligibility, marker of inner Prepare dispatch, worker-start flag, nonzero retry count, explicit dispatch flag, observed run ID, protected symlinked/missing evidence, invalid boolean quota ratios, no subprocess calls, provider `fail_closed=True` and `fail_closed=False` behavior, conservative unknown quota classification, safe exception-class-only diagnostics, non-mutating Preview, and refusal of an already-existing Attempt-2 evidence identity.
 
 **Execution status:** Source and tests have been created on the research branch; actual execution under the owner's pinned D0 venv is **PENDING**. Never report 19/19 pass or real Preview success until operator evidence confirms it.
 
-## One manual *offline* qualification command
+## Manual offline qualification, synced separately
 
-Run inside a child Bash (it won't change the interactive shell's `set -e`), after pulling the **exact approved research HEAD** shown in the assistant response:
+New committed entrypoint: `experiments/dogfooding/d2/d2_ctl_attempt2_offline_manual.sh`.
+It requires an **explicit exact 40-character reviewed HEAD**; the shell script
+never runs `git fetch`, `git pull` or any provider quota probe. Synchronize
+the checkout *separately*, before entering the offline qualification gate.
+Retrieve the exact approved HEAD from the reviewer/operator, not from unreviewed
+remote state. Run this command manually from the pinned research checkout:
 
 ```bash
-bash -c '
-set -euo pipefail
 cd /home/ai/project/My/projectctl-advisory-lab
-git pull --ff-only origin research/advisory-skills-eval
-# Verify the exact research HEAD from the assistant before proceeding.
-VENV="$HOME/.local/share/projectctl-dogfood-d0/venv"
-export PATH="$VENV/bin:$PATH"
-export PROJECTCTL_HOME="$HOME/.local/state/projectctl-dogfood-d2/ctl-home"
-export BD_ACTOR=d2-dogfood-owner
-export BD_DISABLE_METRICS=1
-export DOLT_DISABLE_EVENT_FLUSH=1
-export DO_NOT_TRACK=1
-export PYTHONDONTWRITEBYTECODE=1
-"$VENV/bin/python" -B -m unittest -v experiments.dogfooding.d2.test_d2_ctl_attempt2_offline
-"$VENV/bin/python" -B -m experiments.dogfooding.d2.d2_ctl_attempt2_offline --replay-attempt1
-"$VENV/bin/python" -B -m experiments.dogfooding.d2.d2_ctl_attempt2_offline --preview-attempt2
-'
-echo "D2_ATTEMPT2_OFFLINE_EXIT=$?"
+bash experiments/dogfooding/d2/d2_ctl_attempt2_offline_manual.sh \
+  --expected-head <REVIEWED_40_CHAR_RESEARCH_SHA>
 ```
 
-Expected (NOT yet observed): `Ran 19 tests` then `OK`; `D2_ATTEMPT1_FALLBACK_REPLAY_PASS__NO_PROVIDER_CALLS`; `D2_ATTEMPT2_OFFLINE_PREVIEW_PASS__NO_CLAIM_NO_INFERENCE`; exit 0. Any failure is a stop. Do not delete/rename Attempt-1 evidence, alter protected code or execute the *old* `d2_ctl_prepare_once.py --prepare --ack-claim` which remains deliberately bound to Attempt 1.
+The launcher checks branch, clean HEAD, pinned D0 Python and environment,
+single-use evidence path availability, and frozen input-file presence. It
+writes logs, input SHA-256 values, synthetic test output, historical replay,
+readiness preview, integrity verification and final file manifest only to
+`$HOME/.local/state/projectctl-dogfood-d2/observations/ctl-attempt2-offline-qualification`
+(mode 0700, single-use). It does not create
+`observations/ctl-prepare-attempt-2`.
+
+Expected (not yet observed on operator machine): `Ran 23 tests`, `OK`,
+`D2_ATTEMPT1_FALLBACK_REPLAY_PASS__NO_PROVIDER_CALLS`,
+`D2_ATTEMPT2_OFFLINE_PREVIEW_PASS__NO_CLAIM_NO_INFERENCE`,
+and `D2_ATTEMPT2_OFFLINE_QUALIFIED__PREPARE_NOT_AUTHORIZED`
+with exit 0. A nonzero exit requires preservation and inspection, not rerun
+under the same evidence identity. The launcher checks retained evidence SHA-256
+even if a later gate fails (when the manifest was created). No tests run by
+GitHub commit alone constitute local qualification.
 
 ## Later-stage protocol, NOT YET AUTHORIZED OR EXECUTED
 
@@ -51,4 +56,4 @@ At a separate owner approval after offline qualification, prepare a new Attempt-
 
 All existing historical evidence and both fixture worktrees remain untouched.
 
-**State:** `D2_ATTEMPT2_R_AND_D_OFFLINE_PACKET_PREPARED / 19_SYNTHETIC_TESTS_OPERATOR_PENDING / ATTEMPT2_PREPARE_NOT_AUTHORIZED / CTL_PAID_START_NOT_AUTHORIZED`.
+**State:** `D2_ATTEMPT2_R_AND_D_OFFLINE_PACKET_PREPARED / 23_SYNTHETIC_TESTS_OPERATOR_PENDING / ATTEMPT2_PREPARE_NOT_AUTHORIZED / CTL_PAID_START_NOT_AUTHORIZED`.

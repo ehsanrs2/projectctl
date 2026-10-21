@@ -62,11 +62,16 @@ def safe_historical_replay(folder: Path = ATTEMPT1) -> dict:
     if (summary.get("decision") != EXPECTED_STATE
             or summary.get("reason") != EXPECTED_ERROR
             or summary.get("attempt") != 1
+            or summary.get("retries") != 0
+            or summary.get("worker_started") is not False
+            or (summary.get("prepare_dispatched") is not None
+                and summary.get("prepare_dispatched") is not False)
             or summary.get("run_id") is not None
             or "prepare_dispatch_utc" in summary
             or "prepare_exit_code" in summary):
         raise ValueError("Attempt-1 was not a proven pre-dispatch scheduler stop")
-    if (folder / "prepare.json").exists() or (folder / "prepare.stdout.json").exists():
+    if any((folder / name).exists() or (folder / name).is_symlink()
+           for name in ("prepare.json", "prepare.stdout.json")):
         raise ValueError("Attempt-1 contains post-dispatch preparation evidence")
     first = quota.get("snapshot")
     if not isinstance(first, dict):
@@ -84,6 +89,8 @@ def safe_historical_replay(folder: Path = ATTEMPT1) -> dict:
     eff = quota.get("effective") or {}
     if (not isinstance(eff.get("five_hour"), (float, int))
             or not isinstance(eff.get("weekly"), (float, int))
+            or isinstance(eff["five_hour"], bool)
+            or isinstance(eff["weekly"], bool)
             or eff["five_hour"] < .18 or eff["weekly"] < .08):
         raise ValueError("First historical quota does not meet frozen MEDIUM admission")
     evaluated = datetime.fromisoformat(
