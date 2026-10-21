@@ -121,8 +121,18 @@ class D2CtlReadinessTests(unittest.TestCase):
         self.assertIn("CLAIM_NOT_AUTHORIZED",output.getvalue())
 
     def test_git_preserves_porcelain_marker(self):
-        with patch.object(check,"read_command",return_value=" M source.py\n"):
-            self.assertEqual(check.git(Path("/unused"),"status","--porcelain")," M source.py")
+        # Exercise the real read_command newline normalization rather than
+        # mocking it away. Git porcelain's leading status-space is significant.
+        from subprocess import CompletedProcess
+        sample = CompletedProcess(args=["git"], returncode=0,
+                                  stdout=" M source.py\n", stderr="")
+        with patch.object(check.subprocess, "run", return_value=sample) as call:
+            self.assertEqual(check.git(Path("/unused"), "status", "--porcelain"),
+                             " M source.py")
+        call.assert_called_once_with(
+            ["git", "-C", "/unused", "status", "--porcelain"],
+            capture_output=True, text=True, timeout=45, check=False,
+        )
 
 
 if __name__ == "__main__":
