@@ -16,7 +16,7 @@ Digest equality confirms the **fallback snapshot identity**, not the exact trans
 - `--preview-attempt2` replays the historical evidence and then calls the existing **read-only** D2 CTL readiness audit. It requires zero CTL runs, clean frozen CTL, open/unclaimed Beads Task, frozen policy and Direct HEAD, pinned isolated D0 Python/environment and the non-existence of the new `ctl-prepare-attempt-2` identity. Returns `D2_ATTEMPT2_OFFLINE_PREVIEW_PASS__NO_CLAIM_NO_INFERENCE`. It **does not create or reserve** the suggested future evidence directory on disk.
 - `experiments/dogfooding/d2/test_d2_ctl_attempt2_offline.py`: 23 defined synthetic offline unit cases including exact digest match, wrong digests, altered eligibility, marker of inner Prepare dispatch, worker-start flag, nonzero retry count, explicit dispatch flag, observed run ID, protected symlinked/missing evidence, invalid boolean quota ratios, no subprocess calls, provider `fail_closed=True` and `fail_closed=False` behavior, conservative unknown quota classification, safe exception-class-only diagnostics, non-mutating Preview, and refusal of an already-existing Attempt-2 evidence identity.
 
-**Execution status:** Source and tests have been created on the research branch; actual execution under the owner's pinned D0 venv is **PENDING**. Never report 19/19 pass or real Preview success until operator evidence confirms it.
+**Execution status (operator-reported, 2026-10-21):** The owner executed the committed manual launcher on pinned research HEAD `313f96537a4a18ac93f38e837a3032bbbcac5128`. Terminal output reported all four steps, `D2_ATTEMPT2_OFFLINE_CONTRACT_VALIDATED`, and `D2_ATTEMPT2_OFFLINE_QUALIFIED__PREPARE_NOT_AUTHORIZED` at the single-use evidence directory. The 23-test count was enforced by that launcher. This is owner-supplied terminal evidence, not an independent read of the machine's private evidence files. It does **not** authorize Prepare/Claim/Worker.
 
 ## Manual offline qualification, synced separately
 
@@ -57,4 +57,4 @@ At a separate owner approval after offline qualification, prepare a new Attempt-
 
 All existing historical evidence and both fixture worktrees remain untouched.
 
-**State:** `D2_ATTEMPT2_R_AND_D_OFFLINE_PACKET_PREPARED / 23_SYNTHETIC_TESTS_OPERATOR_PENDING / ATTEMPT2_PREPARE_NOT_AUTHORIZED / CTL_PAID_START_NOT_AUTHORIZED`.
+**State:** `D2_ATTEMPT2_R_AND_D_OFFLINE_QUALIFIED_BY_OPERATOR / 23_SYNTHETIC_TESTS_OPERATOR_REPORTED_PASS / ATTEMPT2_PREPARE_NOT_AUTHORIZED / CTL_PAID_START_NOT_AUTHORIZED`. The separate Attempt-2 guarded Prepare code and its tests are tracked in `D2_CTL_ATTEMPT2_PREPARE_RUNBOOK_2026_10_21.md`.
