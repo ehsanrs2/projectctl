@@ -26,7 +26,8 @@ from experiments.dogfooding.d2.d2_no_inference_preflight import (
     ROOT, CTL, DIRECT, RESEARCH, VENV, BASE, POLICY_HEAD,
     MODEL, SDK, ADAPTER, TASK, ALLOWED_WRITES,
 )
-from experiments.dogfooding.d2.d2_freeze_policy import POLICY_SHA, SPEC_SHA
+from experiments.dogfooding.d2.d2_freeze_policy import SPEC_SHA
+from experiments.dogfooding.d2.d2_post_freeze_audit import POLICY_SHA
 
 DIRECT_SOURCE = {
     "d2events/cli.py": "a9eec60be23a186805c1275f53ed6ece80ad63049d27a0c64ed9a24685d15451",
