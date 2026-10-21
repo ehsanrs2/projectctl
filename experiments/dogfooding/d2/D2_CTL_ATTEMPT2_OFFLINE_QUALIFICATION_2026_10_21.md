@@ -29,11 +29,12 @@ remote state. Run this command manually from the pinned research checkout:
 
 ```bash
 cd /home/ai/project/My/projectctl-advisory-lab
+export D2_REVIEWED_SHA='paste-the-separately-reviewed-40-character-SHA-here'
 bash experiments/dogfooding/d2/d2_ctl_attempt2_offline_manual.sh \
-  --expected-head <REVIEWED_40_CHAR_RESEARCH_SHA>
+  --expected-head "$D2_REVIEWED_SHA"
 ```
 
-The launcher checks branch, clean HEAD, pinned D0 Python and environment,
+Set `D2_REVIEWED_SHA` to the exact Git commit SHA provided in the review report (the placeholder above is deliberately invalid and will fail closed). The launcher checks branch, clean HEAD, pinned D0 Python and environment,
 single-use evidence path availability, and frozen input-file presence. It
 writes logs, input SHA-256 values, synthetic test output, historical replay,
 readiness preview, integrity verification and final file manifest only to
