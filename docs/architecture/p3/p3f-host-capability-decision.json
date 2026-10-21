@@ -1,0 +1,27 @@
+{
+  "document_kind": "projectctl.m6_0_p3f_dev_host_capability_inventory",
+  "document_version": 1,
+  "baseline_main": "0d4391d54d70c6cc4202af4fe7e223bd0a48b40d",
+  "classification": "NONPRIVILEGED_SELF_OBSERVATION_NOT_ATTESTATION",
+  "decision": "P3F_NO_GO_HOST_CAPABILITY_ONLY",
+  "existing_hypervisor_and_host_role": "UNKNOWN",
+  "separate_disposable_vm_verified": false,
+  "independent_guest_administrator_or_observer": "UNVERIFIED",
+  "dedicated_persistent_disk_and_custody_target": "UNVERIFIED",
+  "privileged_trial_approved": false,
+  "p3_f01_to_f28_executed": 0,
+  "root_and_host_snapshot_rollback": "INSIDE_TCB_NOT_DEFEATED",
+  "current_permissions": {
+    "create_vm_or_disk": false,
+    "use_root_or_sudo": false,
+    "install_or_start_hypervisor_services": false,
+    "provision_static_custodian_or_users": false,
+    "alter_mount_or_file_policies": false,
+    "read_real_project_db_or_wal": false,
+    "enable_v3_w1_r1_collector_cli": false,
+    "expand_worker_task_authority": false,
+    "execute_real_custody_scenarios": false
+  },
+  "automatic_go": false,
+  "next_step": "OPERATOR_REVIEWS_REDACTED_HOST_HINTS_THEN_CHOOSES_SEPARATE_DISPOSABLE_VM_AND_INDEPENDENT_ADMIN"
+}
