@@ -22,9 +22,11 @@ class Attempt2PrepareTests(unittest.TestCase):
         with TemporaryDirectory() as td:
             out=Path(td)/"attempt2"
             out.mkdir()
-            with patch.object(h,"OUT",out), (
-                 patch.object(h.old,"git",
-                              side_effect=AssertionError("no reads expected"))):
+            with (
+                patch.object(h, "OUT", out),
+                patch.object(h.old, "git",
+                             side_effect=AssertionError("no reads expected")),
+            ):
                 with self.assertRaisesRegex(ValueError,"NO RETRY"):
                     h.preview("a"*40)
 
@@ -66,31 +68,38 @@ class Attempt2PrepareTests(unittest.TestCase):
             ["prog","--preview","--expected-head","a"*40,"--ack-claim"],
         ]
         for case in cases:
-            with self.subTest(case=case),(
-                 patch.object(sys,"argv",case)),(
-                 patch.object(h,"preview",side_effect=AssertionError("preview"))),(
-                 redirect_stderr(io.StringIO())):
+            with (
+                self.subTest(case=case),
+                patch.object(sys, "argv", case),
+                patch.object(h, "preview",
+                             side_effect=AssertionError("preview")),
+                redirect_stderr(io.StringIO()),
+            ):
                 with self.assertRaises(SystemExit) as ex:
                     h.main()
                 self.assertEqual(ex.exception.code,2)
 
     def test_scheduler_unknown_cannot_use_initial_healthy_quota(self):
-        with patch.object(h,"validate_admission",return_value={}),(
-             patch.object(h.QuotaSnapshot,"model_validate",
-                          return_value=Mock(account="x",provider="x"))),(
-             patch.object(h,"unknown_quota_snapshot",return_value=Mock())),(
-             patch.object(h,"digest",return_value="unknown")):
+        with (
+            patch.object(h, "validate_admission", return_value={}),
+            patch.object(h.QuotaSnapshot, "model_validate",
+                         return_value=Mock(account="x", provider="x")),
+            patch.object(h, "unknown_quota_snapshot", return_value=Mock()),
+            patch.object(h, "digest", return_value="unknown"),
+        ):
                 with self.assertRaisesRegex(ValueError,"unknown"):
                     h.admission({"snapshot":{}},{"quota_snapshot_digest":"unknown"})
 
     def test_provider_error_before_prepare_never_dispatches(self):
         with TemporaryDirectory() as td:
             out=Path(td)/"attempt2"
-            with patch.object(h,"OUT",out),(
-                 patch.object(h.old,"run_read",
-                              side_effect=RuntimeError("sensitive-provider-message")),(
-                 patch.object(h.subprocess,"run",
-                              side_effect=AssertionError("NO DISPATCH"))):
+            with (
+                patch.object(h, "OUT", out),
+                patch.object(h.old, "run_read",
+                             side_effect=RuntimeError("sensitive-provider-message")),
+                patch.object(h.subprocess, "run",
+                             side_effect=AssertionError("NO DISPATCH")),
+            ):
                 result=h.prepare_once({"target":"frozen","research_head":"a"*40})
             self.assertEqual(result["decision"],
                 "D2_CTL_ATTEMPT2_PRECLAIM_BLOCKED__NO_RETRY")
@@ -110,14 +119,16 @@ class Attempt2PrepareTests(unittest.TestCase):
             ready={"decision":
                 "D2_ATTEMPT2_OFFLINE_PREVIEW_PASS__NO_CLAIM_NO_INFERENCE"}
             initial={"target":"frozen","research_head":"a"*40}
-            with patch.object(h,"OUT",out),(
-                 patch.object(h.old,"run_read",side_effect=calls)),(
-                 patch.object(h,"admission",return_value={})),(
-                 patch.object(h,"validate_strategy")),(
-                 patch.object(h.historical,"preview_attempt2",return_value=ready)),(
-                 patch.object(h.old,"git",side_effect=lambda root,*args:
-                              "frozen" if "branch" in args else "a"*40)),(
-                 patch.object(h.subprocess,"run",side_effect=timeout)):
+            with (
+                patch.object(h, "OUT", out),
+                patch.object(h.old, "run_read", side_effect=calls),
+                patch.object(h, "admission", return_value={}),
+                patch.object(h, "validate_strategy"),
+                patch.object(h.historical, "preview_attempt2", return_value=ready),
+                patch.object(h.old, "git", side_effect=lambda root, *args:
+                             "frozen" if "branch" in args else "a"*40),
+                patch.object(h.subprocess, "run", side_effect=timeout),
+            ):
                 result=h.prepare_once(initial)
             self.assertEqual(invocation_count[0],1)
             self.assertEqual(result["decision"],
@@ -130,9 +141,11 @@ class Attempt2PrepareTests(unittest.TestCase):
         with TemporaryDirectory() as td:
             out=Path(td)/"attempt2"
             out.mkdir()
-            with patch.object(h,"OUT",out),(
-                 patch.object(h.old,"run_read",
-                              side_effect=AssertionError("no quota"))):
+            with (
+                patch.object(h, "OUT", out),
+                patch.object(h.old, "run_read",
+                             side_effect=AssertionError("no quota")),
+            ):
                 with self.assertRaises(FileExistsError):
                     h.prepare_once({"target":"frozen"})
 
