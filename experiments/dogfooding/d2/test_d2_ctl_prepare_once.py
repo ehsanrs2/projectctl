@@ -121,9 +121,21 @@ class D2CtlPrepareOfflineTests(unittest.TestCase):
                 return ""
             with patch.object(h,"ROOT",root),patch.object(h,"CTL",ctl), (
                  patch.object(h,"git",side_effect=frozen_git)):
+                payload={"id":rid,"path":str(wt),
+                         "base_commit":h.POLICY_HEAD}
                 got=h.check_preparation(dummy_plan(),dummy_run(),
-                    {"id":rid,"path":str(wt),"base_commit":h.POLICY_HEAD},
-                    target="main")
+                                        payload,target="main")
+                # An actual Direct HEAD drift must still fail closed. The
+                # previous mock incorrectly modeled BOTH HEADs as CTL's.
+                def drifted_git(path, *args):
+                    if args[0] == "rev-parse":
+                        return h.POLICY_HEAD
+                    return ""
+                with patch.object(h,"git",side_effect=drifted_git):
+                    with self.assertRaisesRegex(ValueError,
+                                                "Direct source baseline moved"):
+                        h.check_preparation(dummy_plan(),dummy_run(),
+                                            payload,target="main")
             self.assertEqual(got["status"],"claimed")
             self.assertFalse(got["worker_started"])
 
