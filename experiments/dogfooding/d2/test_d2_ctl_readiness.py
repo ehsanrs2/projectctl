@@ -42,6 +42,18 @@ def valid_detail(description: str):
 
 
 class D2CtlReadinessTests(unittest.TestCase):
+    def test_policy_digest_constants_are_owned_by_frozen_audit(self):
+        # Regression for the original module-import error: POLICY_SHA does
+        # not exist in d2_freeze_policy. Reuse the proven frozen audit map.
+        from experiments.dogfooding.d2 import d2_post_freeze_audit as frozen
+        from experiments.dogfooding.d2 import d2_freeze_policy as freeze
+        self.assertEqual(check.POLICY_SHA, frozen.POLICY_SHA)
+        self.assertEqual(check.SPEC_SHA, freeze.SPEC_SHA)
+        self.assertEqual(set(check.POLICY_SHA), {
+            ".gitignore", ".projectctl/config.yaml",
+            "projectctl.scope.yaml", "projectctl.verification.yaml",
+        })
+
     def test_matching_finished_direct_snapshot(self):
         check.validate_snapshots(valid_result(),valid_preflight())
 
