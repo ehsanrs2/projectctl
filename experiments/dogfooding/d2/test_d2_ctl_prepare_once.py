@@ -76,15 +76,16 @@ class D2CtlPrepareOfflineTests(unittest.TestCase):
             if args[0]=="rev-parse":
                 return h.POLICY_HEAD
             return ""
-        with patch.dict(h.os.environ,{"PROJECTCTL_HOME":str(h.ROOT/"ctl-home"),
-                                      "BD_ACTOR":"d2-dogfood-owner"}), (
-             patch.object(h,"VENV",Path(sys.executable).parent.parent)), (
-             patch.object(h,"readiness_audit",return_value=valid)), (
-             patch.object(h,"git",side_effect=fake_git)), (
-             patch.object(h,"run_read",
-                          side_effect=AssertionError("Quota refresh forbidden in preview"))), (
-             patch.object(h,"OUT",Path("/not-real-d2-path-never-existing-28abcde"))):
-            expected = h.preview()
+        with tempfile.TemporaryDirectory() as td:
+            with patch.dict(h.os.environ,{"PROJECTCTL_HOME":str(h.ROOT/"ctl-home"),
+                                          "BD_ACTOR":"d2-dogfood-owner"}), (
+                 patch.object(h,"VENV",Path(sys.executable).parent.parent)), (
+                 patch.object(h,"readiness_audit",return_value=valid)), (
+                 patch.object(h,"git",side_effect=fake_git)), (
+                 patch.object(h,"run_read",
+                              side_effect=AssertionError("Quota refresh forbidden in preview"))), (
+                 patch.object(h,"OUT",Path(td)/"not-created")):
+                expected = h.preview()
         self.assertEqual(expected["decision"],
                          "D2_CTL_PREPARE_PREVIEW_PASS__NO_CLAIM_NO_INFERENCE")
         self.assertFalse(expected["beads_task_claimed"])
