@@ -209,8 +209,9 @@ class Attempt2ReplayOfflineTests(unittest.TestCase):
             folder=Path(td)
             write_synthetic(folder)
             initial={p.name:p.read_bytes() for p in folder.iterdir()}
+            original_replay=h.safe_historical_replay
             with patch.object(h,"safe_historical_replay",
-                              wraps=lambda: h.safe_historical_replay(folder)), (
+                              wraps=lambda: original_replay(folder)), (
                  patch.object(sys,"argv",["offline","--replay-attempt1"])), (
                  redirect_stdout(io.StringIO())) as out:
                 self.assertEqual(h.main(),0)
@@ -239,12 +240,13 @@ class Attempt2ReplayOfflineTests(unittest.TestCase):
             (binpath/"python").symlink_to(Path(sys.executable).resolve())
             env={"PROJECTCTL_HOME":str(root/"ctl-home"),
                  "BD_ACTOR":"d2-dogfood-owner"}
+            original_replay=h.safe_historical_replay
             with patch.object(h,"ROOT",root),patch.object(h,"ATTEMPT1",a1), (
                  patch.object(h,"ATTEMPT2",a2)), (
                  patch.object(h,"VENV",binpath.parent)), (
                  patch.dict(h.os.environ,env)), (
                  patch.object(h,"safe_historical_replay",
-                              wraps=lambda: h.safe_historical_replay(a1))), (
+                              wraps=lambda: original_replay(a1))), (
                  patch.object(h.readiness,"audit",return_value=ok)), (
                  patch("subprocess.run",
                        side_effect=AssertionError("no provider, prepare or worker calls"))):
