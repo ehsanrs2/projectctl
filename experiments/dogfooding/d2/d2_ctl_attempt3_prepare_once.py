@@ -19,8 +19,6 @@ import subprocess
 import sys
 import time
 
-import yaml
-
 from experiments.dogfooding.d2 import d2_ctl_attempt3_offline as offline
 from experiments.dogfooding.d2 import d2_ctl_prepare_once as old
 from experiments.dogfooding.d2.d2_no_inference_preflight import (
@@ -154,6 +152,8 @@ def first_admission(quota: dict, now: datetime) -> dict:
     offline.first_quota_gate(quota, now=now)
     # Effective numbers must match account/project quota policy, not fake JSON.
     config = load_project_config(CTL)
+    if snapshot.account != config.quota.account:
+        raise offline.AdmissionBlocked("quota_account_mismatch")
     for name in ("five_hour", "weekly"):
         observed = getattr(snapshot, name).remaining_ratio
         reserve = getattr(config.quota.reserve, name)
@@ -169,9 +169,15 @@ def second_admission(scheduler: dict, snap: QuotaSnapshot, *,
     unknown = digest(unknown_quota_snapshot(snap.account, snap.provider))
     offline.scheduler_gate(scheduler, now=now,
                            canonical_unknown_digest=unknown)
+    from projectctl.application.tasks import capture_task_snapshot
+    from projectctl.scheduler.digests import semantic_task_snapshot_digest
+
     config = load_project_config(CTL)
+    current_tasks = capture_task_snapshot(CTL, state="all")
     if (scheduler.get("project_id") != config.project.id
-            or scheduler.get("config_digest") != digest(config)):
+            or scheduler.get("config_digest") != digest(config)
+            or scheduler.get("task_snapshot_digest") !=
+                semantic_task_snapshot_digest(current_tasks)):
         raise offline.AdmissionBlocked("scheduler_project_or_policy_drift")
 
 
