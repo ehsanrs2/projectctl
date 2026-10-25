@@ -47,3 +47,41 @@ Git/Beads reads may touch caches. Do not use \`--prepare\` or acknowledgements.
 **Authority status:** Candidate code presence and a green Preview NEVER
 authorize a live Provider/Scheduler/Prepare or a paid Worker. A separate,
 explicit owner instruction is required for each privilege transition.
+
+
+## Operator-reported live Prepare outcome (2026-10-25)
+
+The owner explicitly authorized **one** controlled Attempt-3 Prepare (NO
+Worker), manually executed the pinned candidate runner, and supplied this
+sanitized result:
+
+- Decision: `D2_CTL_ATTEMPT3_PREPARE_PASS__WORKER_NOT_STARTED`
+- Attempt: `3`
+- `prepare_dispatched=true`
+- `failure_stage=null`; `reason_code=null`
+- `worker_started=false`
+- Non-null run ID returned (retained in the owner's private D2 evidence,
+  not copied to GitHub)
+
+The candidate source returns this PASS only after its postflight verifies the
+prepared plan, claimed RunStore state, Beads ownership and isolated worktree,
+plus unchanged Direct fixture. These are source-contract semantics and
+owner-supplied terminal evidence, not independent direct inspection of the
+private machine or a claim that the paid Worker completed.
+
+**Authorization B is consumed.** Do not rerun `--prepare`, delete the
+`ctl-prepare-attempt-3` evidence identity, or start another Run.
+The live quota/Scheduler observations and Prepare output remain in that
+owner-only directory; do not publish raw account/provider payloads.
+
+**Next gate:** read-only independent confirmation of the same prepared
+Run's durable `claimed` state, lease absence, no `started_at`, no
+`candidate_commit`, and frozen execution/worktree identity. The Worker's
+`run start` API acquires execution admission and revalidates account quota,
+execution plan, task claim and worktree before its model turn. A successful
+Prepare does **not** guarantee Worker-start admission. Paid Worker start,
+checkpoint resume, verification and integration require separate permissions;
+none is authorized here.
+
+**Status:** `D2_CTL_ATTEMPT3_PREPARED_BY_OPERATOR__WORKER_NOT_STARTED`;
+`WAITING_FOR_INDEPENDENT_PREWORKER_REVIEW_AND_OWNER_APPROVAL`.
