@@ -130,3 +130,42 @@ read-only worker-artifact/source inspection.
 
 **State:** `D2_CTL_WORKER_IMPLEMENTED__VERIFY_PENDING`;
 `ONE_PAID_START_CONSUMED__NO_RETRY`.
+
+## Operator-reported independent Verification PASS (2026-10-25)
+
+The owner explicitly authorized ONE independent `projectctl run verify`
+for the previously prepared, one-paid-turn CTL Run. The owner reported
+the sanitized terminal result from the single-use verification wrapper:
+
+- `decision=D2_CTL_VERIFICATION_OUTCOME_REQUIRES_REVIEW`
+- `dispatch_intent_recorded=true`, `retry_authorized=false`
+- `exit_code=0`, `run_status=ready_to_integrate`
+- `overall_pass=true`, `verification_check_count=4`
+- `policy_violation_count=0`
+- Changed paths: exactly `d2events/cli.py`, `d2events/parse.py`,
+  `d2events/report.py`.
+
+**Interpretation:** ProjectCTL's independent verification and scope/policy
+checks passed. Its implementation groups a frozen unittest invocation
+into a single recorded check alongside internal diff-policy,
+execution-write-scope, and workspace-stability checks. Thus the number
+four is NOT the number of unit tests: separately inspect the bounded
+captured verification log for `Ran 26 tests` and `OK`, and validate
+the command/check status and its immutable digests before claiming an
+explicit 26/26 test result.
+
+The successful code path creates a candidate commit in the isolated
+worktree and transitions the durable Run to `ready_to_integrate`.
+Neither automatic integration nor merge into `main` occurred as
+part of verification. Inspect the candidate hash, parent and current
+frozen `main` before any delivery approval.
+
+All direct results and previous Attempt-1/2/3 evidence remain immutable.
+The exact CTL paid-worker time, tokens, cache accounting and full source
+semantic quality have NOT yet been independently reviewed. CLI 0.163.0
+versus CTL SDK 0.160.0/adapter 0.41.0 remains a known comparison
+confounder. No `run integrate`, re-verify, retry, merge or publication
+is authorized.
+
+**State:** `D2_CTL_INDEPENDENT_VERIFICATION_PASS_BY_OPERATOR__CANDIDATE_REVIEW_PENDING`;
+`INTEGRATION_NOT_AUTHORIZED`.
