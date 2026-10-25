@@ -236,3 +236,30 @@ confounders. Neither Prepare alone nor synthetic tests establish parity.
 Task claim, Worktree creation, paid Worker, retries, integration or publication.  
 **Next permission sought (later):** implement/review synthetic offline
 qualification code, **not** dispatch Attempt 3.
+
+## 9. Offline implementation checkpoint (2026-10-25)
+
+A distinct **offline-only** implementation was committed as
+`afed1db11d02ae072925ebc1d0b9591b6e245c8b`:
+
+- `d2_ctl_attempt3_offline.py`: read-only historical and frozen-state
+  preview; deterministic pure functions for ordered quota/Scheduler gate
+  simulation. It has no `--prepare` mode.
+- `test_d2_ctl_attempt3_offline.py`: 36 defined synthetic tests for
+  invalid quota, Scheduler rejection, first-before-second read ordering,
+  identity reuse, integrity and no-live-call semantics.
+- `d2_ctl_attempt3_offline_manual.sh`: one-time offline qualification
+  with pinned HEAD, AST parse, unit tests, immutable historical input-hash
+  checks and read-only D2 preview.
+- `D2_CTL_ATTEMPT3_OFFLINE_QUALIFICATION_2026_10_25.md`: operator runbook.
+
+**Important:** The synthetic quota checker is a qualification prototype,
+not a production live-admission implementation; it does not yet validate
+the real Pydantic QuotaSnapshot or authorize a real Scheduler/Provider call.
+The tests were authored and reviewed statically, but **their execution
+inside the owner's pinned D0 environment is pending**. A passing
+qualification would still NOT authorize Attempt-3 Prepare, Claim, or Worker.
+
+The offline evidence directory, if created by the manual qualification,
+is `observations/ctl-attempt3-offline-qualification`, separate from the
+forbidden-until-approved live identity `ctl-prepare-attempt-3`.
