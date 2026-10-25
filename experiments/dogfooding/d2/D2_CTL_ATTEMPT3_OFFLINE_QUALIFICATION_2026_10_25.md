@@ -48,3 +48,32 @@ no Worker are authorized by a green offline result.
 Future separately approved live Attempt-3 code must stop before any second
 quota/Scheduler sample when the first sample fails the frozen MEDIUM
 thresholds, and must issue at most one Prepare dispatch if all gates pass.
+
+
+## Owner-reported result and follow-on candidate (2026-10-25)
+
+The owner ran the exact one-time offline launcher on research commit
+`c9cafddd1b0973b3e6fbb83ca1caa760928edd38`. Reported terminal:
+
+- `D2_ATTEMPT3_SYNTAX_PASS`
+- synthetic suite step completed and its 36-test + `OK` checks passed
+- `D2_ATTEMPT3_OFFLINE_PREVIEW_CONTRACT_VALIDATED`
+- `D2_ATTEMPT3_OFFLINE_QUALIFIED__PREPARE_NOT_AUTHORIZED`
+- evidence location: `observations/ctl-attempt3-offline-qualification`
+
+These are owner-supplied outputs; the reviewer did not have direct access
+to the private evidence directory. This one-time qualification must NOT
+be rerun. A later source change does not relabel/recreate that evidence.
+
+Subsequent research-only code staging produced
+`d2_ctl_attempt3_prepare_once.py`, its 15 synthetic tests, and
+`D2_CTL_ATTEMPT3_PREPARE_STAGING_2026_10_25.md`.
+They intentionally bind to the historical qualification SHA, independently
+recheck frozen D2 readiness, require an exact new research HEAD, and
+check official first quota BEFORE calling Scheduler in a future,
+separately-authorized Prepare. The Scheduler must select the frozen sole
+task, and its task/config identity must match current canonical authority.
+No live Prepare was authorized or executed here. New candidate tests and
+Preview still require the owner's real D0 environment qualification.
+Status: OFFLINE_QUALIFIED_BY_OPERATOR; PREPARE_CANDIDATE_STAGED;
+PREPARE_NOT_AUTHORIZED; WORKER_NOT_STARTED.
