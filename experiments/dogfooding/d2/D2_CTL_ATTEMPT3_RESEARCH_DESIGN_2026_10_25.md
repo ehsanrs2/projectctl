@@ -91,7 +91,7 @@ A research checkout Git SHA MUST be reviewed/pinned *after* any future
 source implementation commit. The SHA of this design document is not
 automatically a live execution authorization.
 
-## 4. Proposed two-level authorization boundary
+## 4. Proposed three distinct authorization gates
 
 **Approval A — design and offline qualification (current):** review this
 document, design a distinct checker, synthetic unit tests and offline
@@ -167,8 +167,11 @@ Future source must pass deterministic unit tests before any Approval B:
 1. Refuse existing/missing/symlinked evidence and reuse of any past attempt.
 2. Refuse wrong research SHA, dirty source, wrong pinned environment,
    altered fixture HEAD/hash or unexpected CTL runs/Beads claim.
-3. Bind Attempt-1 and Attempt-2 historical SHA manifests; preserve the
-   accepted Direct candidate and 26-test evidence.
+3. Bind retained Attempt-1 files to its existing offline SHA evidence;
+   independently inventory/hash retained Attempt-2 JSON into a new
+   review-only baseline (do not assume Attempt 2 already has a complete
+   historical SHA manifest), without editing historical directories;
+   preserve the accepted Direct candidate and 26-test evidence.
 4. Refuse unknown, stale, non-official, zero/insufficient, boolean,
    nonfinite, too-old and non-MEDIUM first quota; no Scheduler fetch then.
 5. Refuse Scheduler unknown/conservation, no task selection, unrelated task,
@@ -194,7 +197,8 @@ Never patch tests or quota policy just to make an operator gate pass.
 
 If later approved and executed, each Attempt-3 stage should retain:
 operator approval fingerprint/reviewed research SHA; immutable manifest of
-frozen task/spec/policy/direct and prior-attempt source hashes; exact
+frozen task/spec/policy/direct and independently established prior-attempt
+source hashes; exact
 single-use evidence path; sanitized commands and wall times; raw quota and
 Scheduler JSON in owner-only evidence; normalized checks and sample
 timestamps; canonical snapshot/digest classifications; pre-dispatch
