@@ -85,3 +85,48 @@ none is authorized here.
 
 **Status:** `D2_CTL_ATTEMPT3_PREPARED_BY_OPERATOR__WORKER_NOT_STARTED`;
 `WAITING_FOR_INDEPENDENT_PREWORKER_REVIEW_AND_OWNER_APPROVAL`.
+
+## Operator-reported one paid CTL Worker turn (2026-10-25)
+
+The operator independently reported that the pre-Worker durable read-only
+check passed all 11 checks for the prepared run: expected Run and task,
+claimed state, pinned base, no prior start or candidate, lease-free,
+existing clean isolated worktree, no worker-result evidence before start.
+
+The owner subsequently approved **one** bounded paid `projectctl run start`
+for that exact previously prepared CTL Run. A one-time local wrapper recorded
+dispatch intent in a separate evidence directory and invoked exactly one
+`run start`. The operator supplied the sanitized outcome:
+
+| Recorded field | Value |
+| --- | --- |
+| decision | `D2_CTL_WORKER_START_OUTCOME_REQUIRES_REVIEW` |
+| dispatch_intent_recorded | true |
+| retry_authorized | false |
+| exit_code | 0 |
+| run_status | `verifying` |
+| worker_status | `implemented` |
+| checkpoint_present | false |
+
+The unique Run ID remains in the owner's local evidence rather than
+public Git history. The exact Worker token counts, model output,
+changed-path inventory and elapsed wall time were not provided by the
+sanitized message; do not invent them. This is operator-reported terminal
+evidence, not direct inspection of the private run artifacts.
+
+**Interpretation:** the paid CTL Worker returned implementation status
+and advanced the Run to `verifying`. This does **not** mean independent
+tests or policy verification passed. No model rerun, resume, new Prepare,
+`run verify`, integration, merge or publication is authorized by this
+worker-start outcome.
+
+**Verification contract review:** current ProjectCTL `verify_run` is a
+state-changing operation. It acquires a Run lease, resolves trusted
+verification policy, inspects permitted scope, runs the frozen independent
+commands when allowed, persists verification/evidence manifests, and can
+transition the Run to verified/blocked/failed and reconcile the canonical
+task. Accordingly, use a separate owner gate for `run verify`, after
+read-only worker-artifact/source inspection.
+
+**State:** `D2_CTL_WORKER_IMPLEMENTED__VERIFY_PENDING`;
+`ONE_PAID_START_CONSUMED__NO_RETRY`.
