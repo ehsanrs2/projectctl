@@ -169,3 +169,41 @@ is authorized.
 
 **State:** `D2_CTL_INDEPENDENT_VERIFICATION_PASS_BY_OPERATOR__CANDIDATE_REVIEW_PENDING`;
 `INTEGRATION_NOT_AUTHORIZED`.
+
+## Verified CTL candidate identity and frozen-test evidence (2026-10-25)
+
+A first independent audit reported all Verification/Evidence/scope/log tests
+PASS, including `Ran 26 tests` + `OK` and captured log SHA-256 digests.
+It mistakenly reported `same_candidate=false` because the review script
+assumed a flat worktree path `ctl-home/worktrees/<run_id>`; ProjectCTL's
+actual WorktreeManager uses
+`ctl-home/worktrees/<project_instance_id>/<run_id>`.
+The owner then ran an amended read-only audit using the durable
+RunStore `worktree_path` as the authority.
+
+**Owner-reported outcome:** `D2_CTL_CANDIDATE_IDENTITY_PASS`.
+All 11 checks PASS: ready-to-integrate state, verification PASS, RunStore and
+Evidence candidate identity, safely rooted Worktree, no active lease,
+single-parent Candidate based on frozen policy commit, Worktree HEAD
+matching Candidate, clean worktree, exactly three changed paths, and
+integration branch `main` still at the frozen policy commit.
+
+- CTL candidate: `fedc609d4d247f38e883fb72d72e6d8c9eb38376`
+- Base: `3c69dd42497acadadc5d64e7b4abe5d412b309f5`
+- Verification wall: 1.084364 s (profile and policy included)
+- Frozen independent tests: 26/26, signed-by-content matched local log digests
+- `d2events/cli.py` SHA-256:
+  `9335cb9ee2f1068b2524717e7227d1bb11150475004be45802f893764f7e09a7`
+- `d2events/parse.py` SHA-256:
+  `a148bcf3f469828ac0978791d127896c5625d91ce7d6c0b291912cf00c333a52`
+- `d2events/report.py` SHA-256:
+  `c4f946c852d374b28a4e26b4ee97edfeaac5f41b005d9c72c64f3cd703c5e9c6`
+
+All three CTL source hashes differ from the preserved Direct source hashes.
+Different code does not establish better or worse semantic quality.
+
+**Status:** `D2_CTL_VERIFIED_CANDIDATE_IDENTITY_PASS`; cross-arm timing,
+SDK usage accounting and CTL semantic review still pending. This is an
+operator-supplied inspection result, not a claim of direct access to the
+local candidate or raw private evidence. `run integrate`, Merge, Publish,
+rerun and recovery actions are NOT authorized.
