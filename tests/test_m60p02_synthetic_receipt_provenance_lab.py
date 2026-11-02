@@ -185,12 +185,17 @@ def test_invalid_leaf_contract_refused(kind):
 
 
 @pytest.mark.parametrize("raw", [
-    b"", b"{}", b"[]", b"null", b"1", b"trailing", b"\xff",
+    b"", b"trailing", b"\xff",
     b"{", b"[" * 2048, b" " * 4097, None, "text", bytearray(b"{}"),
     b'{"a":NaN}', b'{"a":Infinity}', b'\xef\xbb\xbf{}',
 ])
-def test_malformed_or_unbounded_bytes_refused(raw):
+def test_invalid_json_or_unbounded_bytes_refused(raw):
     assert m.inspect_untrusted_receipt(raw) == m.REFUSE_FORMAT
+
+
+@pytest.mark.parametrize("raw", [b"{}", b"[]", b"null", b"1"])
+def test_valid_json_but_invalid_receipt_shape_refused(raw):
+    assert m.inspect_untrusted_receipt(raw) == m.REFUSE_FIELDS
 
 
 def test_duplicate_keys_top_level_and_nested_and_escaped_alias_refused():
