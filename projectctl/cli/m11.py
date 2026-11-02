@@ -40,6 +40,27 @@ def register_m11(app: typer.Typer) -> None:
     run_app = typer.Typer(help="Prepare and inspect isolated execution runs.")
     app.add_typer(run_app, name="run")
 
+    @run_app.command("audit")
+    def audit_command(
+        run_id: str,
+        project: Path = typer.Option(
+            Path("."), "--project", exists=True, file_okay=False, resolve_path=True
+        ),
+        measurements: Path | None = typer.Option(None, "--measurements"),
+        json_output: bool = typer.Option(False, "--json"),
+    ) -> None:
+        """Inspect lifecycle evidence and a non-dispatching owner handoff."""
+        from projectctl.application.lifecycle_audit import audit_run
+        from projectctl.trace.snapshot import TraceSnapshotError
+
+        try:
+            payload = audit_run(project, run_id, measurements=measurements)
+        except TraceSnapshotError as exc:
+            typer.echo(exc.reason_code, err=True)
+            raise typer.Exit(EXIT_RUN)
+        # JSON is the sole versioned representation, also the default view.
+        typer.echo(_json(payload))
+
     @app.command("migrate")
     def migrate_command(
         project: Path = typer.Option(
@@ -251,11 +272,14 @@ def register_m11(app: typer.Typer) -> None:
         project: Path = typer.Option(
             Path("."), "--project", exists=True, file_okay=False, resolve_path=True
         ),
+        measurements: Path | None = typer.Option(None, "--measurements"),
         json_output: bool = typer.Option(False, "--json"),
     ) -> None:
         try:
             root = find_project_root(project)
-            started = start_prepared_run(root, run_id)
+            from projectctl.telemetry.lifecycle import measurement_artifact
+            with measurement_artifact(measurements, run_id=run_id, stage="start"):
+                started = start_prepared_run(root, run_id)
         except ProjectCtlError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(EXIT_RUN)
@@ -292,11 +316,14 @@ def register_m11(app: typer.Typer) -> None:
         project: Path = typer.Option(
             Path("."), "--project", exists=True, file_okay=False, resolve_path=True
         ),
+        measurements: Path | None = typer.Option(None, "--measurements"),
         json_output: bool = typer.Option(False, "--json"),
     ) -> None:
         try:
             root = find_project_root(project)
-            resumed = resume_checkpointed_run(root, run_id)
+            from projectctl.telemetry.lifecycle import measurement_artifact
+            with measurement_artifact(measurements, run_id=run_id, stage="resume"):
+                resumed = resume_checkpointed_run(root, run_id)
         except ProjectCtlError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(EXIT_RUN)
@@ -329,11 +356,14 @@ def register_m11(app: typer.Typer) -> None:
         project: Path = typer.Option(
             Path("."), "--project", exists=True, file_okay=False, resolve_path=True
         ),
+        measurements: Path | None = typer.Option(None, "--measurements"),
         json_output: bool = typer.Option(False, "--json"),
     ) -> None:
         try:
             root = find_project_root(project)
-            verified = verify_run(root, run_id)
+            from projectctl.telemetry.lifecycle import measurement_artifact
+            with measurement_artifact(measurements, run_id=run_id, stage="verify"):
+                verified = verify_run(root, run_id)
         except ProjectCtlError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(EXIT_RUN)
@@ -367,11 +397,14 @@ def register_m11(app: typer.Typer) -> None:
         project: Path = typer.Option(
             Path("."), "--project", exists=True, file_okay=False, resolve_path=True
         ),
+        measurements: Path | None = typer.Option(None, "--measurements"),
         json_output: bool = typer.Option(False, "--json"),
     ) -> None:
         try:
             root = find_project_root(project)
-            integrated = integrate_run(root, run_id)
+            from projectctl.telemetry.lifecycle import measurement_artifact
+            with measurement_artifact(measurements, run_id=run_id, stage="integrate"):
+                integrated = integrate_run(root, run_id)
         except ProjectCtlError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(EXIT_RUN)

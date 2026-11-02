@@ -29,6 +29,7 @@ MAX_ARTIFACT_BYTES = 2 * 1024 * 1024
 MAX_RUN_EVENTS = 512
 _RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z", re.ASCII)
 _FILE_BY_KIND = {
+    "execution_plan": "execution-plan.json",
     "claim_transition_evidence": "claim-transition.json",
     "context_manifest": "context-manifest.json",
     "evidence_manifest": "evidence-manifest.json",
@@ -155,6 +156,21 @@ def _stable_sha(value: object) -> str:
     ).encode("utf-8")).hexdigest()
 
 
+def read_checkpoint_artifact(project_root: Path, run_id: str, ref: str) -> TraceFileSnapshot:
+    """Follow only the stored, exact run-local checkpoint path contract."""
+    _valid_run_id(run_id)
+    prefix = f".projectctl/runs/{run_id}/checkpoints/"
+    if not isinstance(ref, str) or not ref.startswith(prefix):
+        raise TraceSnapshotError("unsafe_source_path")
+    leaf = ref[len(prefix):]
+    if not re.fullmatch(r"checkpoint-[a-f0-9]{32}\.json", leaf):
+        raise TraceSnapshotError("unsafe_source_path")
+    from projectctl.trace.wal_probe import _pinned_bytes
+    with _directory_chain(project_root, ".projectctl", "runs", run_id, "checkpoints") as dirfd:
+        raw = _pinned_bytes(dirfd, leaf, MAX_ARTIFACT_BYTES)
+    return TraceFileSnapshot("worker_checkpoint", hashlib.sha256(raw).hexdigest(), raw)
+
+
 def _file_identity(path: Path) -> tuple[int, int, int, int, int] | None:
     try:
         st = path.lstat()
@@ -179,9 +195,14 @@ class TraceDbSnapshot:
     run_manifest_version: int
     event_stream_sha256: str
     events: tuple[TraceEventSummary, ...]
+    # Opt-in private data for lifecycle cross-checks; never serialize wholesale.
+    record: dict = field(default_factory=dict, repr=False)
+    manifest: dict = field(default_factory=dict, repr=False)
+    stage_events: tuple[dict, ...] = field(default_factory=tuple, repr=False)
+    instance_id: str | None = field(default=None, repr=False)
 
 
-def read_run_db_snapshot(project_root: Path, run_id: str) -> TraceDbSnapshot:
+def read_run_db_snapshot(project_root: Path, run_id: str, *, details: bool = False) -> TraceDbSnapshot:
     """Capture one existing SQLite run and event stream in one RO transaction.
 
     This B1a prototype only opens rollback-journal SQLite databases. A
@@ -280,6 +301,29 @@ def read_run_db_snapshot(project_root: Path, run_id: str) -> TraceDbSnapshot:
                         ))
                         # No event payload columns are selected or hashed.
                         selected_events.append([event["id"], event["created_at"], event["event_type"]])
+                    detail_record = {}
+                    detail_events = ()
+                    instance_id = None
+                    if details:
+                        instance = conn.execute(
+                            "SELECT value FROM project_metadata WHERE key='project_instance_id'"
+                        ).fetchone()
+                        instance_id = instance[0] if instance else None
+                        detail_record = dict(conn.execute(
+                            "SELECT * FROM runs WHERE run_id=?", (run_id,)
+                        ).fetchone())
+                        detail_record.pop("manifest_json", None)
+                        payload_bound = conn.execute(
+                            "SELECT COALESCE(SUM(length(CAST(payload_json AS BLOB))),0), "
+                            "COALESCE(SUM(typeof(payload_json) != 'text'),0) "
+                            "FROM run_events WHERE run_id=?", (run_id,)
+                        ).fetchone()
+                        if payload_bound[0] > MAX_ARTIFACT_BYTES or payload_bound[1]:
+                            raise TraceSnapshotError("source_unreadable")
+                        detail_events = tuple(dict(item) for item in conn.execute(
+                            "SELECT id, created_at, event_type, payload_json FROM run_events "
+                            "WHERE run_id=? ORDER BY id LIMIT ?", (run_id, MAX_RUN_EVENTS + 1)
+                        ))
                     result = TraceDbSnapshot(
                         run_id=run_id, task_id=record["task_id"],
                         observed_status=observed_status,
@@ -288,6 +332,10 @@ def read_run_db_snapshot(project_root: Path, run_id: str) -> TraceDbSnapshot:
                         run_manifest_version=mv,
                         event_stream_sha256=_stable_sha(selected_events),
                         events=tuple(public_events),
+                        record=detail_record,
+                        manifest=payload if details else {},
+                        stage_events=detail_events,
+                        instance_id=instance_id,
                     )
                     conn.execute("ROLLBACK")  # End read-only BEGIN; no changes.
                 finally:

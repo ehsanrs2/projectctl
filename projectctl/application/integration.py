@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from projectctl.telemetry.lifecycle import measured
+
 import json
 import os
 import subprocess
@@ -1068,6 +1070,7 @@ def _integrate_run_locked(project_root: Path, run_id: str) -> IntegratedRun:
             pass
 
 
+@measured("integration_work")
 def integrate_run(project_root: Path, run_id: str) -> IntegratedRun:
     root = project_root.resolve()
     with project_lock(root, "integration"):

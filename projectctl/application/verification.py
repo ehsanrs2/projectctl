@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from projectctl.telemetry.lifecycle import measured
+
 import json
 import os
 import subprocess
@@ -251,6 +253,7 @@ def _write_failure_evidence(
     return evidence
 
 
+@measured("independent_verification")
 def verify_run(project_root: Path, run_id: str) -> VerifiedRun:
     root = project_root.resolve()
     actor = _actor()

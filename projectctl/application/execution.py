@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from projectctl.telemetry.lifecycle import measured
+
 import hashlib
 import json
 import os
@@ -769,6 +771,7 @@ def _validate_durable_task_claim(
     )
 
 
+@measured("worker_pre_dispatch_contract")
 def _load_admitted_execution_contract(
     project_root: Path,
     run_dir: Path,
@@ -971,6 +974,7 @@ def _persist_checkpoint(
     return record, durable
 
 
+@measured("worker_post_dispatch")
 def _finalize_worker_outcome(
     root: Path,
     *,
@@ -1132,6 +1136,7 @@ def _run_worker_operation(
     )
 
 
+@measured("worker_start_handling")
 def start_prepared_run(project_root: Path, run_id: str) -> StartedRun:
     root = project_root.resolve()
     actor = _actor()
@@ -1459,6 +1464,7 @@ def start_prepared_run(project_root: Path, run_id: str) -> StartedRun:
             pass
 
 
+@measured("worker_resume_handling")
 def resume_checkpointed_run(project_root: Path, run_id: str) -> StartedRun:
     root = project_root.resolve()
     actor = _actor()

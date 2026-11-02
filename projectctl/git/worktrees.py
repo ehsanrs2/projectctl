@@ -53,10 +53,23 @@ def current_branch(project_root: Path) -> str:
 
 
 class WorktreeManager:
+    @staticmethod
+    def storage_path(home: Path, instance: str, worktree_id: str) -> Path:
+        """Pure path contract shared by runtime and read-only inspection."""
+        if not _SAFE_ID.fullmatch(instance) or not _SAFE_ID.fullmatch(worktree_id):
+            raise WorktreeError("Unsafe worktree identity.")
+        root = (home.resolve() / "worktrees").resolve()
+        instance_root = (root / instance).resolve()
+        path = (instance_root / worktree_id).resolve()
+        if not instance_root.is_relative_to(root) or not path.is_relative_to(instance_root):
+            raise WorktreeError("Worktree path escapes ProjectCTL worktree root.")
+        return path
+
     def __init__(self, project_root: Path, *, home: Path | None = None):
         self.project_root = project_root.resolve()
         self.home = (home or projectctl_home()).resolve()
         instance = project_instance_id(self.project_root)
+        self._instance = instance
         if not _SAFE_ID.fullmatch(instance):
             raise WorktreeError(f"Unsafe project instance id: {instance!r}")
         worktrees_root = (self.home / "worktrees").resolve()
@@ -72,7 +85,7 @@ class WorktreeManager:
     def path_for(self, worktree_id: str) -> Path:
         if not _SAFE_ID.fullmatch(worktree_id):
             raise WorktreeError(f"Unsafe worktree id: {worktree_id!r}")
-        path = (self.root / worktree_id).resolve()
+        path = self.storage_path(self.home, self._instance, worktree_id)
         if not path.is_relative_to(self.root):
             raise WorktreeError(f"Worktree path escapes ProjectCTL worktree root: {path}")
         return path
