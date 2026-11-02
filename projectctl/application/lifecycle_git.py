@@ -92,10 +92,12 @@ def inspect_git(root, db, plan, evidence, integration, checkpoint=None):
             candidate = record.get("candidate_commit")
             frozen_worker = db.observed_status.value == "claimed" or (
                 db.observed_status.value == "running" and record.get("checkpoint_ref"))
-            wanted_head = record["base_commit"] if frozen_worker else candidate
+            frozen_head = frozen_worker or (
+                db.observed_status.value == "verifying" and not candidate)
+            wanted_head = record["base_commit"] if frozen_head else candidate
             if wanted_head:
                 set_check("worktree_head", "observed" if head == wanted_head else "inconsistent",
-                          "frozen_base_head_cross_check" if frozen_worker else "candidate_head_cross_check")
+                          "frozen_base_head_cross_check" if frozen_head else "candidate_head_cross_check")
             if frozen_worker and record.get("checkpoint_ref"):
                 if checkpoint is None or not getattr(checkpoint, "workspace_digest", None):
                     set_check("checkpoint_workspace", "unknown", "checkpoint_workspace_digest_unavailable")
@@ -105,8 +107,11 @@ def inspect_git(root, db, plan, evidence, integration, checkpoint=None):
                               else "inconsistent", "checkpoint_workspace_digest_cross_check")
             clean = porcelain_clean(_git(expected, "status", "--porcelain=v1", "-z", "--untracked-files=all"))
             pending_verification = not candidate and db.observed_status.value in {"running", "verifying"}
-            set_check("worktree_clean", "observed" if clean or pending_verification else "inconsistent",
-                      "workspace_pending_verification" if pending_verification else "git_porcelain_observation")
+            # Expected worker changes are not evidence of a clean workspace.
+            set_check("worktree_clean", "observed" if clean else
+                      "not_applicable" if pending_verification else "inconsistent",
+                      "dirty_workspace_pending_verification" if not clean and pending_verification
+                      else "git_porcelain_observation")
             set_check("worktree", "observed", "stored_worktree_exists")
         if plan:
             target = _git(root, "rev-parse", "--verify", "--end-of-options",

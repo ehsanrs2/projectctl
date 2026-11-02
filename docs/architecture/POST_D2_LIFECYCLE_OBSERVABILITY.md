@@ -44,7 +44,13 @@ The existing M6 Seal and coherent snapshot work remains separate.
 DB and artifact rereads detect ordinary drift but are not an atomicity proof.
 Git checks use optional locks disabled, stored identity and the manager's path
 contract. They do not create the manager's storage directory. Git porcelain is
-read as bytes without trimming its significant leading status blank. Parent
+read as bytes without trimming its significant leading status blank. A verify
+preview requires observed HEAD at the frozen execution base when no candidate
+exists. Clean porcelain is reported as observed; dirty pre-verification worker
+changes are reported as `worktree_clean: not_applicable` with reason
+`dirty_workspace_pending_verification`, not as proof of cleanliness. These
+changes do not block verify previews or checkpoint-bound resume previews; start
+and integrate retain their existing cleanliness gates. Parent
 artifact hashes use canonical model digests, while source file SHA-256 values
 describe bytes. Event payloads are inspected for available digest links and
 structural/time-order inconsistencies; an unauthenticated historical event log

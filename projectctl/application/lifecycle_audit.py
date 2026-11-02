@@ -237,6 +237,8 @@ def assemble_audit(db, files, *, project_root=None):
         required_git += ("worktree_head", "worktree_clean")
     elif proposed == "resume":
         required_git += ("worktree_head", "checkpoint_workspace")
+    elif proposed == "verify":
+        required_git += ("worktree_head",)
     elif proposed == "integrate":
         required_git += ("worktree_head", "worktree_clean", "candidate_diff")
     if proposed is not None and (any(

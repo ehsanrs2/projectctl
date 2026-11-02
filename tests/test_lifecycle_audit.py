@@ -403,3 +403,70 @@ def test_integrate_requires_complete_candidate_git_evidence(tmp_path, monkeypatc
     assert report["handoff"]["guards"]
     assert "PRIVATE_CANDIDATE_ERROR" not in json.dumps(report)
     assert tree_bytes(tmp_path) == before
+
+
+def verifying_run(tmp_path, monkeypatch, *, frozen_head=True):
+    repo, worktree, base, _, _, run_id = setup_ready_run(tmp_path, monkeypatch)
+    cold(repo)
+    set_status(repo, "verifying", candidate_commit=None)
+    for name in ("verification-manifest.json", "evidence-manifest.json"):
+        (repo / ".projectctl/runs" / run_id / name).unlink()
+    if frozen_head:
+        subprocess.run(["git", "-C", str(worktree), "reset", "--hard", base],
+                       check=True, capture_output=True)
+    return repo, worktree, run_id
+
+
+@pytest.mark.parametrize("frozen_head", [True, False])
+def test_verify_requires_observed_frozen_base_head(tmp_path, monkeypatch, frozen_head):
+    repo, _, run_id = verifying_run(tmp_path, monkeypatch, frozen_head=frozen_head)
+    report = audit_run(repo, run_id)
+    assert report["handoff"]["proposed_stage"] == ("verify" if frozen_head else None)
+    assert report["checks"]["worktree_head"] == {
+        "state": "observed" if frozen_head else "inconsistent",
+        "reason": "frozen_base_head_cross_check",
+    }
+    assert not report["handoff"]["dispatch_authorized"]
+    assert not report["handoff"]["implicit_retry_allowed"]
+
+
+@pytest.mark.parametrize("status", ["running", "verifying"])
+@pytest.mark.parametrize("dirty", [None, "tracked", "staged", "untracked"])
+def test_pending_verification_reports_actual_cleanliness(tmp_path, monkeypatch, status, dirty):
+    repo, worktree, run_id = verifying_run(tmp_path, monkeypatch)
+    set_status(repo, status, candidate_commit=None)
+    if dirty == "untracked":
+        (worktree / "new.txt").write_text("worker output\n")
+    elif dirty:
+        (worktree / "app.py").write_text("worker output\n")
+        if dirty == "staged":
+            subprocess.run(["git", "-C", str(worktree), "add", "app.py"], check=True)
+    before = tree_bytes(tmp_path)
+    report = audit_run(repo, run_id)
+    assert report["checks"]["worktree_clean"] == {
+        "state": "not_applicable" if dirty else "observed",
+        "reason": "dirty_workspace_pending_verification" if dirty else "git_porcelain_observation",
+    }
+    assert report["handoff"]["proposed_stage"] == ("verify" if status == "verifying" else None)
+    assert not report["handoff"]["dispatch_authorized"]
+    assert not report["handoff"]["implicit_retry_allowed"]
+    assert tree_bytes(tmp_path) == before
+
+
+@pytest.mark.parametrize("state", [None, "unknown", "not_applicable"])
+def test_verify_refuses_unproven_head(tmp_path, monkeypatch, state):
+    from projectctl.application import lifecycle_git
+    repo, _, run_id = verifying_run(tmp_path, monkeypatch)
+    original = lifecycle_git.inspect_git
+
+    def insufficient(*args, **kwargs):
+        checks = original(*args, **kwargs)
+        checks.pop("worktree_head", None)
+        if state is not None:
+            checks["worktree_head"] = {"state": state, "reason": "synthetic_unproven_head"}
+        return checks
+
+    monkeypatch.setattr(lifecycle_git, "inspect_git", insufficient)
+    report = audit_run(repo, run_id)
+    assert report["handoff"]["proposed_stage"] is None
+    assert "git_inputs_unproven" in report["handoff"]["guards"]
