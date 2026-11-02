@@ -112,7 +112,8 @@ def test_artifact_reader_rejects_inconsistent_subset_observations(tmp_path, scop
         "state": "inconsistent", "reason": "measurement_provenance_invalid"}
 
 
-def test_capture_and_reader_preserve_unknown_inconsistent_subsets(tmp_path):
+def test_capture_and_reader_preserve_unknown_inconsistent_subsets(tmp_path, monkeypatch):
+    monkeypatch.setattr("importlib.metadata.version", lambda name: "0.160.0")
     from types import SimpleNamespace as NS
     path = tmp_path / "metrics.json"
     with measurement_artifact(path, run_id="run-1", stage="start"):
@@ -125,3 +126,13 @@ def test_capture_and_reader_preserve_unknown_inconsistent_subsets(tmp_path):
     assert scopes["last"]["input_tokens"]["value"] == 10
     assert scopes["total"]["reasoning_output_tokens"] == {"state": "unknown", "value": None}
     assert scopes["total"]["output_tokens"]["value"] == 5
+
+
+@pytest.mark.parametrize("sdk_version", ["unknown", "0.159.0"])
+def test_reader_keeps_usage_unknown_for_unverified_sdk(tmp_path, monkeypatch, sdk_version):
+    monkeypatch.setattr("importlib.metadata.version", lambda name: sdk_version)
+    path = tmp_path / "metrics.json"
+    with measurement_artifact(path, run_id="run-1", stage="start"):
+        observed_sdk_call(lambda: object())
+    usage = inspect_measurements(path, "run-1")["measurements"][0]["usage"]
+    assert usage == {"state": "unknown", "reason": "sdk_version_not_offline_verified"}
