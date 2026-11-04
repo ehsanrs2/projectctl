@@ -1,5 +1,8 @@
 # ADR-041 — Research lifecycle observations and optional measurements
 
+> **Post-merge status addendum (2026-11-04):** This decision was implemented and selectively ported to main by [PR #126](https://github.com/ehsanrs2/projectctl/pull/126), merge commit `82f576632f35b68adced2e529768d72f7017fd3b`. The exact merge [CI](https://github.com/ehsanrs2/projectctl/actions/runs/41785470901) passed (2763 tests passed, 7 skipped). The original "PR pending / not merged" statement immediately below is preserved as **historical preparation-time provenance**, not the present state. The ADR's non-authority, rollback-journal and retry restrictions are unchanged. See [current status](../IMPLEMENTATION_STATUS.md).
+
+
 Status: Feature-port preparation, offline qualification only; PR pending.
 No merge into main or live experiment approval.
 
