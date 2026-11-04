@@ -1,5 +1,8 @@
 # M6.0 — Read-only Trace & Evaluation Export: Bounded Implementation Plan
 
+> **Dated plan warning (2026-11-04):** The stage narratives below include 2026-10-19 planning and older draft labels. Since then, [R0b](M6_0_R0B_CURRENT_WAL_FAIL_CLOSED_DECISION.md) selected **C / active-WAL fail-closed**, P01/P02 synthetic studies and P3i–P3n labs were completed without real P0–P4 admission, and Post-D2 audit/telemetry merged via [PR #126](https://github.com/ehsanrs2/projectctl/pull/126). Do not treat the older "R0 next" sentence as today's priority. For the current ordered gates consult the [2026-11-04 evidence ledger](../IMPLEMENTATION_STATUS.md), the Blueprint and the still-Draft P03-D1 owner decision. The historical plan below is retained, not silently rewritten.
+
+
 **Implementation status (2026-10-19): PRs #54–#96 merged; ADR-039 and ADR-040 Path A are accepted DESIGNS, not production approval. Current evidence and all R/W/M gate statuses: [M6.0 reader-first rebaseline](M6_0_REBASELINE_2026_10_19.md), pinned at main 325fc7ef54ae29823e84f35a14397c040c9649e5. R0 live-WAL feasibility remains unresolved; real v3 migration, W1 Seal, R1 reader, Collector/CLI and supported assessments remain NO-GO.**
 
 > Historical note: the stage narratives below were written as PRs #54–#67 arrived. Their older Draft/Proposed wording is stage-local history, not the up-to-date readiness ledger. Do not derive current authorization from those paragraphs. **Pause new M0 journal labs pending the R0 A/B/C decision.**
