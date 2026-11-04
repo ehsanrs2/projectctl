@@ -67,8 +67,7 @@ git push --force-with-lease=refs/heads/experiment/m6.0-m0h-mount-namespace-acces
 
 ```bash
 # OPTIONAL, after the checks above, on the authenticated repository remote:
-git push --force-with-lease=refs/heads/docs/m6.0-p03d1-source-witness-topology-decision:d48e4b95d5b9aeffff117d4f16f3a9b644a15866 \\
-  origin :refs/heads/docs/m6.0-p03d1-source-witness-topology-decision
+git push --force-with-lease=refs/heads/docs/m6.0-p03d1-source-witness-topology-decision:d48e4b95d5b9aeffff117d4f16f3a9b644a15866 origin :refs/heads/docs/m6.0-p03d1-source-witness-topology-decision
 ```
 
 This removes **only the branch ref**, not the closed PR/Issue history. It is not an instruction to erase, force-rewrite or prune unmerged research evidence.
