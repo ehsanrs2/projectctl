@@ -14,6 +14,11 @@ from pathlib import Path
 _collector: ContextVar[list | None] = ContextVar("lifecycle_measurements", default=None)
 
 
+class MeasurementArtifactExistsError(FileExistsError):
+    """Exclusive measurement destination collision, before any stage dispatch."""
+
+
+
 @contextmanager
 def capture_measurements():
     """Collect only within this context. Caller owns any explicit persistence.
@@ -96,8 +101,13 @@ def measurement_artifact(path: Path | None, *, run_id: str, stage: str):
     _valid_run_id(run_id)
     if stage not in {"start", "resume", "verify", "integrate"}:
         raise ValueError("Unsupported measurement stage")
-    fd = os.open(Path(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL
-                 | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        fd = os.open(Path(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                     | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    except FileExistsError:
+        # Preserve the exclusive no-clobber/no-retry boundary. Do not leak the
+        # user-supplied filename or confuse stage-internal EEXIST with this gate.
+        raise MeasurementArtifactExistsError("measurement_artifact_exists") from None
     payload = {
         "schema_kind": "projectctl.lifecycle_measurements", "schema_version": 1,
         "run_id": run_id, "stage": stage, "invocation_id": uuid.uuid4().hex,
