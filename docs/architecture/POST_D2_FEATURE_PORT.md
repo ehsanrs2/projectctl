@@ -1,5 +1,8 @@
 # Post-D2 lifecycle feature port
 
+> **Integration status addendum (2026-11-04):** This is a frozen selective-port preparation log. [PR #126](https://github.com/ehsanrs2/projectctl/pull/126) was subsequently merged into `main` at `82f576632f35b68adced2e529768d72f7017fd3b`; [postmerge CI](https://github.com/ehsanrs2/projectctl/actions/runs/41785470901) succeeded. The log's final `PR_PENDING` label refers only to the time this file was authored. Do not rerun D2 or reinterpret research timing. See [current status](../IMPLEMENTATION_STATUS.md).
+
+
 Worktree: `/home/ai/project/My/projectctl-lifecycle-integration`.
 Branch: `feature/post-d2-lifecycle-observability`.
 Frozen base: `4b3ce59f9f2f6daa9bb5b7e4dd77cf3eb49e12b4`.
