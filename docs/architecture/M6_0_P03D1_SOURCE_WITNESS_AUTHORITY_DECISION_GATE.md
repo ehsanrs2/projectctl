@@ -6,6 +6,8 @@
 
 **Governance:** ADR-039 accepted local non-authoritative, strictly read-only Trace design; ADR-040 accepted narrow Path A *design*; R0b chooses route C, active WAL fail-closed. P01 (#121) tests a hypothetical independent oracle; P02 (#123) falsifies promotion of a self-hashed receipt into provenance. The preserved P3i–P3n synthetic custody trials are separate and do not establish source admission.
 
+> **Post-D2 / documentation rebaseline, 2026-11-04:** Merged [PR #126](https://github.com/ehsanrs2/projectctl/pull/126), `main@82f576632f35b68adced2e529768d72f7017fd3b`, installed a separate **derived, read-only** `projectctl run audit` and optional non-authoritative lifecycle telemetry, with successful exact-merge CI. Later [README/architecture documentation #128](https://github.com/ehsanrs2/projectctl/pull/128) and [telemetry collision diagnostics #129](https://github.com/ehsanrs2/projectctl/pull/129) merged; source of truth for the live head is `main`, not this PR's 2026-11-02 snapshot. Read [the dated implementation ledger](../IMPLEMENTATION_STATUS.md) for the full post-merge evidence chain. Audit may observe supported rollback-journal inputs; **none** of its `observed`, `proposed_stage`, optional measurements, Git digest checks or SDK timings can serve as a P0 source proof, an atomic P1 Seal, a source history/freshness oracle, a durable exclusive dispatch-intent journal or a safe-R1 active-WAL guarantee. These features are *parallel* to this design gate, not prerequisites that silently fulfill it. **M0 v2→v3 operational migration** likewise stays a separate NO-GO owner-authorized cutover, not a consequence of a passing synthetic W1 fixture. This addendum updates chronology only; it does not amend ADR-039/040/041 or authorize a new operation.
+
 ## 1. Exact problem and selected scope
 
 The next necessary step is not another synthetic receipt schema. It is a decision about **who** can independently establish a source epoch and **what durable evidence** binds that claim to actual ProjectCTL state. A SHA-256 of sequentially copied state.sqlite + JSON, a JSON field `epoch`, a signed manifest, a systemd unit name, or a test oracle constructed from the package is not P0/P1 evidence.
@@ -69,6 +71,20 @@ Real state as of this baseline: production ProjectCTL project state remains v2; 
 - **D5: independent audit and recovery.** Who observes start/FD exclusion and disk transaction boundaries, and can independently reconcile crash, checkpoint, root restart, filesystem metadata, snapshot rollback and partial handoff? No such observer is currently attested.
 
 Until decisions are explicit and separately evidenced: **P0_P1_P2_P3_P4_NO_GO**, `R0B_C_FAIL_CLOSED`, `P3_NO_GO_DEPLOYMENT_UNVERIFIED`, no real project data, root command, systemd/AppArmor policy, key provision, writer migration, WAL Reader or public export.
+
+## 6A. Proposed bounded owner decision and evidence matrix — still unsigned
+
+This review distinguishes **architecture preference** from **authorization to execute**:
+
+| Decision | Bounded recommendation for review | What would change the current NO-GO |
+| --- | --- | --- |
+| D1 topology / P0 | Keep the Debian/KVM closed-world M0o/M0q profile as an unselected candidate; independently held controller authority, old-v2 entrypoints, inherited/SCM_RIGHTS FDs and alternate writable aliases must be enumerated and challenged. | An owner-scoped environment/TCB decision plus independently observed continuous old-start/new-open exclusion and held FD/credential boundary; neither a service name nor a single PID inventory suffices. |
+| D2 W1 experiment | **Recommend only an unprivileged disposable fixture** reproducing one narrow non-review `VERIFYING -> READY_TO_INTEGRATE` transition with source-owned exact leaf bytes, file/parent durability barriers and one fenced DB status+event+Seal transaction. This is a proposal, **not** a live ProjectCTL code-change approval. | A separate bounded task authorization defining allowed sandbox, file/DB creation, fault injection, deterministic offline test budget, expected failure/refusal classes and explicit no-production-touch. |
+| D3 historical retention | Record either independently retained exact bytes for `as_of N` or an explicit `UNAVAILABLE`; never treat rewritten fixed names from N+1 as evidence of N. `current` requires a separately evidenced freshness witness. | Retained byte/object identity, binding and no-clobber evidence under an approved custody/source policy. |
+| D4 P2/P3 trust | Keep issuer-key authority and custody as independently governed future interfaces, not an arbitrary `issuer_claim_id` or synthetic signed packet. | Owner-approved issuer registry/key custody, writer→issuer authorization and external replay/rollback witness. |
+| D5 read/recovery | R0b C fail-closed until independent source nonmutation/epoch and crash-reconciliation evidence; no live-WAL opening as a quick audit workaround. | A reviewable negative test showing no forbidden DB/WAL/SHM/content/metadata writes and deterministic incomplete refusal under unsupported states. |
+
+**Decision hold point:** No trusted issuer/custodian identity, real migration path, root policy, new Writer binary, live Worker/Provider, automatic retry or permission to publish a completed Trace has been selected by this memo. The proposed first engineering gate is a separate **offline disposable W1 fixture** only; it must have its own owner-scoped acceptance, without presuming D1, D3–D5 have passed.
 
 ## 7. One-next-slice rule
 
