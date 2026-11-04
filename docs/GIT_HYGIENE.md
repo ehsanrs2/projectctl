@@ -17,6 +17,8 @@
 
 **Important:** Git ancestry is sufficient to show these branch tips are reachable from main; it is **not** evidence that every historical worktree, snapshot or external research witness can be deleted. Do not delete Git tags, merge commits, local worktrees, private evidence or pinned research paths.
 
+**Repository setting verified 2026-11-04:** `delete_branch_on_merge=false`. After this cleanup, the owner should consider **Settings → General → Pull Requests → Automatically delete head branches** for future merged PRs. This does not delete currently retained historical branches and should only be enabled after the team agrees on branch-retention policy. The connected GitHub action cannot change this setting.
+
 ## Read-only preflight on normal developer host (no root, no tmux)
 
 ```bash
