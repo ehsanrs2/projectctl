@@ -105,6 +105,7 @@ def _fixture(tmp_path: Path) -> Path:
         """)
         conn.execute("INSERT INTO run VALUES (?, ?, ?, 0, '', 0)",
                      (_RUN, _STATUS_PRE, "none"))
+        conn.commit()  # closing() alone does not commit the seed transaction
     return root
 
 
