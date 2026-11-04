@@ -12,6 +12,7 @@ This directory separates **current status**, **canonical architecture**, **accep
 | Active goal/milestone | [PROJECT_STATE.yaml](PROJECT_STATE.yaml) | **Sole** structured active-milestone authority |
 | Detailed previous milestone commands and explanations | [Feature history](FEATURE_HISTORY.md) | Preserved historical root README; may be stale |
 | M6 document topics and gating | [M6 architecture index](architecture/INDEX.md) | Curated navigation |
+| Branch/document cleanup | [Git hygiene](GIT_HYGIENE.md) | Protected refs, merge ancestry, operator-only guarded deletion |
 | Decisions | [ADRs](decisions/) | Versioned architecture decisions with their original context |
 
 ## Implemented Post-D2 capability vs M6 research
