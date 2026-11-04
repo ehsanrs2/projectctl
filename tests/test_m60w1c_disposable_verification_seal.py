@@ -245,6 +245,10 @@ def _publish(
                 )
                 if fault == "before_commit":
                     raise InjectedCrash("before_commit")
+                if fault == "hard_exit_before_commit":
+                    # Real process death with an open SQLite transaction.
+                    # This is a disposable test DB, never a production source.
+                    os._exit(73)
                 conn.commit()
                 steps.append("commit")
             except BaseException:
@@ -253,6 +257,8 @@ def _publish(
 
         if fault == "after_commit_before_ack":
             raise InjectedCrash("after_commit_before_ack")
+        if fault == "hard_exit_after_commit":
+            os._exit(73)
         steps.append("ack")
     return tuple(steps)
 
@@ -433,8 +439,8 @@ def _process_crash(root: str, grant: tuple[int, str], fault: str) -> None:
 
 
 @pytest.mark.parametrize(("fault", "expected"), [
-    ("before_commit", _REFUSE_NO_SEAL),
-    ("after_commit_before_ack", _SUCCESS),
+    ("hard_exit_before_commit", _REFUSE_NO_SEAL),
+    ("hard_exit_after_commit", _SUCCESS),
 ])
 def test_process_exit_at_commit_boundary_is_reconciled_from_fresh_reader(
     tmp_path, fault, expected
@@ -459,6 +465,7 @@ def test_fixture_creates_no_real_projectctl_state_and_no_runtime_import():
     # All SQL and file publication code lives in this test module. No
     # production RunStore or external ProjectCTL store can be reached.
     source = Path(__file__).read_text(encoding="utf-8")
+    source = source.split("def test_fixture_creates_no_real_projectctl_state_and_no_runtime_import():")[0]
     for forbidden in ("from projectctl", "import projectctl", "subprocess.",
                       "socket.", "codex", "os.system("):
         assert forbidden not in source.lower()
