@@ -1,5 +1,8 @@
 # M6.0 — Current implementation rebaseline and gate scorecard (2026-10-19)
 
+> **Historical baseline notice (2026-11-04):** This ledger is pinned to 2026-10-19. Later evidence includes R0b option C fail-closed, synthetic P01/P02 and P3i–P3n, and merged Post-D2 audit/telemetry PR #126. Its original priority statements are evidence of that date, **not current operational gates**. See [current status](../IMPLEMENTATION_STATUS.md) and [architecture index](INDEX.md); P0–P4 are still NO-GO.
+
+
 **Status: PROPOSED IMPLEMENTATION REVIEW, not a new ADR or permission grant.**
 **Pinned repository evidence:** merged main SHA 325fc7ef54ae29823e84f35a14397c040c9649e5, PR #96. This review is read-only. It neither overrides accepted ADR-039 or ADR-040 Path A nor changes the active M6.0 goal in docs/PROJECT_STATE.yaml. No root trial, OS policy, source DB, project writer, public CLI or release is authorized by this PR.
 
