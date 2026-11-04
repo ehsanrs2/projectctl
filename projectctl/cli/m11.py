@@ -17,6 +17,7 @@ from projectctl.application.integration import integrate_run
 from projectctl.application.recovery import recover_run
 from projectctl.core.enums import AutoStopReason, WorkerStrategyKind
 from projectctl.core.errors import ProjectCtlError
+from projectctl.telemetry.lifecycle import MeasurementArtifactExistsError
 from projectctl.project.bootstrap import projectctl_home
 from projectctl.project.root import find_project_root
 from projectctl.schemas.capabilities import StrategyFallbackPolicy
@@ -28,6 +29,17 @@ from projectctl.storage.sqlite import migrate_global_state_db, migrate_project_s
 EXIT_REPOSITORY = 11
 EXIT_RUN = 17
 EXIT_VERIFICATION = 19
+
+
+def _measurement_path_collision_exit() -> None:
+    """Only called when O_EXCL refused telemetry *before* stage invocation."""
+    typer.echo(
+        "Measurement artifact already exists. Choose a new --measurements path; "
+        "existing bytes are preserved and the stage was not started. "
+        "A pending artifact never authorizes retry.",
+        err=True,
+    )
+    raise typer.Exit(EXIT_RUN)
 
 
 def _json(value) -> str:
@@ -280,6 +292,8 @@ def register_m11(app: typer.Typer) -> None:
             from projectctl.telemetry.lifecycle import measurement_artifact
             with measurement_artifact(measurements, run_id=run_id, stage="start"):
                 started = start_prepared_run(root, run_id)
+        except MeasurementArtifactExistsError:
+            _measurement_path_collision_exit()
         except ProjectCtlError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(EXIT_RUN)
@@ -324,6 +338,8 @@ def register_m11(app: typer.Typer) -> None:
             from projectctl.telemetry.lifecycle import measurement_artifact
             with measurement_artifact(measurements, run_id=run_id, stage="resume"):
                 resumed = resume_checkpointed_run(root, run_id)
+        except MeasurementArtifactExistsError:
+            _measurement_path_collision_exit()
         except ProjectCtlError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(EXIT_RUN)
@@ -364,6 +380,8 @@ def register_m11(app: typer.Typer) -> None:
             from projectctl.telemetry.lifecycle import measurement_artifact
             with measurement_artifact(measurements, run_id=run_id, stage="verify"):
                 verified = verify_run(root, run_id)
+        except MeasurementArtifactExistsError:
+            _measurement_path_collision_exit()
         except ProjectCtlError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(EXIT_RUN)
@@ -405,6 +423,8 @@ def register_m11(app: typer.Typer) -> None:
             from projectctl.telemetry.lifecycle import measurement_artifact
             with measurement_artifact(measurements, run_id=run_id, stage="integrate"):
                 integrated = integrate_run(root, run_id)
+        except MeasurementArtifactExistsError:
+            _measurement_path_collision_exit()
         except ProjectCtlError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(EXIT_RUN)
