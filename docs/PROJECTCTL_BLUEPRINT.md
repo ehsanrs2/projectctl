@@ -2,7 +2,8 @@
 
 Status: **Canonical high-level product, architecture, and roadmap reference**
 
-Last architecture review: **2026-10-07**
+Last broad architecture review: **2026-10-07**
+Status/dependency reconciliation: **2026-11-04** against main `82f576632f35b68adced2e529768d72f7017fd3b`, with [current evidence ledger](IMPLEMENTATION_STATUS.md). This date records facts and sequencing, **not** a new operational architecture approval.
 
 This document answers four questions:
 
@@ -13,7 +14,7 @@ This document answers four questions:
 
 It is intentionally different from the README and ADRs:
 
-- `README.md` is the user-facing implementation guide and milestone history.
+- `README.md` is the concise project entry point; detailed legacy milestone content is preserved at [FEATURE_HISTORY.md](FEATURE_HISTORY.md). A dated [implementation-status ledger](IMPLEMENTATION_STATUS.md) lists current evidence but is **not** a second roadmap or execution authority.
 - `docs/PROJECT_STATE.yaml` is the **only authority for the active goal and active milestone**.
 - ADRs are the authority for individual architecture decisions. A newer accepted ADR overrides
   a conflicting statement here and this blueprint must then be updated.
@@ -497,10 +498,7 @@ primitive is explicitly introduced.
 
 ### 6.10 Telemetry/evaluation layer
 
-Current telemetry is a local SQLite event stream.
-
-It is useful for audit and later evaluation, but it is not yet a distributed tracing or OTLP
-system and must not be described as one.
+Current telemetry includes the existing local SQLite event stream and, since merged [Post-D2 PR #126](https://github.com/ehsanrs2/projectctl/pull/126), **opt-in monotonic in-process lifecycle measurements and scoped SDK usage**. The new `run audit` derives read-only, fail-closed observations and an inspection-only proposed stage; RunStore and existing lifecycle gates remain authoritative. It is useful for audit and later evaluation, but it is not a durable exclusive dispatch-intent journal, coherent P0/P1 epoch witness, distributed tracing or OTLP. No duration derived from these overlapping spans is pure model processing time. See ADR-041 and [feature guide](architecture/POST_D2_LIFECYCLE_OBSERVABILITY.md).
 
 ---
 
@@ -1683,7 +1681,7 @@ See `docs/architecture/M5_2B_CLOSURE_AUDIT.md`, `docs/architecture/POST_M5_2_ARC
 
 ### M6.0 — Read-only Trace & Evaluation Export
 
-**Active milestone — Slice A contract and Slice B0 pure formatter merged; ADR-039 read-only design acceptance recorded in a separate PR. Collector/CLI not yet implemented.**
+**Active milestone — bounded contracts/private readers and synthetic feasibility evidence exist. The separate ADR-041 Post-D2 audit/measurements feature is now merged, but the M6.0 trusted Trace Collector/CLI, real W1 Seal, P0/P1 epoch source and safe R1 live-WAL Reader remain NO-GO.** See the [2026-11-04 ledger](IMPLEMENTATION_STATUS.md).
 
 M6.0 produces a reproducible, local-only, redacted view derived from the
 existing authoritative RunStore, ExecutionInputManifest, VerificationManifest,
@@ -1716,11 +1714,9 @@ proven. See `docs/architecture/M6_0_B3A1_PURE_SEAL_CONTRACT_AUDIT.md`,
 The active goal is set only in `docs/PROJECT_STATE.yaml`; the current package
 version remains `0.41.0` pending a separate release decision.
 
-The optional lifecycle audit and measurement interface (ADR-041) is a separate,
-non-authoritative observation view under feature-port preparation. It does not
-implement the M6 trace Collector, supported assessments, coherent live-WAL
-snapshots, a dispatcher or another lifecycle authority. Unknown WAL sources
-remain inspection-only; main integration and live stages require separate decisions.
+The optional lifecycle audit and measurement interface (ADR-041) was **selectively ported and merged** via [PR #126](https://github.com/ehsanrs2/projectctl/pull/126), main `82f576632f35b68adced2e529768d72f7017fd3b`, and its [postmerge CI](https://github.com/ehsanrs2/projectctl/actions/runs/41785470901) passed (2763 passed, 7 skipped). The implemented `run audit` is a **non-authoritative** view, with a preview-only handoff. Measurements on separately authorized start/resume/verify/integrate calls are telemetry, not evidence of dispatch intent or safe retry. Neither feature implements the M6 Trace Collector, supported assessments, coherent live-WAL snapshots, a dispatcher or another lifecycle authority. Unsupported WAL sources remain inspection-only and existing stage authority remains unchanged.
+
+Post-merge follow-up [Issue #127](https://github.com/ehsanrs2/projectctl/issues/127) concerns only a concise CLI error on duplicate exclusive measurement paths. The separate [P03-D1 Draft #125](https://github.com/ehsanrs2/projectctl/pull/125) still requires an explicit owner trust-topology decision; P01/P02 and synthetic P3i–P3n do not establish real source provenance or custody. See [M6 index](architecture/INDEX.md) and [dated dependency ledger](IMPLEMENTATION_STATUS.md).
 
 ### Deferred product directions
 
