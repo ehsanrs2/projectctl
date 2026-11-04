@@ -1,0 +1,147 @@
+{
+  "authority": "derived_non_authoritative",
+  "checkpointed": false,
+  "checks": {
+    "candidate_binding": {
+      "reason": "run_evidence_candidate_cross_check",
+      "state": "observed"
+    },
+    "candidate_diff": {
+      "reason": "committed_diff_digest_cross_check",
+      "state": "observed"
+    },
+    "event_payload_integrity": {
+      "reason": "no_authenticated_event_log_baseline",
+      "state": "unknown"
+    },
+    "evidence_base": {
+      "reason": "run_evidence_base_cross_check",
+      "state": "observed"
+    },
+    "evidence_manifest": {
+      "reason": "schema_identity_match",
+      "sha256": "09ac979e7fb975f12abf00e136450baeee4a66a1d33c4f190d74b1a8e1d0cb99",
+      "state": "observed"
+    },
+    "execution_plan": {
+      "reason": "schema_identity_digest_match",
+      "sha256": "444e7eeffaa39d48c6dcfbcc29558c9d18bc82a6e9fe99191b7fca8915ccde6e",
+      "state": "observed"
+    },
+    "integration_manifest": {
+      "reason": "artifact_missing",
+      "state": "missing"
+    },
+    "overall_pass": {
+      "reason": "verification_evidence_cross_check",
+      "state": "observed"
+    },
+    "publication_manifest": {
+      "reason": "artifact_missing",
+      "state": "missing"
+    },
+    "run_manifest_base_commit": {
+      "reason": "run_record_manifest_cross_check",
+      "state": "observed"
+    },
+    "run_manifest_candidate_commit": {
+      "reason": "run_record_manifest_cross_check",
+      "state": "observed"
+    },
+    "run_manifest_execution_plan_digest": {
+      "reason": "run_record_manifest_cross_check",
+      "state": "observed"
+    },
+    "run_manifest_worktree_id": {
+      "reason": "run_record_manifest_cross_check",
+      "state": "observed"
+    },
+    "target_ref": {
+      "reason": "target_advanced_or_matches_recorded_boundary",
+      "state": "observed"
+    },
+    "verification_manifest": {
+      "reason": "schema_identity_match",
+      "sha256": "1a55bfafa183ed843da78b835f3fcfab327f1ccd4837affdb5586168b0c24d4a",
+      "state": "observed"
+    },
+    "verification_manifest_digest": {
+      "reason": "parent_digest_cross_check",
+      "state": "observed"
+    },
+    "verification_profile_digest": {
+      "reason": "verification_evidence_cross_check",
+      "state": "observed"
+    },
+    "verification_success": {
+      "reason": "terminal_or_candidate_verification_cross_check",
+      "state": "observed"
+    },
+    "verification_timestamps": {
+      "reason": "wall_clock_order_only_not_monotonic_duration",
+      "state": "observed"
+    },
+    "worker_dispatch": {
+      "reason": "absence_does_not_prove_no_dispatch",
+      "state": "unknown"
+    },
+    "worker_result": {
+      "reason": "schema_identity_match",
+      "sha256": "06c90b6bcdf3d9f5a23cbddec893bcf9f194a15151f636c524b1ca5e74649648",
+      "state": "observed"
+    },
+    "worker_result_digest": {
+      "reason": "parent_digest_cross_check",
+      "state": "observed"
+    },
+    "workspace_state_digest": {
+      "reason": "verification_evidence_cross_check",
+      "state": "observed"
+    },
+    "worktree": {
+      "reason": "stored_worktree_exists",
+      "state": "observed"
+    },
+    "worktree_clean": {
+      "reason": "git_porcelain_observation",
+      "state": "observed"
+    },
+    "worktree_head": {
+      "reason": "candidate_head_cross_check",
+      "state": "observed"
+    },
+    "worktree_path": {
+      "reason": "stored_identity_manager_path_match",
+      "state": "observed"
+    }
+  },
+  "consistency": "independent_source_observations_not_atomic_snapshot",
+  "event_count": 1,
+  "handoff": {
+    "dispatch_authorized": false,
+    "guards": [
+      "separate_owner_authorization_required",
+      "current_inputs_require_revalidation"
+    ],
+    "implicit_retry_allowed": false,
+    "permitted_action": "inspect",
+    "proposed_stage": "integrate"
+  },
+  "observed_status": "ready_to_integrate",
+  "run_id": "run-integration",
+  "schema_kind": "projectctl.lifecycle_audit",
+  "schema_version": 1,
+  "sources": {
+    "event_metadata_sha256": "63798e082b54e5cc6424dc2a99c9073b6c5688b75ea7c29c0ad641911486c7cf",
+    "run_manifest_sha256": "84ac66214b66a9906ab84160b3a055c0578c0954d0d2979d03cf337a02cd3d04",
+    "run_record_sha256": "d44c94e07b0b9aa00c76b41e435837d6ed8ee96450eed9e1c3bb369f781cc8ce"
+  },
+  "task_authority": {
+    "reason": "task_provider_not_contacted",
+    "state": "unknown"
+  },
+  "timing": {
+    "reason": "no_bound_measurement_artifact",
+    "state": "unknown"
+  }
+}

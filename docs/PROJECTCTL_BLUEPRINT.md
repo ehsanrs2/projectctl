@@ -1716,6 +1716,12 @@ proven. See `docs/architecture/M6_0_B3A1_PURE_SEAL_CONTRACT_AUDIT.md`,
 The active goal is set only in `docs/PROJECT_STATE.yaml`; the current package
 version remains `0.41.0` pending a separate release decision.
 
+The optional lifecycle audit and measurement interface (ADR-041) is a separate,
+non-authoritative observation view under feature-port preparation. It does not
+implement the M6 trace Collector, supported assessments, coherent live-WAL
+snapshots, a dispatcher or another lifecycle authority. Unknown WAL sources
+remain inspection-only; main integration and live stages require separate decisions.
+
 ### Deferred product directions
 
 The owner selected M6.0 after the accepted Post-M5.2 review. Other roadmap

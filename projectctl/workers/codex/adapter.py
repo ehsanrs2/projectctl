@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from projectctl.telemetry.lifecycle import observed_sdk_call
 from projectctl import __version__
 from projectctl.core.digest import digest
 from projectctl.core.enums import (
@@ -329,7 +330,7 @@ class CodexWorkerAdapter:
         kwargs["cwd"] = str(workspace)
 
         if checkpoint_monitor is None:
-            result = thread.run(message, **kwargs)
+            result = observed_sdk_call(thread.run, message, **kwargs)
             status = getattr(result.status, "value", str(result.status)).lower()
             if status != "completed":
                 raise WorkerError(
@@ -345,7 +346,7 @@ class CodexWorkerAdapter:
         checkpoint_monitor.start(lambda decision: turn.interrupt())
         try:
             try:
-                result = turn.run()
+                result = observed_sdk_call(turn.run)
             except Exception:
                 checkpoint_monitor.stop()
                 if checkpoint_monitor.decision is not None:
