@@ -1,5 +1,8 @@
 # Post-D2 lifecycle inspection and timing
 
+> **Current integration status (2026-11-04):** Feature merged in [PR #126](https://github.com/ehsanrs2/projectctl/pull/126); postmerge CI passed. The old opening phrase "feature-branch implementation" below describes original development history, not present Git status. [Current dependency ledger](../IMPLEMENTATION_STATUS.md) and ADR-041 retain the live-WAL/dispatch limitations.
+
+
 This feature-branch implementation follows ADR-041. It does not authorize a live
 experiment or any stage against historical D2 fixtures.
 
