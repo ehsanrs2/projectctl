@@ -15,7 +15,8 @@
 - [W0 trusted writer protocol](M6_0_W0_WRITER_FENCING_AND_SEAL_PROTOCOL.md), [W1a cross-process fencing](M6_0_W1A_CROSS_PROCESS_FENCING_PROOF.md), [W1b RunStore preflight](M6_0_W1B_REAL_RUNSTORE_FENCING_PREFLIGHT.md): bounded design/proof assets; not a production writer.
 - [M0o closed-world deployment candidate](M6_0_M0O_DEBIAN_KVM_CLOSED_WORLD_DEPLOYMENT_PROFILE.md), [M0q executable origin](M6_0_M0Q_EXECUTION_ORIGIN_AND_START_AUTHORITY.md), [M0r credential feasibility](M6_0_M0R_SERVICE_ONLY_WRITE_CREDENTIAL_FEASIBILITY.md), [M0x journal crash windows](M6_0_M0X_ANCHORED_JOURNAL_CRASH_WINDOWS.md): why root/LSM/FD/execution-origin admission remains separate and unproven.
 - [P01 mixed-epoch and false current](M6_0_P01_SYNTHETIC_MIXED_EPOCH_ADMISSION_GATE.md) and [P02 self-asserting receipt](M6_0_P02_SYNTHETIC_RECEIPT_PROVENANCE_GAP.md): merged **LAB_ONLY** negative models, not source attestation.
-- [P03-D1 proposed owner decision](https://github.com/ehsanrs2/projectctl/pull/125) — **Draft**, to reconcile against latest main before any decision; corresponding [Issue #124](https://github.com/ehsanrs2/projectctl/issues/124).
+- [P03-D1 owner decisions D1–D5](https://github.com/ehsanrs2/projectctl/issues/124) — **OPEN / NOT OPERATIONALLY APPROVED**. Proposed [PR #125](https://github.com/ehsanrs2/projectctl/pull/125) was **closed without merge as redundant**; substantive authority and threat requirements remain in the existing B-Diagnostic design, matrix, ADR-040 and this open issue.
+- [W1c disposable Seal/crash tests](https://github.com/ehsanrs2/projectctl/pull/131) — **MERGED / LAB_ONLY**; [Issue #130](https://github.com/ehsanrs2/projectctl/issues/130) closed, not proof of a trusted real Writer or captured source epoch.
 
 ## Reader, schema and artifact research
 
