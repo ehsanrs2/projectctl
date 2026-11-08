@@ -1683,6 +1683,25 @@ See `docs/architecture/M5_2B_CLOSURE_AUDIT.md`, `docs/architecture/POST_M5_2_ARC
 
 **Active milestone — bounded contracts/private readers and synthetic feasibility evidence exist. The separate ADR-041 Post-D2 audit/measurements feature is now merged, but the M6.0 trusted Trace Collector/CLI, real W1 Seal, P0/P1 epoch source and safe R1 live-WAL Reader remain NO-GO.** See the [2026-11-04 ledger](IMPLEMENTATION_STATUS.md).
 
+**Owner delivery-priority decision (2026-11-08; no change of M6.0 active milestone):**
+Ship the **M6a candidate first**, meaning a *strictly incomplete, offline-only,
+non-authoritative diagnostic* from an **independently qualified, non-mutating,
+supported input**. It must fail closed on unsupported WAL, mark absent/stale or
+unverified evidence unknown/incomplete, emit `assessments=[]` and never claim
+source authenticity, one verified DB+external-JSON epoch, current task/Run
+status, safe retry, verified delivery or trusted custody. No public
+`projectctl trace export` CLI, output destination, source acquisition or
+privacy policy is approved by this priority decision; those require their own
+acceptance and tests. Reuse existing B1/B2 and B-Diagnostic detached-fixture
+work. [Issue #134](https://github.com/ehsanrs2/projectctl/issues/134)
+tracks the first *tests-only* source-input isolation gate.
+
+The full trusted **M6b as-of provenance** remains a separate longer-term
+ADR-040 Path A research/deployment track. [Issue #124](https://github.com/ehsanrs2/projectctl/issues/124)
+retains P0–P4 independent authority decisions; the M6a sequencing decision
+**does not** close any of them or reverse R0b option C fail-closed. M6a and
+M6b must never share an ambiguous `complete/verified/current` product claim.
+
 M6.0 produces a reproducible, local-only, redacted view derived from the
 existing authoritative RunStore, ExecutionInputManifest, VerificationManifest,
 EvidenceManifest and integration/delivery evidence. The export is always
