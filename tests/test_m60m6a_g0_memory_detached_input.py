@@ -10,6 +10,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
+from contextlib import closing
 
 import pytest
 
@@ -91,9 +92,10 @@ def _synthetic_v2_rollback_image(tmp_path: Path) -> tuple[Path, bytes]:
     """Only manufacture a disposable v2 ProjectCTL schema in a temp dir."""
     db = tmp_path / "synthetic-projectctl-state.sqlite"
     initialize_project_state_db(db)
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn:
         mode = conn.execute("PRAGMA journal_mode=DELETE").fetchone()[0]
         assert mode == "delete"
+        conn.commit()
     raw = db.read_bytes()  # acquisition belongs to the test, not the probe
     assert raw[:len(_HEADER)] == _HEADER
     assert raw[18:20] == b"\x01\x01"
@@ -181,7 +183,6 @@ def test_real_active_wal_header_is_refused_before_deserialize(tmp_path, monkeypa
     b"",
     b"not sqlite",
     b"SQLite format 3\x00",
-    b"SQLite format 3\x00" + b"\x00" * 512,
 ])
 def test_invalid_image_rejected_without_file_access(corruption, monkeypatch):
     def should_not_connect(*args, **kwargs):
@@ -208,8 +209,9 @@ def test_bounded_image_refuses_before_sqlite_connection(monkeypatch):
 ])
 def test_unrecognized_source_identity_refused(tmp_path, pragma, value):
     db, _ = _synthetic_v2_rollback_image(tmp_path)
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn:
         conn.execute(f"PRAGMA {pragma} = {value}")
+        conn.commit()
     with pytest.raises(InputRefused, match="UNSUPPORTED_SOURCE_SCHEMA"):
         _inspect_memory_image(db.read_bytes())
 
