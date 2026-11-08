@@ -62,3 +62,62 @@ These are *conditional* work packages, not blanket authorizations, completion da
 - **Operational GO:** only after independently witnessed target-specific tests + explicit owner consent; none of P0–P4 qualifies.
 
 **Current decision:** `POST_D2_LIFECYCLE_OBSERVABILITY_MERGED_AND_POSTMERGE_CI_GREEN`; `P01_P02_W1C_LAB_ONLY_MERGED`; `P03_D1_PR_CLOSED_REDUNDANT`; `P03_D1_OWNER_DECISION_PENDING_IN_ISSUE_124`; `P0_P1_P2_P3_P4_NO_GO`; `R0B_C_FAIL_CLOSED`.
+
+
+---
+
+## 7. Engineering progress and ranked work — 2026-11-08 (estimates, NOT certified metrics)
+
+**Pinned evidence:** [main c486e50d94858fe5ead3571e4c60e8d8eea4ba9d](https://github.com/ehsanrs2/projectctl/commit/c486e50d94858fe5ead3571e4c60e8d8eea4ba9d); [postmerge CI #42361676934](https://github.com/ehsanrs2/projectctl/actions/runs/42361676934): 2797 passed, 7 skipped, test and SDK-contract jobs success. GitHub currently lists **no open PR** and [Issue #124](https://github.com/ehsanrs2/projectctl/issues/124) as its sole open issue. Sections 1–6 above remain the dated November 4 ledger. This appendix supersedes **no accepted ADR or project state**, and grants no authority.
+
+**Estimation rubric:** approximate expert judgment of implemented coverage within *each already declared scoped feature*, not empirical project completion, work log, schedule, security certificate or exact forecast. Uncertainty is roughly ±10–20 percentage points, possibly more for security. Different rows have different denominators; **never average them**. A passing negative test can establish a weakness, not close its operational gate. Architectural acceptance and deployed source trust must be measured separately.
+
+### A. Existing roadmap feature coverage
+
+| Workstream | Approximate scoped coverage | Grounded limit |
+| --- | --- | --- |
+| M0–M1: bootstrap, RunStore, claims, single-run, independent verify/integrate/recover | **90–95%** | Implemented, CI-covered within documented scope; this is NOT the new M6 M0 v2→v3 cutover. |
+| M2: quota/auto/checkpoint | **85–95%** | Bounded automation/quotas; cost modeling, external operator approval, new providers not silently provided. |
+| M3: task authorities/delivery | **80–90%** | GitHub and Jira execution capabilities, Linear read/eligibility only and intentionally unsupported lifecycle writes. |
+| M4: account-global admission, portfolio, safe concurrency, unified turns | **90–95%** | M4.2a/b completed; account-global worker turns remain serialized intentionally. |
+| M5–M5.2: derived context, human-reviewed scope, enforcement | **90–95%** | Explicit human scope remains authoritative; derived suggestions do not grant permission. |
+| Post-D2 / ADR-041: offline audit/measurements | **95–100% of its deliberately bounded feature** | #126/#129 merged and postmerge tested; no current live-WAL claim, exclusive dispatch-intent journal or retry authority. |
+| M6: schema/private reader/pure Seal *foundation* only | **65–80% of foundation** | Public schema, strict historical validators, rollback-only private reader and synthetic Seal/fault tests; no public Collector. |
+| M6: full trust-qualified as-of Trace Export *end to end* | **25–35% design/lab-weighted progress** | **Zero of P0–P4 operational gates admitted**; this percentage is neither a deployment readiness score nor a likelihood of success. |
+
+### B. M6 proof chain, deliberately separating lab maturity from operational GO
+
+| Dependency | Estimated design/lab maturity | Operational gate / principal gap |
+| --- | --- | --- |
+| P0 trusted source admission | ~20–30% | **NO_GO**. M0l–M0x demonstrate FD, independent start, same UID+private GID, code-origin, LSM and recovery gaps; no independently held continuous barrier. |
+| W1/P1 genuine as-of Seal | ~30–40% | **NO_GO**. [#131](https://github.com/ehsanrs2/projectctl/pull/131) is a participating-writer disposable fixture. No actual fenced W1 source publisher/retention/epoch authority. |
+| M0 controlled v2→v3 cutover | ~25–35% | **NO_GO**. Rehearsals do not prove all old writers/FDs excluded, migration compatibility or privileged recovery. |
+| R1 supported nonmutating source reader | ~15–25% | **R0b C_FAIL_CLOSED** for active WAL; bounded private rollback readers and detached probes do not prove source+JSON epoch coherence. |
+| P2 authenticated issuer | ~15–25% | **NO_GO**. Receipt, syntax and replay lab only; no independently governed real keys/issuer/authorization. |
+| P3 protected custody | ~35–45% | **NO_GO deployment**. P3i–P3n synthetic no-clobber/reboot only; no protected real-source package or anti-rollback root. |
+| P4 Collector/CLI/verified assessments | ~15–25% | **NO_GO**. Trace v1 schema/privacy contract exists, but end-to-end detached consumer, safe output and independent evaluation claims absent. |
+
+### C. Strategic scope choice before expensive implementation
+
+**Two deliverables must not be confused:**
+
+- **M6a, restricted incomplete offline diagnostics (candidate only):** A separately accepted derived, local, strictly privacy-redacted trace from a **proven supported non-mutating offline or quiescent input**. It must refuse unsupported live WAL, emit explicit unknown/incomplete/indeterminate classifications and `assessments=[]`. Reuse ADR-039, Post-D2 and historical readers. It **cannot** claim P0/P1/P2/P3 external attestation, latest state, safe Retry or verified provider completion. No public CLI is currently authorized. Order-of-magnitude effort **6–15 engineer-days** after input/privacy acceptance; high risk if no safe source input is available.
+- **M6b, full trusted as-of provenance (current ambitious architecture):** ADR-040 Path A is preferred as *design*. Real P0 admission, W1/M0 change, R1 nonmutation, P2 issuer, P3 custody and P4 product release are unproved. Total **40–100+ engineer-days** is only a very uncertain one-contributor engineering-effort range, excluding external approvals and unknown topology difficulties. The chosen environment may make it infeasible. This is NOT a promised duration.
+
+**Architectural caution:** The accepted ADR-039 goal is a **non-authoritative local derived export**; imposing signed independently protected provenance on *every* incomplete diagnostic could inflate scope needlessly. But an incomplete diagnostic may never masquerade as a trusted current snapshot. Splitting a deliverable or acceptance target requires explicit human review; this appendix does not revise ADR-039/040 or authorize the shorter path.
+
+### D. Ranked priorities and stop conditions
+
+| Priority | Smallest useful next unit | Exit and dependency | Very approximate engineering effort |
+| --- | --- | --- | --- |
+| **P0 — FIRST** | Decide on M6a incomplete diagnostic, M6b trusted as-of, or **two separately named tiers**. Use the *existing* [Issue #124](https://github.com/ehsanrs2/projectctl/issues/124) and accepted ADRs; no new duplicate architecture document. | Explicit allowed source input and truthful output labels, plus a fail-closed stop path for each tier. This decision precedes any privileged pilot or public CLI. | **1–3 engineer-days** review and scoped source inventory |
+| **P1 — EARLY** | Time-box only the **new** reader/input feasibility gap using existing R0b/B1/B2 evidence; do not repeat known WAL-unsafe approaches. | Qualify a supported detached/quiescent non-mutating input **or reject**. Negative result is legitimate. | **3–8 engineer-days**; high uncertainty |
+| **P1 — IF M6b** | Choose/test bounded P0 controller/TCB in a disposable Debian KVM guest, with explicit separate approval before root/systemd/AppArmor. Model A is valid only if untrusted actors cannot obtain *both* writer credentials or escaped writable FDs; a unit-local AppArmor label is not global protection. | Independent denial of old starts/new opens, preopened/SCM_RIGHTS FD/alias challenges, credential/code provenance and durable recovery. Any bypass => NO_GO. | **3–6 days pilot design; 8–20+ days** guest-only evidence if authorized |
+| **P2 — AFTER P0** | Implement and test real W1 single status+event+Seal transaction and separately gated M0 v2→v3 migration (or reviewed cooperative alternative). | Protected exact bytes, durable published Seal, old writer exclusion and backup/ambiguous-commit recovery. | **12–30+ days** |
+| **P2 — AFTER SAFE SOURCE** | R1 coherent as-of read with independently audited no-mutation of source DB/WAL/SHM/metadata. | Supported nonmutating input or preserved R0b option C; no fake `current`. | **7–15+ days**, may be infeasible |
+| **P3** | Independently governed P2 authentication + P3 custody and then P4 redacted export. | Valid provenance, no-clobber/replay protection, safe deterministic local output and supported evidence claims. | **15–35+ days** |
+| **P4 / DEFER** | Durable exclusive dispatch-intent, more providers, D2 statistical comparison, optional old branch hygiene. | Separate ROI/safety decision; not a prerequisite for initial bounded Trace. | No estimate without accepted scope |
+
+**Recommended order:** (1) resolve one concrete **product/trust tier** decision in #124; (2) qualify one safe input, preserving fail-closed; (3) implement a narrow diagnostic vertical slice *if independently accepted*, or the separately authorized real P0 enforcement pilot if full trusted path is selected; (4) proceed to W1/M0→R1→P2/P3→P4. Avoid another self-hashed receipt or one-more-journal negative-model PR unless it uniquely closes a new admission obstacle.
+
+**Unchanged stop line:** `P0_P1_P2_P3_P4_NO_GO`; `R0B_C_FAIL_CLOSED`; no real worker/provider call, source DB migration, root policy install, actual guest reconfiguration, key enrollment, public Trace or implied approval from a percent estimate. `docs/PROJECT_STATE.yaml` remains the single active-goal authority.
