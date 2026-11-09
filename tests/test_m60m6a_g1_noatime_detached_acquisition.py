@@ -26,8 +26,8 @@ pytestmark = pytest.mark.skipif(
     not sys.platform.startswith("linux") or
     not all(hasattr(os, name) for name in
             ("O_NOATIME", "O_NOFOLLOW", "O_DIRECTORY", "O_CLOEXEC",
-             "O_NONBLOCK", "getuid", "geteuid")),
-    reason="G1 is a Linux-only O_NOATIME disposable experiment",
+             "O_NONBLOCK", "getuid", "geteuid")) or os.geteuid() == 0,
+    reason="G1 requires Linux and an ordinary non-root owner UID",
 )
 
 _DIR = "m6a-g1-detached"
@@ -60,8 +60,8 @@ def _acquire_test_owned_leaf(
     No O_RDONLY fallback is permitted if NOATIME or its permission fails.
     """
     if (not isinstance(root, Path) or not root.is_absolute()
-            or root.name != _DIR or leaf not in _ALLOWED
-            or type(leaf) is not str
+            or root.name != _DIR or type(leaf) is not str
+            or leaf not in _ALLOWED
             or type(byte_limit) is not int or byte_limit < 1
             or byte_limit > _LIMIT):
         raise AcquisitionRefused("OUTSIDE_DISPOSABLE_INPUT_SCOPE")
@@ -293,6 +293,30 @@ def test_size_limit_fails_before_byte_read(tmp_path, monkeypatch):
     monkeypatch.setattr(os, "read", fail_read)
     with pytest.raises(AcquisitionRefused, match="UNTRUSTED_DETACHED_LEAF"):
         _acquire_test_owned_leaf(root, _CONTEXT, byte_limit=10)
+
+
+def test_both_fd_opens_require_noatime_and_no_follow(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    _private_file(root / _CONTEXT, b"PRIVATE")
+    original_open = os.open
+    requests = []
+
+    def observe_open(path, flags, *args, **kwargs):
+        requests.append((path, flags, kwargs))
+        return original_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", observe_open)
+    assert _acquire_test_owned_leaf(root, _CONTEXT) == b"PRIVATE"
+    assert len(requests) == 2
+    assert requests[0][0] == root
+    assert requests[1][0] == _CONTEXT
+    for _, flags, _ in requests:
+        assert flags & os.O_NOATIME
+        assert flags & os.O_NOFOLLOW
+        assert flags & os.O_CLOEXEC
+    assert requests[0][1] & os.O_DIRECTORY
+    assert requests[1][1] & os.O_NONBLOCK
+    assert requests[1][2].get("dir_fd") is not None
 
 
 def test_unknown_or_missing_leaf_is_refused_without_creation(tmp_path):
