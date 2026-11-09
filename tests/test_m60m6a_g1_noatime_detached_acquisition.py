@@ -59,7 +59,7 @@ def _acquire_test_owned_leaf(
     directory and fixed filenames. A caller-provided path is NOT admission.
     No O_RDONLY fallback is permitted if NOATIME or its permission fails.
     """
-    if (type(root) is not Path or not root.is_absolute()
+    if (not isinstance(root, Path) or not root.is_absolute()
             or root.name != _DIR or leaf not in _ALLOWED
             or type(leaf) is not str
             or type(byte_limit) is not int or byte_limit < 1
@@ -175,14 +175,9 @@ def test_detached_context_bytes_keep_atime_and_directory_metadata(tmp_path):
     _age(root)
     a = _identity(leaf.stat())
     b = _identity(root.stat())
-    assert _acquire_test_owned_leaf(root, _CONTEXT) == leaf.read_bytes()
-    # The assertion above uses an ordinary read; keep its side effect out of
-    # the measured window by refreshing the baseline instead.
-    _age(leaf)
-    _age(root)
-    a = _identity(leaf.stat())
-    b = _identity(root.stat())
-    assert _acquire_test_owned_leaf(root, _CONTEXT).startswith(b'{"fixture"')
+    assert _acquire_test_owned_leaf(root, _CONTEXT) == (
+        b'{"fixture":true,"source":"unattested"}\n'
+    )
     assert _identity(leaf.stat()) == a
     assert _identity(root.stat()) == b
 
