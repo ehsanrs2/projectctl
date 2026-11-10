@@ -1702,6 +1702,42 @@ retains P0–P4 independent authority decisions; the M6a sequencing decision
 **does not** close any of them or reverse R0b option C fail-closed. M6a and
 M6b must never share an ambiguous `complete/verified/current` product claim.
 
+**M6a G3 private presentation contract — owner direction 2026-11-10; separate code
+review/merge still required.** First show an **internally returned**, deterministic
+diagnostic envelope built from **already caller-supplied** bounded SQLite
+rollback-mode and allowlisted artifact bytes; never accept a project root,
+live-WAL source, inventory self-signature or arbitrary input path. Reuse the
+merged G2 `scripts/m6a_g2_private_byte_diagnostic.py` composer and the
+unchanged `ExecutionTraceBundle v1`. The envelope is a private **presentation
+wrapper**, not a new public Trace schema, evidence receipt or authorization.
+
+Envelope labels must be **constant and non-upgradable by caller input**:
+`decision=M6A_OFFLINE_DIAGNOSTIC_INCOMPLETE_ONLY`,
+`source_origin=UNATTESTED`, `cross_store_epoch=UNATTESTED`,
+`source_current=UNKNOWN`, `source_capture_nonmutation=UNPROVEN`,
+`authenticated_custody=UNPROVEN`, `assessment_authority=NONE`.
+The embedded Trace must remain `incomplete` or `inconsistent` with
+`assessments=[]`. Its `observed_run_status` and source
+`validation_state=present` refer **only to caller-supplied bytes**, not to
+the latest or authenticated ProjectCTL run. A bare Trace alone is not an
+approved presentation for the first M6a delivery.
+
+The bounded `project_id`, `run_id`, event timestamps and source SHA-256
+identities are **locally correlatable**, not anonymous: no remote transfer,
+stdout default, on-disk export or CLI yet. Never copy raw event payload,
+prompts, provider text, task IDs, worktree paths, arbitrary URLs, raw exception
+strings, hostnames or export timestamps to the wrapper. The wrapper must
+have deterministic exact-byte roundtrip, fixed keys and no dynamic
+`authority` upgrades; reject malformed, noncanonical or self-promoted
+bundles. **No `--project PATH` input, file output or public CLI** is
+approved by this G3 decision. Privacy, destination, user-facing wording and
+actual source-byte acquisition require separately reviewed release gates.
+
+Implementation is tracked in [Issue #141](https://github.com/ehsanrs2/projectctl/issues/141).
+This scoped direction refines delivery ordering within accepted ADR-039 but
+does not amend its planned public `trace export` contract, select a producer,
+qualify live-WAL R1, or change ADR-040 / P0–P4 NO_GO.
+
 M6.0 produces a reproducible, local-only, redacted view derived from the
 existing authoritative RunStore, ExecutionInputManifest, VerificationManifest,
 EvidenceManifest and integration/delivery evidence. The export is always
