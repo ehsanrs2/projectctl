@@ -119,6 +119,7 @@ def render_supplied_wire(wire: bytes) -> bytes:
             or envelope.get("authorizes_retry") is not False):
         raise G4Refused("UNSAFE_PRIVATE_RESULT")
     envelope["private_format"] = _OUTPUT_FORMAT
+    envelope["preview_status"] = "M6A_G4_PREVIEW_LAB_ONLY"
     envelope["output_destination"] = "EXPLICIT_OPT_IN_STDOUT_LAB_ONLY"
     output = (
         json.dumps(envelope, ensure_ascii=False, sort_keys=True,
