@@ -58,6 +58,7 @@ def test_pure_renderer_deterministic_and_no_sensitive_fields(tmp_path):
     assert a == b and a.endswith(b"\n")
     doc = json.loads(a)
     assert doc["private_format"] == g4._OUTPUT_FORMAT
+    assert doc["preview_status"] == "M6A_G4_PREVIEW_LAB_ONLY"
     assert doc["output_destination"] == "EXPLICIT_OPT_IN_STDOUT_LAB_ONLY"
     assert doc["source_origin"] == doc["cross_store_epoch"] == "UNATTESTED"
     assert doc["source_capture_nonmutation"] == "UNPROVEN"
