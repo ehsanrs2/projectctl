@@ -121,3 +121,19 @@ These are *conditional* work packages, not blanket authorizations, completion da
 **Recommended order:** (1) resolve one concrete **product/trust tier** decision in #124; (2) qualify one safe input, preserving fail-closed; (3) implement a narrow diagnostic vertical slice *if independently accepted*, or the separately authorized real P0 enforcement pilot if full trusted path is selected; (4) proceed to W1/M0→R1→P2/P3→P4. Avoid another self-hashed receipt or one-more-journal negative-model PR unless it uniquely closes a new admission obstacle.
 
 **Unchanged stop line:** `P0_P1_P2_P3_P4_NO_GO`; `R0B_C_FAIL_CLOSED`; no real worker/provider call, source DB migration, root policy install, actual guest reconfiguration, key enrollment, public Trace or implied approval from a percent estimate. `docs/PROJECT_STATE.yaml` remains the single active-goal authority.
+
+---
+
+## 8. 2026-11-11 M6a G4a focused operator witness (lab only)
+
+**Owner-reported local execution:** On ordinary-user Debian at `$HOME/projectctl-m0k-lab`, the operator ran the exact-head, `&&`-guarded command previously reviewed for [PR #145](https://github.com/ehsanrs2/projectctl/pull/145). The command required a clean checkout, fetched `origin/experiment/m6a-g4a-stdin-stdout-optin-preview`, pinned `363287c4f30935af70d38820c4e772177d4d0227`, and invoked `pytest -q -rs` with exactly these three files:
+
+- `tests/test_m60m6a_g2_private_byte_diagnostic.py`
+- `tests/test_m60m6a_g3_private_envelope.py`
+- `tests/test_m60m6a_g4_stdin_preview.py`
+
+The provided terminal excerpt showed `HEAD is now at 363287c`, pytest progress through `[100%]` without visible failing markers, and the final guarded sentinel **`LOCAL_M6A_G4_PASS`**. This is **owner-reported focused local evidence**, not an independently captured local log or an exhaustive hardware/filesystem attestation. The prior [exact-head CI #43005752828](https://github.com/ehsanrs2/projectctl/actions/runs/43005752828) independently completed **2,907 passed / 7 skipped** and SDK-contract success for that commit. A later evidence-only commit requires its own exact-head CI before merge.
+
+**Credit:** The owner explicitly reports that the focused test was performed with help from Reza Souri; the commit recording this evidence carries the requested `Co-authored-by` Git trailer. This statement does not assert authorship of all earlier commits or retroactively change their metadata.
+
+**No promotion:** This remains `M6A_G4_PREVIEW_LAB_ONLY`. The script consumes caller-provided synthetic test bytes and produces a redacted, explicitly opted-in and locally correlatable stdout preview; it does **not** prove trustworthy source acquisition, absence of live writes, one DB+JSON epoch, authenticated provenance or custody, readiness for installed/public `projectctl trace export`, or any supported assessment. `P0_P1_P2_P3_P4_NO_GO` and `R0B_C_FAIL_CLOSED` remain unchanged. [Issue #144](https://github.com/ehsanrs2/projectctl/issues/144) stays open until independent review, merge, and postmerge CI.
