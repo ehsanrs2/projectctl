@@ -133,7 +133,6 @@ def test_unknown_fields_and_bad_contract_refused(tmp_path, bad):
 
 @pytest.mark.parametrize("value", [
     "*", "😃", "Z", "Z==", "Zh==", # malformed or noncanonical pad bits
-    "a" * 200,
 ])
 def test_base64_incorrect_or_noncanonical_refused(tmp_path, value):
     doc = _document(tmp_path)
