@@ -103,16 +103,47 @@ def _memory_snapshot(db_bytes: bytes, run_id: str) -> TraceDbSnapshot:
     with closing(sqlite3.connect(":memory:", isolation_level=None)) as conn:
         if not hasattr(conn, "deserialize"):
             raise G2Refused("MEMORY_DESERIALIZE_UNAVAILABLE")
+        if not hasattr(conn, "set_progress_handler"):
+            raise G2Refused("MEMORY_STEP_GUARD_UNAVAILABLE")
+        # Bound query VM instructions even on an adversarial SQLite byte image.
+        # This is a lab ceiling, not an OS-level hard CPU/memory sandbox:
+        # deserialization and Python model validation are still separate.
+        progress = [0]
+
+        def limited_progress() -> int:
+            progress[0] += 1
+            return int(progress[0] > 1000)
+
+        conn.set_progress_handler(limited_progress, 1000)
         try:
+            # Reject unsafe schema functions before any supplied schema is used.
+            conn.execute("PRAGMA trusted_schema=OFF")
+            if hasattr(conn, "setlimit"):
+                conn.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, MAX_ARTIFACT_BYTES + 262144)
+                conn.setlimit(sqlite3.SQLITE_LIMIT_SQL_LENGTH, 65536)
             conn.deserialize(db_bytes)
             conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA trusted_schema=OFF")
             conn.execute("PRAGMA query_only=ON")
             conn.execute("BEGIN")
             if (conn.execute("PRAGMA application_id").fetchone()[0] != APPLICATION_ID
                     or conn.execute("PRAGMA user_version").fetchone()[0]
                     != PROJECT_STATE_DB_VERSION):
                 raise G2Refused("UNSUPPORTED_SOURCE_VERSION")
+            # A SQLite view or virtual table named "runs" may execute
+            # attacker-controlled SQL or extensions on otherwise fixed SELECT.
+            # Permit ONLY ordinary tables at the two queried names.
+            objects = conn.execute(
+                "SELECT name, type, sql FROM sqlite_schema "
+                "WHERE name IN ('runs', 'run_events')"
+            ).fetchall()
+            if (len(objects) != 2
+                    or {item["name"] for item in objects} != {"runs", "run_events"}
+                    or any(item["type"] != "table"
+                           or type(item["sql"]) is not str
+                           or re.match(r"^\s*CREATE\s+TABLE\b",
+                                       item["sql"], re.IGNORECASE) is None
+                           for item in objects)):
+                raise G2Refused("UNSAFE_SQLITE_SCHEMA_OBJECT")
             row = conn.execute(
                 "SELECT run_id, task_id, status, terminal_reason, "
                 "execution_plan_digest, base_commit, candidate_commit, "
