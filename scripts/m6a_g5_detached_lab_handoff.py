@@ -155,7 +155,10 @@ def synthetic_detached_to_g4_wire(
             or not hasattr(os, "geteuid") or os.geteuid() == 0
             or not isinstance(root, Path) or not root.is_absolute()
             or root.name != _DIR
-            or type(project_id) is not str or type(run_id) is not str):
+            or type(project_id) is not str or type(run_id) is not str
+            # G2 identities are at most 128 characters. Bound them before
+            # acquisition and JSON escaping, not after allocating the wire.
+            or len(project_id) > 128 or len(run_id) > 128):
         raise AcquisitionRefused("OUTSIDE_G5_LAB_INPUT_SCOPE")
     _refuse_sqlite_sidecars(root)
     before = _observed_metadata(root)
