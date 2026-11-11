@@ -195,11 +195,18 @@ def test_base64_declared_length_limit_rejects_without_decoding(tmp_path, monkeyp
     doc["artifacts_b64"]["context_manifest"] = (
         "A" * (4 * ((g4._ARTIFACT_MAX + 2) // 3) + 1)
     )
-    def forbidden_decode(*args, **kwargs):
-        raise AssertionError("oversized base64 must be refused before decoding")
-    monkeypatch.setattr(base64, "b64decode", forbidden_decode)
+    original_decode = base64.b64decode
+    decoded_sizes = []
+
+    def observe_decode(data, *args, **kwargs):
+        decoded_sizes.append(len(data))
+        return original_decode(data, *args, **kwargs)
+
+    monkeypatch.setattr(base64, "b64decode", observe_decode)
     with pytest.raises(g4.G4Refused, match="INVALID_BASE64_LENGTH"):
         g4.render_supplied_wire(_wire(doc))
+    # The valid DB is decoded first; the oversized artifact is NEVER decoded.
+    assert decoded_sizes == [len(doc["db_b64"])]
 
 
 def test_refusal_contains_no_user_text_stderr(tmp_path):
