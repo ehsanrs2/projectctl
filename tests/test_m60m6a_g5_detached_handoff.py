@@ -123,21 +123,54 @@ def test_no_plain_read_fallback_after_noatime_denial(tmp_path, monkeypatch):
     assert calls and all(flags & os.O_NOATIME for flags in calls)
 
 
-def test_second_read_mutating_first_leaf_is_detected(tmp_path, monkeypatch):
+@pytest.mark.parametrize("short_read", [False, True])
+def test_second_read_mutating_first_leaf_is_detected(tmp_path, monkeypatch, short_read):
     root, _, _ = _fixture(tmp_path)
+    acquire = g5._acquire_test_owned_leaf
     real_read = os.read
-    seen = []
-    def mutate_after_first_leaf(fd, length):
-        raw = real_read(fd, length)
-        seen.append(True)
-        # First leaf typically takes one read plus EOF; third read is
-        # the first read of the context leaf. Local injected mutation only.
-        if len(seen) == 3:
+    boundaries = []
+    if short_read:
+        monkeypatch.setattr(os, "read", lambda fd, n: real_read(fd, min(n, 7)))
+
+    def mutate_at_context_boundary(root_arg, leaf, **kwargs):
+        # The DB descriptor has closed; mutation precedes the context read.
+        # This remains the same boundary for large files and short reads.
+        if leaf == g5._CONTEXT:
+            assert boundaries == [g5._DB]
             os.utime(root / g5._DB, ns=(1_650_000_000_000_000_000,) * 2)
+        raw = acquire(root_arg, leaf, **kwargs)
+        boundaries.append(leaf)
         return raw
-    monkeypatch.setattr(os, "read", mutate_after_first_leaf)
-    with pytest.raises(g5.AcquisitionRefused, match="DETACHED_CROSS_READ_CHANGE"):
+
+    monkeypatch.setattr(g5, "_acquire_test_owned_leaf", mutate_at_context_boundary)
+    with pytest.raises(g5.AcquisitionRefused, match="^DETACHED_CROSS_READ_CHANGE$"):
         _wire(root)
+    assert boundaries == [g5._DB, g5._CONTEXT]
+
+
+@pytest.mark.parametrize("field", ["project_id", "run_id"])
+@pytest.mark.parametrize("value", ["x" * 129, "x" * 1048576, "\U0001f603" * 129],
+                         ids=["ascii-129", "ascii-1Mi", "unicode-129"])
+def test_oversized_identity_refused_before_io_or_serialization(
+    tmp_path, monkeypatch, field, value
+):
+    def unexpected(*args, **kwargs):
+        raise AssertionError("oversized identity must refuse before IO or allocation")
+
+    monkeypatch.setattr(g5, "_refuse_sqlite_sidecars", unexpected)
+    monkeypatch.setattr(g5.json, "dumps", unexpected)
+    args = {"project_id": PROJECT, "run_id": RUN, field: value}
+    with pytest.raises(g5.AcquisitionRefused, match="^OUTSIDE_G5_LAB_INPUT_SCOPE$"):
+        g5.synthetic_detached_to_g4_wire(tmp_path / g5._DIR, **args)
+
+
+def test_identity_length_boundary_preserved(tmp_path):
+    root, _, _ = _fixture(tmp_path)
+    wire = g5.synthetic_detached_to_g4_wire(root, project_id="x" * 128, run_id="y" * 128)
+    parsed = json.loads(wire)
+    assert parsed["project_id"] == "x" * 128
+    assert parsed["run_id"] == "y" * 128
+    assert len(wire) < g4._WIRE_MAX
 
 
 def test_unknown_root_and_root_symlink_refused(tmp_path):
