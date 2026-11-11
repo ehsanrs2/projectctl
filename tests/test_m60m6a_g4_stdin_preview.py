@@ -217,6 +217,27 @@ def test_source_can_be_deleted_before_consumer_uses_supplied_bytes(tmp_path):
     assert json.loads(g4.render_supplied_wire(_wire(doc)))["source_origin"] == "UNATTESTED"
 
 
+@pytest.mark.parametrize("unsafe_object", ["runs", "run_events"])
+def test_reject_malicious_sqlite_view_even_with_correct_application_id(
+    tmp_path, unsafe_object,
+):
+    # A schema can forge application_id/user_version and replace an ordinary
+    # table with a view. G2 must refuse BEFORE a fixed SELECT resolves it.
+    doc = _document(tmp_path)
+    db_path = tmp_path / "synthetic-source/.projectctl/state.sqlite"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(f"DROP TABLE {unsafe_object}")
+        conn.execute(
+            f"CREATE VIEW {unsafe_object} AS "
+            "SELECT 1 AS run_id, 1 AS task_id, 1 AS status"
+        )
+        conn.commit()
+    doc["db_b64"] = base64.b64encode(db_path.read_bytes()).decode("ascii")
+    refused = _run(_wire(doc), "--ack-local-correlatable")
+    assert refused.returncode == 2 and refused.stdout == b""
+    assert refused.stderr == b"G4_INPUT_REFUSED\n"
+
+
 def test_no_runtime_or_public_cli_wiring():
     import inspect
     assert set(inspect.signature(g4.render_supplied_wire).parameters) == {"wire"}
