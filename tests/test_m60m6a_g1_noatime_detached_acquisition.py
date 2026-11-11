@@ -30,105 +30,10 @@ pytestmark = pytest.mark.skipif(
     reason="G1 requires Linux and an ordinary non-root owner UID",
 )
 
-_DIR = "m6a-g1-detached"
-_DB = "synthetic-projectctl-state.sqlite"
-_CONTEXT = "synthetic-context.json"
-_ALLOWED = {_DB, _CONTEXT}
-_LIMIT = 16 * 1024 * 1024
-_PASS = "M6A_G1_DETACHED_NOATIME_LAB_ONLY"
-
-
-class AcquisitionRefused(ValueError):
-    """Sanitized test-only refusal, never a trusted source-state report."""
-
-
-def _identity(info: os.stat_result) -> tuple[int, ...]:
-    return (
-        info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_gid,
-        info.st_nlink, info.st_size, info.st_atime_ns,
-        info.st_mtime_ns, info.st_ctime_ns,
-    )
-
-
-def _acquire_test_owned_leaf(
-    root: Path, leaf: str, *, byte_limit: int = _LIMIT
-) -> bytes:
-    """Use descriptor-relative no-atime reads; never open SQLite on this path.
-
-    Preconditions deliberately limit this helper to a known synthetic fixture
-    directory and fixed filenames. A caller-provided path is NOT admission.
-    No O_RDONLY fallback is permitted if NOATIME or its permission fails.
-    """
-    if (not isinstance(root, Path) or not root.is_absolute()
-            or root.name != _DIR or type(leaf) is not str
-            or leaf not in _ALLOWED
-            or type(byte_limit) is not int or byte_limit < 1
-            or byte_limit > _LIMIT):
-        raise AcquisitionRefused("OUTSIDE_DISPOSABLE_INPUT_SCOPE")
-    if not hasattr(os, "O_NOATIME"):
-        raise AcquisitionRefused("NOATIME_UNAVAILABLE")
-    noatime = os.O_NOATIME
-    directory_flags = (
-        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-        | os.O_CLOEXEC | noatime
-    )
-    file_flags = (
-        os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
-        | os.O_CLOEXEC | noatime
-    )
-    directory_fd = -1
-    file_fd = -1
-    try:
-        directory_fd = os.open(root, directory_flags)
-        initial_dir = os.fstat(directory_fd)
-        if (not stat.S_ISDIR(initial_dir.st_mode)
-                or initial_dir.st_uid != os.geteuid()
-                or stat.S_IMODE(initial_dir.st_mode) != 0o700):
-            raise AcquisitionRefused("UNTRUSTED_DETACHED_DIRECTORY")
-        file_fd = os.open(leaf, file_flags, dir_fd=directory_fd)
-        initial_file = os.fstat(file_fd)
-        if (not stat.S_ISREG(initial_file.st_mode)
-                or initial_file.st_uid != os.geteuid()
-                or initial_file.st_nlink != 1
-                or stat.S_IMODE(initial_file.st_mode) not in (0o400, 0o600)
-                or initial_file.st_size < 1
-                or initial_file.st_size > byte_limit):
-            raise AcquisitionRefused("UNTRUSTED_DETACHED_LEAF")
-        data = bytearray()
-        while len(data) <= byte_limit:
-            chunk = os.read(
-                file_fd, min(64 * 1024, byte_limit + 1 - len(data))
-            )
-            if not chunk:
-                break
-            data.extend(chunk)
-        if len(data) != initial_file.st_size or len(data) > byte_limit:
-            raise AcquisitionRefused("CHANGED_OR_UNBOUNDED_LEAF")
-        final_fd = os.fstat(file_fd)
-        final_path = os.stat(
-            leaf, dir_fd=directory_fd, follow_symlinks=False
-        )
-        final_dir = os.fstat(directory_fd)
-        final_root_path = os.stat(root, follow_symlinks=False)
-        if (_identity(initial_file) != _identity(final_fd)
-                or _identity(initial_file) != _identity(final_path)
-                or _identity(initial_dir) != _identity(final_dir)
-                or _identity(initial_dir) != _identity(final_root_path)):
-            raise AcquisitionRefused("OBSERVED_METADATA_OR_ALIAS_CHANGE")
-        return bytes(data)
-    except AcquisitionRefused:
-        raise
-    except OSError as exc:
-        if exc.errno in (errno.EACCES, errno.EPERM, errno.EINVAL,
-                         getattr(errno, "ENOTSUP", -1)):
-            raise AcquisitionRefused("NOATIME_OR_FILE_ACCESS_DENIED") from None
-        raise AcquisitionRefused("DETACHED_LEAF_READ_REFUSED") from None
-    finally:
-        if file_fd >= 0:
-            os.close(file_fd)
-        if directory_fd >= 0:
-            os.close(directory_fd)
-
+from scripts.m6a_g5_detached_lab_handoff import (
+    AcquisitionRefused, _acquire_test_owned_leaf, _identity,
+    _DIR, _DB, _CONTEXT, _ALLOWED, _LIMIT, _PASS,
+)
 
 def _root(tmp_path: Path) -> Path:
     root = tmp_path / _DIR
