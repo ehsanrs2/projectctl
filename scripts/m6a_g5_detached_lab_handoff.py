@@ -130,6 +130,18 @@ def _observed_metadata(root: Path) -> tuple[tuple[int, ...], ...]:
         raise AcquisitionRefused("DETACHED_METADATA_UNAVAILABLE") from None
 
 
+def _refuse_sqlite_sidecars(root: Path) -> None:
+    """Do not read or try to recover sidecars in this rollback-only lab."""
+    for suffix in ("-wal", "-shm", "-journal"):
+        try:
+            os.lstat(root / (_DB + suffix))
+        except FileNotFoundError:
+            continue
+        except OSError:
+            raise AcquisitionRefused("SIDE_CAR_IDENTITY_UNAVAILABLE") from None
+        raise AcquisitionRefused("UNSUPPORTED_SQLITE_SIDE_CAR")
+
+
 def synthetic_detached_to_g4_wire(
     root: Path, *, project_id: str, run_id: str
 ) -> bytes:
@@ -145,9 +157,11 @@ def synthetic_detached_to_g4_wire(
             or root.name != _DIR
             or type(project_id) is not str or type(run_id) is not str):
         raise AcquisitionRefused("OUTSIDE_G5_LAB_INPUT_SCOPE")
+    _refuse_sqlite_sidecars(root)
     before = _observed_metadata(root)
     db = _acquire_test_owned_leaf(root, _DB)
     context = _acquire_test_owned_leaf(root, _CONTEXT, byte_limit=2 * 1024 * 1024)
+    _refuse_sqlite_sidecars(root)
     if before != _observed_metadata(root):
         raise AcquisitionRefused("DETACHED_CROSS_READ_CHANGE")
     wire = {
