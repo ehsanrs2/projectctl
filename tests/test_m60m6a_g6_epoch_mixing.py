@@ -58,7 +58,7 @@ def _epoch_bytes(tmp_path):
 def _detached_pair(tmp_path, db, context):
     # Only fixed synthetic G5 leaf names; no actual project paths.
     root = tmp_path / g5._DIR
-    root.mkdir(mode=0o700)
+    root.mkdir(parents=True, mode=0o700)
     for name, raw in ((g5._DB, db), (g5._CONTEXT, context)):
         leaf = root / name
         leaf.write_bytes(raw)
@@ -103,9 +103,7 @@ def test_private_preview_cannot_prove_mixed_epoch(
     assert sources["context_manifest"]["validation_state"] == "present"
     assert sources["run_record"]["validation_state"] == "present"
     assert sources["run_event_stream"]["validation_state"] == "present"
-    assert (db_epoch == context_epoch) == (
-        (db_epoch, context_epoch) in {("A", "A"), ("B", "B")}
-    )
+    # Fixture labels encode the oracle truth but are not passed to G5/G4.
     # Mixed fixtures and coherent fixtures share exactly the same *authority*
     # status; a consumer must not interpret 'present' as an epoch certificate.
 
