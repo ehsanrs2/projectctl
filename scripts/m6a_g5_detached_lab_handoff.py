@@ -39,6 +39,40 @@ def _identity(info: os.stat_result) -> tuple[int, ...]:
     )
 
 
+def _open_detached_directory(root: Path) -> int:
+    """Walk each ancestor with pinned dirfds; reject ancestor symlink traversal.
+
+    Ancestor O_PATH opens do not read directory data; the final owned lab
+    directory still requires O_NOATIME. This does NOT defend against bind
+    mounts, already-held external writable FDs, or prove synthetic origin.
+    """
+    if (root.anchor != "/" or not hasattr(os, "O_PATH")
+            or any(part in (".", "..") for part in root.parts[1:])):
+        raise AcquisitionRefused("UNTRUSTED_DETACHED_DIRECTORY_CHAIN")
+    ancestor_flags = (
+        os.O_PATH | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    )
+    final_flags = (
+        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        | os.O_CLOEXEC | os.O_NOATIME
+    )
+    try:
+        parent_fd = os.open("/", ancestor_flags)
+        try:
+            for part in root.parts[1:-1]:
+                next_fd = os.open(part, ancestor_flags, dir_fd=parent_fd)
+                os.close(parent_fd)
+                parent_fd = next_fd
+            return os.open(root.name, final_flags, dir_fd=parent_fd)
+        finally:
+            os.close(parent_fd)
+    except OSError as exc:
+        if exc.errno in (errno.EACCES, errno.EPERM, errno.EINVAL,
+                         getattr(errno, "ENOTSUP", -1)):
+            raise AcquisitionRefused("NOATIME_OR_FILE_ACCESS_DENIED") from None
+        raise AcquisitionRefused("UNTRUSTED_DETACHED_DIRECTORY_CHAIN") from None
+
+
 def _acquire_test_owned_leaf(
     root: Path, leaf: str, *, byte_limit: int = _LIMIT
 ) -> bytes:
@@ -57,10 +91,6 @@ def _acquire_test_owned_leaf(
     if not hasattr(os, "O_NOATIME"):
         raise AcquisitionRefused("NOATIME_UNAVAILABLE")
     noatime = os.O_NOATIME
-    directory_flags = (
-        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-        | os.O_CLOEXEC | noatime
-    )
     file_flags = (
         os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
         | os.O_CLOEXEC | noatime
@@ -68,7 +98,7 @@ def _acquire_test_owned_leaf(
     directory_fd = -1
     file_fd = -1
     try:
-        directory_fd = os.open(root, directory_flags)
+        directory_fd = _open_detached_directory(root)
         initial_dir = os.fstat(directory_fd)
         if (not stat.S_ISDIR(initial_dir.st_mode)
                 or initial_dir.st_uid != os.geteuid()
