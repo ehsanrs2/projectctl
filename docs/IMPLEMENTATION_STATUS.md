@@ -1,5 +1,7 @@
 # ProjectCTL — Implementation status and dependency ledger (2026-11-04)
 
+> **Current M6a handoff:** See Section 9 (2026-11-22) for the post-G8 source-input admission gate. Sections 1–8 preserve their dated evidence and earlier planning state.
+>
 > **Status snapshot, not a second roadmap or execution authority.** The [Blueprint](PROJECTCTL_BLUEPRINT.md) governs the overall product architecture and roadmap shape; [PROJECT_STATE.yaml](PROJECT_STATE.yaml) alone determines the active milestone (M6.0). Accepted ADRs govern bounded design decisions; evidence and approvals are separate. This index reconciles [main at 82f576632f35b68adced2e529768d72f7017fd3b](https://github.com/ehsanrs2/projectctl/commit/82f576632f35b68adced2e529768d72f7017fd3b) on 2026-11-04.
 
 ## 1. Verified baseline
@@ -137,3 +139,33 @@ The provided terminal excerpt showed `HEAD is now at 363287c`, pytest progress t
 **Credit:** The owner explicitly reports that the focused test was performed with help from Reza Souri; the commit recording this evidence carries the requested `Co-authored-by` Git trailer. This statement does not assert authorship of all earlier commits or retroactively change their metadata.
 
 **No promotion:** This remains `M6A_G4_PREVIEW_LAB_ONLY`. The script consumes caller-provided synthetic test bytes and produces a redacted, explicitly opted-in and locally correlatable stdout preview; it does **not** prove trustworthy source acquisition, absence of live writes, one DB+JSON epoch, authenticated provenance or custody, readiness for installed/public `projectctl trace export`, or any supported assessment. `P0_P1_P2_P3_P4_NO_GO` and `R0B_C_FAIL_CLOSED` remain unchanged. [Issue #144](https://github.com/ehsanrs2/projectctl/issues/144) stays open until independent review, merge, and postmerge CI.
+
+---
+
+## 9. 2026-11-22 — M6a G5–G8 merged; G9 supported-input admission decision
+
+**Verified baseline:** `main@b19112737457974d9368ceb763bfe40d3b096b26`, merge of [G8 PR #154](https://github.com/ehsanrs2/projectctl/pull/154) on 2026-11-22. The previous G5 [#147](https://github.com/ehsanrs2/projectctl/pull/147) and correction [#148](https://github.com/ehsanrs2/projectctl/pull/148), G6 [#150](https://github.com/ehsanrs2/projectctl/pull/150), and G7 [#152](https://github.com/ehsanrs2/projectctl/pull/152) are all merged. G5–G8 scope issues #146, #149, #151, and #153 were closed as completed; **Issue [#124](https://github.com/ehsanrs2/projectctl/issues/124) stays OPEN** because its actual producer/controller/issuer/custody trust decisions remain unmade.
+
+**Exact G8 PR-head CI** [#45004166751](https://github.com/ehsanrs2/projectctl/actions/runs/45004166751): 2,951 passed, 7 skipped; `test` and `codex-sdk-contract` both succeeded on `a926191059e37d43805a30d7a11aee993fc146a1`. This is *not* a new independently witnessed operator run, a postmerge CI claim, or a real source-mutability assessment.
+
+### 9.1 What has and has not been established
+
+| Input/observation path | Evidence now available | Admission status |
+| --- | --- | --- |
+| Explicit caller-supplied bytes → G2/G3/G4 private diagnostic | Deterministic bounded byte processing; G4 has exact `--ack-local-correlatable` for standalone stdout and constant untrusted labels | **Private research input only**. Supplied bytes are not independently authenticated or source-qualified. No public `trace export` interface/destination accepted |
+| G5 named, owner-controlled synthetic rollback DB and context JSON | `O_NOATIME` test-owned leaf reads, bounded/typed G4 input wire, sidecar refusal; G8 adds dirfd `O_NOFOLLOW` ancestor traversal | **LAB_ONLY**; even a matching basename, UID, mode, inode and metadata are not synthetic provenance or an admission authority |
+| Cross-store epoch in G6/G7 A/B fixtures | Controlled mixed epoch tests and pre-pinned test-oracle digest contrast; same-actor self-resigning can match mixed data | **UNATTESTED**. Test-oracle labels do not authenticate real origin, immutable retention, writer commit or a current epoch |
+| Proposed independently qualified *offline/quiescent* rollback copy of actual ProjectCTL v2 evidence | B1/B2, R0b and G1–G8 define failure cases; no approved real data source, producer, acquisition/custody topology or non-mutation witness | **OWNER_DECISION_REQUIRED; NOT ADMITTED**. No code path may read it on this evidence |
+| Active v2 SQLite WAL source, or a complete trusted as-of export | R0b rejects unsupported active-WAL reads; ADR-040/W1c remain design/test-only | **NO_GO**. No `immutable=1`, native WAL connection, migration or implicit snapshot claim |
+
+**Separate labels:** M6a can eventually be a strictly incomplete, local, non-authoritative diagnostic if its source and privacy gates are independently accepted. It need not claim M6b's L2–L4 verified epoch. Nevertheless, calling arbitrary source bytes “safe/quiescent” without proof is not allowed. Never infer source admission or source nonmutation from fixture checks, an operator-supplied inventory, permission bits, metadata polling, or a self-computed digest.
+
+### 9.2 The next *finite* G9 admission gate (decision-ready, not implemented authority)
+
+1. **Owner scope choice:** confirm **one specific input class** for an independently reviewed M6a *diagnostic-only* trial: (A) an operator-produced, already-detached and explicitly quiesced rollback-v2 DB plus fixed allowlisted JSON, delivered as a separate private copy under an approved handling procedure; or (B) retain only synthetic/caller-supplied test bytes and stop physical source trials. The existing M6a-first priority is already accepted; **do not ask to choose the M6a/M6b tier again**. Choice A is **not** permission to read a live project or to install a real writer.
+2. **Acquisition/nonmutation evidence before any actual-source input:** name the source owner and acquisition producer; pin an approved controlled offline transition/quiescence procedure and its independent observer; define exact file set, origin path and copy destination, rollback header, journal sidecars, byte/capacity bounds, filesystem/OS/atime policy, known aliases and preopened writers. Verify nonmutation using evidence stronger than pre/post self-reported metadata; otherwise **reject input**, without fallback to reading the live database.
+3. **Cross-store and retention semantics:** explicitly label an offline copy with `source_origin=UNATTESTED`, `cross_store_epoch=UNATTESTED`, `source_current=UNKNOWN` unless separately proven (no such upgrade exists today); no automatic “latest” claim. If exact historical JSON versions are missing or replaced, classify them as unavailable, never silently substitute current bytes. The G6/G7 mixed-pair counterexamples are mandatory negative controls.
+4. **Privacy/destination decision:** independently accept the locally correlatable fields and exact output surface. Existing G4 stdout is opt-in *lab preview* only. Do not create an installed CLI, write output files, network upload or general input-path option without a separate reviewed destination/privacy contract.
+5. **Narrow implementation gate only after choices and evidence:** run a scoped nonroot test matrix on explicitly approved disposable inputs; include WAL refusal, symlink/ancestor/mount/alias and concurrent mutation challenges, a source-metadata/atime audit, malformed/historical JSON, and strict no-provenance/no-assessment labels. A single unexplained source write, unapproved alias, unsupported WAL or uncontrolled mutation => **FAIL_CLOSED**. Follow with a separately reviewed Draft PR; no automatic production promotion.
+
+**Present disposition:** `G9_M6A_SUPPORTED_SOURCE_ADMISSION_OWNER_DECISION_PENDING`. No new source acquisition code or privilege has been authorized by G5–G8, this ledger or the G9 plan. Existing operational decisions remain **M6b P0–P4 = NO_GO** and **R0b = C_FAIL_CLOSED**; the original [Issue #124](https://github.com/ehsanrs2/projectctl/issues/124) remains the owner control point rather than a duplicate ADR/roadmap.
