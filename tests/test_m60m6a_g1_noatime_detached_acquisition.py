@@ -134,7 +134,9 @@ def test_noatime_permission_failure_must_not_fallback_to_plain_read(tmp_path, mo
     monkeypatch.setattr(os, "open", deny_noatime)
     with pytest.raises(AcquisitionRefused, match="NOATIME_OR_FILE_ACCESS_DENIED"):
         _acquire_test_owned_leaf(root, _CONTEXT)
-    assert flags_seen and all(flags & os.O_NOATIME for flags in flags_seen)
+    assert any(flags & os.O_NOATIME for flags in flags_seen)
+    assert all((flags & os.O_NOATIME) or (flags & os.O_PATH)
+               for flags in flags_seen)
 
 
 def test_unsupported_noatime_flag_refuses_without_open(tmp_path, monkeypatch):
@@ -212,16 +214,25 @@ def test_both_fd_opens_require_noatime_and_no_follow(tmp_path, monkeypatch):
 
     monkeypatch.setattr(os, "open", observe_open)
     assert _acquire_test_owned_leaf(root, _CONTEXT) == b"PRIVATE"
-    assert len(requests) == 2
-    assert requests[0][0] == root
-    assert requests[1][0] == _CONTEXT
-    for _, flags, _ in requests:
+    # G8 pins every ancestor with O_PATH, and reserves NOATIME for the
+    # actual owned root and final data leaf. No plain directory traversal.
+    assert len(requests) >= 3
+    assert requests[0][0] == "/"
+    assert requests[-2][0] == _DIR
+    assert requests[-1][0] == _CONTEXT
+    for _, flags, _ in requests[:-2]:
+        assert flags & os.O_PATH
+        assert flags & os.O_DIRECTORY
+        assert flags & os.O_NOFOLLOW
+        assert flags & os.O_CLOEXEC
+    for _, flags, _ in requests[-2:]:
         assert flags & os.O_NOATIME
         assert flags & os.O_NOFOLLOW
         assert flags & os.O_CLOEXEC
-    assert requests[0][1] & os.O_DIRECTORY
-    assert requests[1][1] & os.O_NONBLOCK
-    assert requests[1][2].get("dir_fd") is not None
+    assert requests[-2][1] & os.O_DIRECTORY
+    assert requests[-1][1] & os.O_NONBLOCK
+    assert requests[-2][2].get("dir_fd") is not None
+    assert requests[-1][2].get("dir_fd") is not None
 
 
 def test_unknown_or_missing_leaf_is_refused_without_creation(tmp_path):
