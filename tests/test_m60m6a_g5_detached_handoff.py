@@ -112,15 +112,21 @@ def test_unknown_leaf_type_or_alias_refused(tmp_path, kind):
 def test_no_plain_read_fallback_after_noatime_denial(tmp_path, monkeypatch):
     root, _, _ = _fixture(tmp_path)
     calls = []
+    original_open = os.open
+
     def deny_noatime(path, flags, *args, **kwargs):
         calls.append(flags)
         if flags & os.O_NOATIME:
             raise OSError(errno.EPERM, "NOATIME unavailable")
-        raise AssertionError("unsafe fallback open")
+        if flags & os.O_PATH:
+            return original_open(path, flags, *args, **kwargs)
+        raise AssertionError("unsafe data-reading fallback open")
+
     monkeypatch.setattr(os, "open", deny_noatime)
     with pytest.raises(g5.AcquisitionRefused, match="NOATIME_OR_FILE_ACCESS_DENIED"):
         _wire(root)
-    assert calls and all(flags & os.O_NOATIME for flags in calls)
+    assert any(flags & os.O_NOATIME for flags in calls)
+    assert all((flags & os.O_NOATIME) or (flags & os.O_PATH) for flags in calls)
 
 
 @pytest.mark.parametrize("short_read", [False, True])
