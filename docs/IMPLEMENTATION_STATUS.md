@@ -1,5 +1,7 @@
 # ProjectCTL — Implementation status and dependency ledger (2026-11-04)
 
+> **Current M6a handoff:** Sections 9–10 (2026-11-22) reconcile post-G8 evidence and record the owner-approved **design-only** G9 option A with its remaining admission/review gates. Sections 1–8 preserve their dated evidence and earlier planning state.
+>
 > **Status snapshot, not a second roadmap or execution authority.** The [Blueprint](PROJECTCTL_BLUEPRINT.md) governs the overall product architecture and roadmap shape; [PROJECT_STATE.yaml](PROJECT_STATE.yaml) alone determines the active milestone (M6.0). Accepted ADRs govern bounded design decisions; evidence and approvals are separate. This index reconciles [main at 82f576632f35b68adced2e529768d72f7017fd3b](https://github.com/ehsanrs2/projectctl/commit/82f576632f35b68adced2e529768d72f7017fd3b) on 2026-11-04.
 
 ## 1. Verified baseline
@@ -137,3 +139,107 @@ The provided terminal excerpt showed `HEAD is now at 363287c`, pytest progress t
 **Credit:** The owner explicitly reports that the focused test was performed with help from Reza Souri; the commit recording this evidence carries the requested `Co-authored-by` Git trailer. This statement does not assert authorship of all earlier commits or retroactively change their metadata.
 
 **No promotion:** This remains `M6A_G4_PREVIEW_LAB_ONLY`. The script consumes caller-provided synthetic test bytes and produces a redacted, explicitly opted-in and locally correlatable stdout preview; it does **not** prove trustworthy source acquisition, absence of live writes, one DB+JSON epoch, authenticated provenance or custody, readiness for installed/public `projectctl trace export`, or any supported assessment. `P0_P1_P2_P3_P4_NO_GO` and `R0B_C_FAIL_CLOSED` remain unchanged. [Issue #144](https://github.com/ehsanrs2/projectctl/issues/144) stays open until independent review, merge, and postmerge CI.
+
+---
+
+## 9. 2026-11-22 — M6a G5–G8 merged; G9 supported-input admission decision
+
+**Verified baseline:** `main@b19112737457974d9368ceb763bfe40d3b096b26`, merge of [G8 PR #154](https://github.com/ehsanrs2/projectctl/pull/154) on 2026-11-22. The previous G5 [#147](https://github.com/ehsanrs2/projectctl/pull/147) and correction [#148](https://github.com/ehsanrs2/projectctl/pull/148), G6 [#150](https://github.com/ehsanrs2/projectctl/pull/150), and G7 [#152](https://github.com/ehsanrs2/projectctl/pull/152) are all merged. G5–G8 scope issues #146, #149, #151, and #153 were closed as completed; **Issue [#124](https://github.com/ehsanrs2/projectctl/issues/124) stays OPEN** because its actual producer/controller/issuer/custody trust decisions remain unmade.
+
+**Exact G8 PR-head CI** [#45004166751](https://github.com/ehsanrs2/projectctl/actions/runs/45004166751): 2,951 passed, 7 skipped; `test` and `codex-sdk-contract` both succeeded on `a926191059e37d43805a30d7a11aee993fc146a1`. This is *not* a new independently witnessed operator run, a postmerge CI claim, or a real source-mutability assessment.
+
+### 9.1 What has and has not been established
+
+| Input/observation path | Evidence now available | Admission status |
+| --- | --- | --- |
+| Explicit caller-supplied bytes → G2/G3/G4 private diagnostic | Deterministic bounded byte processing; G4 has exact `--ack-local-correlatable` for standalone stdout and constant untrusted labels | **Private research input only**. Supplied bytes are not independently authenticated or source-qualified. No public `trace export` interface/destination accepted |
+| G5 named, owner-controlled synthetic rollback DB and context JSON | `O_NOATIME` test-owned leaf reads, bounded/typed G4 input wire, sidecar refusal; G8 adds dirfd `O_NOFOLLOW` ancestor traversal | **LAB_ONLY**; even a matching basename, UID, mode, inode and metadata are not synthetic provenance or an admission authority |
+| Cross-store epoch in G6/G7 A/B fixtures | Controlled mixed epoch tests and pre-pinned test-oracle digest contrast; same-actor self-resigning can match mixed data | **UNATTESTED**. Test-oracle labels do not authenticate real origin, immutable retention, writer commit or a current epoch |
+| Proposed independently qualified *offline/quiescent* rollback copy of actual ProjectCTL v2 evidence | B1/B2, R0b and G1–G8 define failure cases; no approved real data source, producer, acquisition/custody topology or non-mutation witness | **OWNER_DECISION_REQUIRED; NOT ADMITTED**. No code path may read it on this evidence |
+| Active v2 SQLite WAL source, or a complete trusted as-of export | R0b rejects unsupported active-WAL reads; ADR-040/W1c remain design/test-only | **NO_GO**. No `immutable=1`, native WAL connection, migration or implicit snapshot claim |
+
+**Separate labels:** M6a can eventually be a strictly incomplete, local, non-authoritative diagnostic if its source and privacy gates are independently accepted. It need not claim M6b's L2–L4 verified epoch. Nevertheless, calling arbitrary source bytes “safe/quiescent” without proof is not allowed. Never infer source admission or source nonmutation from fixture checks, an operator-supplied inventory, permission bits, metadata polling, or a self-computed digest.
+
+### 9.2 The next *finite* G9 admission gate (decision-ready, not implemented authority)
+
+1. **Owner scope choice — resolved for DESIGN ONLY (2026-11-22):** The owner explicitly selected **A**: research and review a future operator-produced, already-detached and independently quiesced rollback-v2 DB plus exact allowlisted JSON as a *diagnostic-only* candidate. This approves **protocol authoring and review only**, not an actual-source trial, source access, snapshot/copy creation, producer deployment, new CLI or real writer. **B was not selected**. M6a-first priority was already accepted; do not reopen the M6a/M6b tier choice. See Section 10 for the design and its evidence gates.
+2. **Acquisition/nonmutation evidence before any actual-source input:** name the source owner and acquisition producer; pin an approved controlled offline transition/quiescence procedure and its independent observer; define exact file set, origin path and copy destination, rollback header, journal sidecars, byte/capacity bounds, filesystem/OS/atime policy, known aliases and preopened writers. Verify nonmutation using evidence stronger than pre/post self-reported metadata; otherwise **reject input**, without fallback to reading the live database.
+3. **Cross-store and retention semantics:** explicitly label an offline copy with `source_origin=UNATTESTED`, `cross_store_epoch=UNATTESTED`, `source_current=UNKNOWN` unless separately proven (no such upgrade exists today); no automatic “latest” claim. If exact historical JSON versions are missing or replaced, classify them as unavailable, never silently substitute current bytes. The G6/G7 mixed-pair counterexamples are mandatory negative controls.
+4. **Privacy/destination decision:** independently accept the locally correlatable fields and exact output surface. Existing G4 stdout is opt-in *lab preview* only. Do not create an installed CLI, write output files, network upload or general input-path option without a separate reviewed destination/privacy contract.
+5. **Narrow implementation gate only after choices and evidence:** run a scoped nonroot test matrix on explicitly approved disposable inputs; include WAL refusal, symlink/ancestor/mount/alias and concurrent mutation challenges, a source-metadata/atime audit, malformed/historical JSON, and strict no-provenance/no-assessment labels. A single unexplained source write, unapproved alias, unsupported WAL or uncontrolled mutation => **FAIL_CLOSED**. Follow with a separately reviewed Draft PR; no automatic production promotion.
+
+**Current disposition after owner's design-only A selection:** `G9A_PROTOCOL_DESIGN_APPROVED_SOURCE_NOT_ADMITTED`. No actual-source acquisition code or privilege has been authorized by G5–G8, this ledger or the G9 plan. Existing operational decisions remain **M6b P0–P4 = NO_GO** and **R0b = C_FAIL_CLOSED**; the original [Issue #124](https://github.com/ehsanrs2/projectctl/issues/124) remains the owner control point rather than a duplicate ADR/roadmap.
+
+---
+
+## 10. 2026-11-22 — G9 option A: proposed OFFLINE-COPY protocol (design and review only)
+
+**Owner instruction recorded:** Option **A** is approved **exclusively for design and review**. No command in this section is authorization to touch real ProjectCTL storage, generate or inspect actual project snapshots, stop or signal a real writer, alter journaling, change permissions, install a service/policy, access a VM, launch a provider, introduce a public CLI, or export user content. **Not a runbook for execution.** The 2026-11-22 exact design baseline is `main@b19112737457974d9368ceb763bfe40d3b096b26`, before this documentation-only Draft PR.
+
+### 10.1 Code-grounded feasibility and trust boundary
+
+- **Source default:** `projectctl/storage/sqlite.py::connect_db` creates the parent directory and explicitly selects `PRAGMA journal_mode=WAL`. An ordinary active `.projectctl/state.sqlite` is **not** an eligible rollback input. Reading or copying just its DB file can omit uncheckpointed WAL transactions. A source-side SQLite backup, checkpoint or `journal_mode=DELETE` would require a separate side-effect/nonmutation and writer-control approval; **none is authorized**. Never use `immutable=1` on a changing source.
+- **Existing reader:** `projectctl/trace/snapshot.py::read_run_db_snapshot` recognizes rollback header bytes `01 01`, refuses unsupported live WAL before the SQLite connection, and uses source sidecar/metadata checks. These are useful local negative controls **not** proof of source nonmutation, quiescence, or a DB-plus-JSON commit epoch. `scripts/m6a_g5_detached_lab_handoff.py` admits its fixed **synthetic test-only** root and two leaves, even after G8 ancestor hardening; it must **not** be repurposed as an actual-source importer.
+- **Source writer ordering:** `docs/architecture/M6_0_B2B_SNAPSHOT_CONSISTENCY_REVIEW.md` records separately committed JSON/DB transitions and missing cross-store Seal; therefore a physically coherent filesystem capture is not automatically a single committed business epoch. Existing B-Diagnostic copies and G6/G7 SHA test anchors are **not** authenticated custody evidence.
+- **Diagnostic classification must remain fixed:** `source_origin=UNATTESTED`; `cross_store_epoch=UNATTESTED`; `source_current=UNKNOWN`; `source_capture_nonmutation=UNPROVEN`; `authenticated_custody=UNPROVEN`; `assessment_authority=NONE`; `assessments=[]`; completeness `incomplete` or `inconsistent`. No retry, dispatch, verification-success, provider-delivery or public export permission.
+
+### 10.2 Proposed roles; assignment intentionally pending
+
+| Role | Necessary independent duty | Present determination |
+| --- | --- | --- |
+| Source owner / scope approver | Choose *one* disposable or separately consented source instance and a defined, no-secret test objective; approve any future actual-source trial | **UNASSIGNED**; design-only permission is not this approval |
+| Quiescence controller | Independently prevent both new writes and already-open/aliased writable FDs, including legacy v2 processes and reconnect/start paths, for the entire cut | **UNASSIGNED / UNPROVEN**. PID lists, `chmod`, same-UID cooperative locks or service stop alone fail |
+| Offline-copy producer | Operate only under a separately approved, independently evidenced quiescence boundary; produce a **private detached candidate**, not an ad hoc single-file WAL copy | **UNASSIGNED**. No script, command or root policy is authorized |
+| Independent observer / evidence holder | Verify prestate, continuous nonmutation while capturing, complete file membership, and poststate; hold evidence outside producer's ability to rewrite | **UNASSIGNED**. Source and copy hashes generated by the producer alone do not create this role |
+| Private diagnostic reviewer | Review exact offline candidate compatibility, privacy/destination policy and typed refusal outcomes without opening the real source | **REVIEW ONLY**. G2–G5 are not an accepted production intake interface |
+
+No assumption that a second account on the same machine or a self-signed receipt automatically constitutes independent custody. Bind mounts, directory ancestry/aliases, source filesystem, atime behavior and same-credential writer access must be included in the trust model.
+
+### 10.3 Proposed stages and mandatory fail-closed holds
+
+| Stage | Design-only qualification evidence | Stop / refusal boundary |
+| --- | --- | --- |
+| **H0: explicit source-scope approval** | Document source owner, project/run scope, version, lawful handling/privacy basis, designated roles, isolation topology and precisely which destination is allowed; no real path/secret in public Issue/CI | No explicit later trial approval, wrong source, privilege ambiguity or missing privacy decision → **STOP** |
+| **H1: independent quiescence proof** | Controller/observer specify how all old and new writer entry points, credentials, preopened/SCM_RIGHTS FDs, symlink/mount aliases, WAL/SHM/journal and recovery/restarts are continuously excluded; enumerate failure/boot scenarios and evidence artifacts | Unsupported controller/TCB, writer still able to mutate, or merely inferred inactivity → **STOP**. No real stop or service control under this design permission |
+| **H2: exact detached candidate definition** | Propose allowlist of rollback-v2 SQLite and schema-versioned source leaves (initial diagnostic subset: DB plus Context; further evidence kinds separate), bounded raw sizes, run/task/project identity and missing-leaf policy; record whether raw WAL/SHM/hot journal are absent or unsupported | Active WAL header, residual WAL/SHM/hot journal, unknown leaf/alias, or inconsistent/missing bytes → **REFUSE**. Converting live source WAL or copying DB alone is **not** a fallback |
+| **H3: non-mutating source acquisition witness** | Before any future trial, independent OS/VFS/filesystem-level method must observe content, directory entries and metadata including atime during the **entire** acquisition, plus sidecar creation/deletion/temporary changes and mount aliases. Pre/post SHA, stat and producer logs are supporting observations, not a proof | Any unexplained access-time mutation, metadata write, transient sidecar, checkpoint, journal conversion or uncontrolled gap → **REFUSE**; unknown visibility also → **NOT QUALIFIED** |
+| **H4: detached retention and integrity** | Source-to-copy identity witness plus raw byte fingerprints retained by an independently controlled holder; exact file membership and version labeling; no-clobber and cleanup/retention limits agreed separately | Inability to attest correct candidate membership or retained exact bytes → **REFUSE**. A rehashed forged inventory is not a source witness |
+| **H5: isolated offline interpretation** | Only a **future separately reviewed** private consumer of already detached, allowed rollback bytes may run; prove it cannot reach source paths/network and remains bounded/redacted/non-authoritative; malformed/historical or mixed-epoch test fixtures stay negative controls | No newly approved consumer or destination, unsupported WAL, cross-project identity mismatch, unbounded bytes, raw payload disclosure or false `current`/assessments → **REFUSE** |
+| **H6: audit and rollback** | Typed outcome record (pass / refuse / unavailable / unsupported), independent evidence references, documented deletion/retention of sensitive detached bytes, no source mutations and incident response on unexpected writes | Any ambiguous exit, privacy leakage, uncontrolled temporary file or unverifiable cleanup → **STOP / QUARANTINE** |
+
+A **design review may pass H0–H6 as specified controls**, but it cannot label **any actual source as admitted** without separate execution authorization and empirical evidence. No stage changes `R0b C_FAIL_CLOSED` or the unchanged M6b P0–P4 gates.
+
+### 10.4 Evidence fields for a *future* review packet (not a new runtime schema)
+
+| Evidence field | What reviewer needs | Prohibited inference |
+| --- | --- | --- |
+| `review_scope`, `source_kind`, `source_version`, `run_scope` | Explicit source/run boundary and known v2 / historical artifacts; sensitive identifiers kept private | A field value is not a verified origin |
+| `owner_approval_ref`, `controller_ref`, `observer_ref` | Separately approved and independently checked responsibilities | No self-signed issuer or unreviewed account equivalence |
+| `quiescence_window`, `writer_fd_exclusion_evidence` | Evidence of exclusion across writer startup/restart/FD aliases for whole window | A process snapshot does not prove closed-world quiescence |
+| `filesystem_vfs_policy`, `nonmutation_evidence` | OS/fs, mount/alias topology, atime and transient write/sidecar monitoring method | Pre/post inode/hash checks alone cannot prove zero transient writes |
+| `candidate_allowlist`, `raw_byte_sha256`, `missing_leaves` | Bounded exact DB/JSON membership retained privately for comparison | A matching hash cannot prove same-epoch or unforgeable source |
+| `privacy_surface`, `retention_expiry`, `cleanup_evidence` | Local output/destination, correlatable fields, retention and confirmed deletion policy | The existing opt-in G4 lab stdout is not a production privacy approval |
+| `refusal_codes`, `open_gaps`, `review_disposition` | Explicit typed stop reasons, unknown assumptions, exact reviewer approval status | CI success cannot turn an unapproved actual source into a safe one |
+
+**Evidence security:** Do **not** commit actual project paths, payloads, hashes that enable correlation, credentials, host/user identity or copies to public GitHub. Retained copies remain private and limited by a separately accepted handling policy. No logger/CLI interface is added by defining these review fields.
+
+### 10.5 Mandatory adversarial acceptance matrix (design tests; NOT executed)
+
+1. **Active WAL** header `02 02`, residual `-wal/-shm`, missing SHM and hot `-journal`: **REFUSE**, do not invoke SQLite VFS on source or attempt repair/checkpoint.
+2. **Writer concurrency** across a claimed stop, restart, inherited writable FD, alternate interpreter/code origin, aliased path and same-UID/private-GID actor: if denial is not independently demonstrated for the entire cut, **NOT QUALIFIED**.
+3. **Intermediate symlink, bind mount, hardlink, inode swap, TOCTOU/ABA** and source-to-detached identity mismatch: **REFUSE / UNKNOWN**; G8's no-symlink observed walk does not cover mounts.
+4. **Pre/post-equal tampering** or transient WAL/SHM creation between observations, including atime-only source metadata changes: **REFUSE if witnessed; NOT QUALIFIED if unobservable**.
+5. **Partial publication:** DB(A)+JSON(B), DB(B)+JSON(A), producer-rehashed inventory, stale retained leaf or missing historical artifact: do not claim an epoch; preserve `UNATTESTED`, report missing/inconsistent where independently detected.
+6. **Historical/malformed schema, wrong run/project identity, oversize artifact or unknown input leaf:** **REFUSE** or typed invalid/unsupported, never coerce to current schema.
+7. **Privacy violation, nonlocal destination, raw event/prompt/secret, unapproved output flag:** **REFUSE**; exact opt-in G4 output stays lab-only and locally correlatable.
+8. **Crash, partial private candidate, producer/observer disagreement, uncertain teardown:** **STOP / QUARANTINE**, neither silent retry nor promotion to a complete Trace.
+
+A passing **future** nonroot disposable test suite is necessary but not sufficient for a real offline source admission. No real file or source system is accessed during this proposal. The broader M6b trusted P0/P1/W1/R1/P2/P3/P4 path remains separately governed by ADR-040 and Issue #124.
+
+### 10.6 Design-review disposition and next authorized work
+
+**Approved now:** document and review the A-path protocol, negative controls and explicit evidence checklist; existing private synthetic code and docs may be read for context. **Not approved now:** live source reads or copies, journal conversion on source, root/VM policy changes, new active source-reader implementation, source/reader credential enrollment, public export/CLI or user-data transfer.
+
+**Review exit:** `G9A_OFFLINE_COPY_PROTOCOL_REVIEW_READY_SOURCE_NOT_ADMITTED` if the owner can assess H0–H6 and the adversarial matrix with unresolved roles marked honestly; **not** `SOURCE_ADMITTED`. **Next separate authorization** (only if later explicitly granted): choose a disposable/sanitized trial source and independently controlled capture/observer topology, privately pin filesystem/OS requirements and privacy handling, then design a bounded test-only proof before any actual-source bytes are touched.
+
+**Standing status:** `M6a=INCOMPLETE_DIAGNOSTIC_RESEARCH_ONLY`, `M6b P0–P4=NO_GO`, `R0b=C_FAIL_CLOSED`. The consent to **design** option A is not consent to **execute** it.
