@@ -1,0 +1,52 @@
+name: G14 Debian 11 synthetic preflight
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/g14-debian11-preflight.yml'
+      - 'scripts/m6a_g14_h2_preflight.py'
+      - 'tests/test_m60m6a_g14_h2_preflight.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: g14-debian11-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  debian11-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Build temporary Debian 11 userspace
+        run: |
+          set -eu
+          docker pull debian:11-slim
+          docker image inspect debian:11-slim --format '{{json .RepoDigests}}'
+          docker build --pull=false -t projectctl-g14-preflight:ci - <<'DOCKERFILE'
+          FROM debian:11-slim
+          RUN apt-get update && apt-get install -y --no-install-recommends python3 e2fsprogs libseccomp2 && rm -rf /var/lib/apt/lists/*
+          DOCKERFILE
+          docker image inspect projectctl-g14-preflight:ci --format '{{.Id}}'
+
+      - name: Run exact synthetic probe without network or host privileges
+        run: |
+          set -eu
+          echo "GIT_HEAD=$(git rev-parse HEAD)"
+          echo "SCOPE=DEBIAN_11_CONTAINER_USERSPACE_SHARED_RUNNER_KERNEL"
+          for identity in 65534:65534 0:0; do
+            echo "CONTAINER_UID_GID=$identity"
+            docker run --rm --network none --cap-drop ALL \
+              --security-opt no-new-privileges \
+              --read-only --tmpfs /tmp:rw,nosuid,nodev,size=256m,mode=1777 \
+              --user "$identity" \
+              --mount "type=bind,source=$PWD/scripts/m6a_g14_h2_preflight.py,target=/probe.py,readonly" \
+              projectctl-g14-preflight:ci \
+              sh -ec 'cat /etc/os-release; dpkg-query -W python3 e2fsprogs libseccomp2; python3 -I /probe.py --synthetic-only'
+          done
