@@ -1,0 +1,64 @@
+name: G14 Debian 11 synthetic preflight
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/g14-debian11-preflight.yml'
+      - 'scripts/m6a_g14_h2_preflight.py'
+      - 'tests/test_m60m6a_g14_h2_preflight.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: g14-debian11-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  debian11-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Build temporary Debian 11 userspace
+        run: |
+          set -eu
+          docker pull debian:11-slim@sha256:e5b6442dd2e9684cf5e87d8338b5968f3b348636fc0be6d7850a381e3731a2bd
+          docker image inspect debian:11-slim@sha256:e5b6442dd2e9684cf5e87d8338b5968f3b348636fc0be6d7850a381e3731a2bd --format '{{json .RepoDigests}}'
+          docker build --pull=false -t projectctl-g14-preflight:ci - <<'DOCKERFILE'
+          FROM debian:11-slim@sha256:e5b6442dd2e9684cf5e87d8338b5968f3b348636fc0be6d7850a381e3731a2bd
+          # Bullseye LTS ended 2026-08-31. Use the official frozen archives,
+          # not stale live security mirrors. Keep Release signature and
+          # package hash checks; only archived freshness expiry is relaxed.
+          RUN rm -f /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources && \
+              printf '%s\n' \
+                'deb [check-valid-until=no] http://archive.debian.org/debian bullseye main' \
+                'deb [check-valid-until=no] http://archive.debian.org/debian-security bullseye-security main' \
+                > /etc/apt/sources.list && \
+              rm -rf /var/lib/apt/lists/* && \
+              apt-get -o Acquire::Retries=2 update && \
+              apt-get -o Acquire::Retries=2 install -y --no-install-recommends python3 e2fsprogs libseccomp2 && \
+              rm -rf /var/lib/apt/lists/*
+          DOCKERFILE
+          docker image inspect projectctl-g14-preflight:ci --format '{{.Id}}'
+
+      - name: Run exact synthetic probe without network or host privileges
+        run: |
+          set -eu
+          echo "GIT_HEAD=$(git rev-parse HEAD)"
+          echo "SCOPE=DEBIAN_11_CONTAINER_USERSPACE_SHARED_RUNNER_KERNEL"
+          for identity in 65534:65534 0:0; do
+            echo "CONTAINER_UID_GID=$identity"
+            docker run --rm --network none --cap-drop ALL \
+              --security-opt no-new-privileges \
+              --read-only --tmpfs /tmp:rw,nosuid,nodev,size=256m,mode=1777 \
+              --user "$identity" \
+              --mount "type=bind,source=$PWD/scripts/m6a_g14_h2_preflight.py,target=/probe.py,readonly" \
+              projectctl-g14-preflight:ci \
+              sh -ec 'cat /etc/os-release; dpkg-query -W python3 e2fsprogs libseccomp2; python3 -I /probe.py --synthetic-only'
+          done
