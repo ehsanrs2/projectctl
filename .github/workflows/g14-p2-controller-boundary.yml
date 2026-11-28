@@ -1,0 +1,44 @@
+name: G14 P2 synthetic controller boundary
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/g14-p2-controller-boundary.yml'
+      - 'tests/test_m60m6a_g14_p2_controller_boundary.py'
+      - 'tests/test_m60m6a_g14_p1_image_bridge.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: g14-p2-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  controller-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install existing project test dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Pin disposable container identity and exercise boundary
+        run: |
+          set -eu
+          test "$(id -u)" -ne 0
+          command -v mke2fs
+          command -v debugfs
+          echo "GIT_HEAD=$(git rev-parse HEAD)"
+          echo "SCOPE=SYNTHETIC_HOSTED_RUNNER_TRUSTED_DOCKER_DAEMON"
+          docker pull python:3.12-slim
+          docker image inspect python:3.12-slim --format '{{json .RepoDigests}}'
+          export PROJECTCTL_G14_P2_IMAGE_ID="$(docker image inspect python:3.12-slim --format '{{.Id}}')"
+          export PROJECTCTL_G14_P2_SYNTHETIC_CI=1
+          python -m pytest -o addopts="" -v -s -rs tests/test_m60m6a_g14_p2_controller_boundary.py
