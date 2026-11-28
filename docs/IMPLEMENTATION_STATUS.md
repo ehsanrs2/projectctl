@@ -1,6 +1,6 @@
 # ProjectCTL — Implementation status and dependency ledger (2026-11-04)
 
-> **Current M6a handoff:** Sections 9–10 (2026-11-22) reconcile post-G8 evidence and record the owner-approved **design-only** G9 option A with its remaining admission/review gates. Sections 1–8 preserve their dated evidence and earlier planning state.
+> **Current M6a handoff:** Section 11 (2026-11-28) assesses delivery readiness after merged G10–G12 and defines the finite next input-qualification decision. Sections 1–10 preserve their dated evidence, including the owner-approved G9A design-only protocol.
 >
 > **Status snapshot, not a second roadmap or execution authority.** The [Blueprint](PROJECTCTL_BLUEPRINT.md) governs the overall product architecture and roadmap shape; [PROJECT_STATE.yaml](PROJECT_STATE.yaml) alone determines the active milestone (M6.0). Accepted ADRs govern bounded design decisions; evidence and approvals are separate. This index reconciles [main at 82f576632f35b68adced2e529768d72f7017fd3b](https://github.com/ehsanrs2/projectctl/commit/82f576632f35b68adced2e529768d72f7017fd3b) on 2026-11-04.
 
@@ -243,3 +243,59 @@ A passing **future** nonroot disposable test suite is necessary but not sufficie
 **Review exit:** `G9A_OFFLINE_COPY_PROTOCOL_REVIEW_READY_SOURCE_NOT_ADMITTED` if the owner can assess H0–H6 and the adversarial matrix with unresolved roles marked honestly; **not** `SOURCE_ADMITTED`. **Next separate authorization** (only if later explicitly granted): choose a disposable/sanitized trial source and independently controlled capture/observer topology, privately pin filesystem/OS requirements and privacy handling, then design a bounded test-only proof before any actual-source bytes are touched.
 
 **Standing status:** `M6a=INCOMPLETE_DIAGNOSTIC_RESEARCH_ONLY`, `M6b P0–P4=NO_GO`, `R0b=C_FAIL_CLOSED`. The consent to **design** option A is not consent to **execute** it.
+
+---
+
+## 11. 2026-11-28 — G13 M6a delivery readiness after G10–G12
+
+**Evidence baseline:** `main@37878226506dd128d62042f7236ac26bb261f645`, merged G12 [PR #161](https://github.com/ehsanrs2/projectctl/pull/161). The active M6.0 goal in [PROJECT_STATE.yaml](PROJECT_STATE.yaml) remains unchanged. This is a delivery-readiness review, not a second roadmap, new ADR, new source authority or release approval.
+
+### 11.1 Reconcile the intervening owner scope and evidence
+
+G9A [#155](https://github.com/ehsanrs2/projectctl/pull/155) merged 2026-11-25 at `b0164120de5639b49e458e0fb523b965f4051b13`. The owner subsequently authorized a **bounded synthetic-only trial**; G10–G12 executed in hosted CI on test-generated fixtures, not a user project, target guest, actual-source acquisition or root/global policy. That limited permission does not lift H0–H6 for real inputs.
+
+| Stage | Verified merged evidence | What it establishes / what it does not |
+| --- | --- | --- |
+| G10-D1 [#157](https://github.com/ehsanrs2/projectctl/pull/157) | `dc1d6c2197c0b4619ecc688c5ff5808afac4d85d`; [PR-head CI](https://github.com/ehsanrs2/projectctl/actions/runs/45564631142) and [postmerge CI](https://github.com/ehsanrs2/projectctl/actions/runs/45586869320): 2956 passed / 7 skipped | Known committed WAL-only fixture event survives normalization on a fresh writable clone; exact G4 output agrees with a separately constructed logical fixture oracle. Missing/truncated/altered WAL rejected against a test-held pin. DB-only stale clone can still pass integrity. No independent acquisition/custody or full transaction-history proof |
+| G11 [#159](https://github.com/ehsanrs2/projectctl/pull/159) | `5a5324515c23c3bacc72889f55e660642c8a289b`; [PR-head CI](https://github.com/ehsanrs2/projectctl/actions/runs/45587192727) and [postmerge CI](https://github.com/ehsanrs2/projectctl/actions/runs/45602719853): 2959 passed / 7 skipped | On covered Linux x86_64 nonroot fixtures, process-local Landlock ABI >= 3 restricts handled new file accesses while clone normalization succeeds. Inherited FD and utime negative controls explicitly expose limitations |
+| G12 [#161](https://github.com/ehsanrs2/projectctl/pull/161) | PR head `d2a9c02ab5e28fabbc62b78b2c53518952410793`; [PR-head CI](https://github.com/ehsanrs2/projectctl/actions/runs/46111898405): 2961 passed / 7 skipped, both jobs succeeded | G11 + libseccomp: four native timestamp setter syscalls denied, including in-clone operations, while exact G4 equality survives. No general syscall allowlist, network isolation, inherited-FD revocation, implicit metadata guarantee or external writer exclusion |
+
+Counts are suite-level hosted CI observations, not separate focused test logs, exhaustive platform coverage or an independent target-host witness. G12 postmerge CI is not asserted here. G10–G12 experiment issues #156/#158/#160 are completed; #124 remains open.
+
+### 11.2 Product boundary and requirements-to-evidence traceability
+
+M6a's first useful deliverable remains **local, explicitly incomplete, assessment-free diagnosis of independently qualified detached input**. It is not M6b's authenticated, coherent Verification as-of export. Its source-safety requirements are real; L2–L4 epoch/issuer/verified-delivery claims need not be proved merely to report unknowns. Keep every false authority flag and conservative reason code.
+
+| Requirement for M6a | Existing implementation / evidence | Readiness / next consequence |
+| --- | --- | --- |
+| Byte-only diagnostic and v2 structural/historical validation | G0/G2; private `scripts/m6a_g2_private_byte_diagnostic.py`, B1 historical validation; memory-only SQLite, bounded bytes and VM instructions | **LAB PROVEN** for tested fixtures. No hard OS memory/CPU proof or public support commitment |
+| Deterministic locally correlatable redaction and refusal | G3/G4 private envelope and explicit stdout ack; ADR-039 local privacy baseline | **LAB PROVEN**; final destination and allowed fields for actual data still need acceptance. No raw payload, network or file destination |
+| Bounded non-following detached file acquisition | G1/G5/G8, fixed fixture directory/leaves, O_NOATIME, no sidecars, ancestor dirfd traversal | **LAB PROVEN** for sampled conditions. Not proof against mounts, transient changes, ABA or real origin; no generic importer |
+| Preserve WAL-inclusive fixture commit on an isolated copy | G10-D1, reuse B2a/B3a4; G2 still refuses WAL | **LAB PROVEN** for known single event; D1 capture completeness remains unproved. Normalizing a clone does not certify the raw capture |
+| Restrict normalization child | G11/G12, process-local handled-rights restriction and explicit timestamp denylist | **PARTIAL LAB EVIDENCE**; no complete sandbox, independent controller, network denial, hard resource envelope or metadata nonmutation. Do not equate with H1/H3 |
+| Independent source selection, quiescence and no mutation | H0–H3; prior M0/R0/B2 negative evidence | **BLOCKED**; no approved actual-source topology, externally held barrier or capture proof. Primary delivery blocker |
+| Private retained candidate, independent observation and failure handling | H4/H6; G7/G10 fixture pins, earlier custody/recovery labs | **BLOCKED** for actual-source acquisition; test-held digest is not independent custody, crash/restart/teardown remains unqualified |
+| Honest epoch and freshness semantics | G6/G7, B2b, G2/G3/G4 | **LAB PROVEN refusal to promote**; retain UNATTESTED/UNKNOWN. No requirement to fabricate L2/L3 evidence for M6a |
+| Usable local product interface | G4 standalone experimental preview | **NOT RELEASED**. No registered CLI, supported source contract, release privacy acceptance or independent end-to-end admission |
+
+Do not sum or average these rows into a release-readiness percentage: the unresolved source and release gates are mandatory. The earlier rough estimates in §7 remain historical.
+
+### 11.3 Finite next decision: qualify one source boundary, not another sandbox layer
+
+Compare three routes against H0–H6 and the owner's M6a-first priority:
+
+| Route | Design decision | Why |
+| --- | --- | --- |
+| **D0 / first qualification target** | A newly generated, deliberately rollback-v2 disposable source with fixed Context JSON, on a dedicated test-only storage image outside any real project. Independent controller/observer outside the fixture writer's process/credential boundary. | Minimizes moving parts and directly tests the source-acquisition boundary missing from G1–G12. Does not solve WAL-default production capture |
+| **D1 / conditional later extension** | A separately approved, independently frozen WAL-inclusive raw candidate; preserve raw bytes apart from mutable clone and normalize only the clone | G10 already supplies logical downstream feasibility. Need first to demonstrate source freeze, complete membership and independently observed nonmutation; no live source read fallback |
+| **Stop at private byte-only research** | Continue G2–G4 on synthetic data without claiming a safe actual source | Honest fallback if no trustworthy isolation/controller or observer can be established. Not a shipped M6a product |
+
+**Recommended G14 target (proposal, not authorized execution):** choose D0 first for a single deliberately disposable, independently controlled offline-source pilot. Prefer an externally controlled, powered-off disposable guest/disk image with no shared writable host mounts and a separately observed read-only source boundary over relying on an in-guest process scan, chmod or a same-UID lock. This is a proposed topology, not a verified capability of the owner's environment. Host/hypervisor/storage controller and observer trust assumptions, image backing-chain identity, exclusion of other host writes, read-only mapping/filesystem journal/recovery behavior, atime policy, raw-data handling and cleanup must be independently reviewed. A powered-off guest by itself does not prove host-side write exclusion or nonmutation. No privileged action, VM or actual data operation is part of G13.
+
+**Acceptance sequence:** (1) explicit owner approval of the concrete disposable environment, controller/observer roles, authorized operations and privacy/retention boundary; (2) independently review the exact fixture/image identity, writable alias and already-open FD exclusion, cold/offline state and observation method before capture; (3) one bounded capture with an independently held expected fixture reference and positive/negative evidence for H0–H4/H6; (4) only if qualified, feed separately retained rollback bytes to existing G2–G4 in the approved local destination, check deterministic output and unchanged authority labels; (5) report evidence and refuse any unexplained source change, unobserved barrier, uncertain recovery or privacy violation. Do not allow arbitrary source paths, mount a real disk, grant new credentials, or silently retry. Separate approval required for any root/hypervisor/storage action. If the chosen environment cannot support independent evidence, record **NO_GO** rather than repeating G10–G12.
+
+### 11.4 Exit and governance
+
+**G13 disposition:** `G13_M6A_LAB_CHAIN_REVIEWED_SOURCE_QUALIFICATION_BLOCKED`. G10–G12 do not change R0b C or the accepted ADR-039/040 designs. Stop incremental denylist expansion as the primary research path. The next meaningful decision is the scoped, independently observed D0 pilot under #124; once it qualifies, consider the narrowly bounded M6a local interface and release review. D1 remains a separate extension and M6b remains separately gated.
+
+`M6A_ACTUAL_SOURCE_NOT_ADMITTED`; `M6b P0–P4=NO_GO`; `R0b=C_FAIL_CLOSED`. No source access, user-data transfer, VM/root operation, worker/provider dispatch, runtime schema, migration or public CLI authorized by this review. #124 is deliberately left open.
